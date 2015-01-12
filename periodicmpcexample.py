@@ -1,0 +1,45 @@
+# Periodic MPC for single-variable system.
+
+# Imports.
+import numpy as np
+import scipy.signal as spsignal
+import mpc_tools_casadi as mpc
+
+# Define optimal periodic solution.
+T = 1
+f = lambda t : spsignal.sawtooth(2*np.pi/T*t + np.pi/2,.5)
+
+# Define continuous time model.
+Acont = np.matrix([-1])
+Bcont = np.matrix([10])
+n = Acont.shape[0] # Number of states.
+p = Bcont.shape[1] # Number of control elements
+
+# Discretize.
+dt = .01
+N = 250
+t = np.arange(N+1)*dt
+(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)
+A = [Adisc]
+B = [Bdisc]
+
+# Bounds on u.
+umax = 1
+ulb = [np.array([-umax])]
+uub = [np.array([umax])]
+
+# Define Q and R matrices and q penalty for periodic solution.
+R = [np.eye(p)]
+Q = [np.eye(n)]
+q = [None]*(N+1) # Preallocate.
+for k in range(N+1):
+    q[k] = -Q[k % len(Q)]*f(t[k])
+
+# Initial condition.
+x0 = np.matrix([-2])
+
+# Solve linear MPC problem.
+(x,u) = mpc.lmpc(A,B,x0,N,Q,q,R,ulb,uub)
+
+# Plot things.
+mpc.mpcplot(x,u,t,f(t[np.newaxis,:]))
