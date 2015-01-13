@@ -8,15 +8,16 @@ import matplotlib.pyplot as plt
 Functions for solving linear MPC problems using Casadi and Ipopt.
 
 The main function is lmpc, which is analogous to the mpc-tools function of the
-same name. However, this function is currently missing a lot of functionality,
-e.g. state constraints, non-box input constraints, and mixed objective terms.
+same name. However, this function is currently missing a lot of the "advanced"
+functionality of Octave lmpc, e.g. soft constraints, solver tolerances, and
+returning lagrange multipliers.
 
 Most other functions are just convenience wrappers to replace calls like
 long.function.name((args,as,tuple)) with f(args,as,args), although these are
 largely unnecessary.
 """
 
-def lmpc(A,B,x0,N,Q,q,R,ulb,uub):
+def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D=None,G=None,d=None):
     """
     Solves the canonical linear MPC problem using a discrete-time model.
     
@@ -27,24 +28,46 @@ def lmpc(A,B,x0,N,Q,q,R,ulb,uub):
     The actual optimization problem is as follows:
     
         min \sum_{k=0}^N        0.5*x[k]'*Q[k]*x[k] + q[k]'*x[k]      
-            + \sum_{k=0}^{N-1}  0.5*u[k]'*R[k]*u[k]
+            + \sum_{k=0}^{N-1}  0.5*u[k]'*R[k]*u[k] + r[k]'*u[k]
+                                 + x[k]'*M[k]*u[k]
     
         s.t. x[k+1] = A[k]*x[k] + B[k]*u[k]               k = 0,...,N-1
              ulb[k] <= u[k] <= uub[k]                     k = 0,...,N-1
+             xlb[k] <= x[k] <= xlb[k]                     k = 0,...,N
+             D[k]*u[k] - G[k]*x[k] <= d[k]                k = 0,...,N-1
     
-    A, B, Q, and R should be lists of numPy matrices. x0 should be a numPy vector.
-    q, ulb, and uub should be lists of numpy vectors.
+    A, B, Q, R, M, D, and G should be lists of numPy matrices. x0 should be a
+    numPy vector. q, r, xlb, xub, ulb, uub, and d should be lists of numpy vectors.
     
     All of these lists are accessed modulo their respective length;hus,
     time-invariant models can be lists with one element, while time-varying
     periodic model with period T should have T elements.
     
-    Return value is 
-    """
+    All arguments are optional except A, B,x0, N, Q, and R. If any of D, G, or d
+    are given, then all must be given.    
+    
+    Return value is a tuple (x,u) with both x and u as 2D arrays with the first
+    index corresponding to individual states and the second index corresponding
+    to time.
+    """    
     
     # Get shapes.    
     n = A[0].shape[0]
     p = B[0].shape[1]
+    
+    # Sort out arguments.
+    if xlb is None:
+        xlb = [-np.inf*np.ones((n,1))]
+    if xub is None:
+        xub = [np.inf*np.ones((n,1))]
+    if ulb is None:
+        ulb = [-np.inf*np.ones((p,1))]
+    if uub is None:
+        uub = [np.inf*np.ones((p,1))]
+    
+    argcheck = [D is None, G is None, d is None]    
+    if any(argcheck) and not all(argcheck):
+        raise ValueError("D, G, and d must be specified all or none.")
     
     # Define NLP variables.
     VAR = casadi.tools.struct_symMX([(
@@ -53,33 +76,60 @@ def lmpc(A,B,x0,N,Q,q,R,ulb,uub):
     )])
     LB = VAR(-np.Inf) # Default all bounds to +/- Inf.
     UB = VAR(np.Inf)
-    F = casadi.MX(0) # Start with dummy objective.
-    G = [None]*N # Preallocate, although we don't really need to do this.
-    for k in range(N,-1,-1):
+    qpF = casadi.MX(0) # Start with dummy objective.
+    qpG = [None]*N # Preallocate, although we could just append.
+    
+    # First handle objective/constraint terms that aren't optional.    
+    for k in range(N):
         if k != N:
             LB["u",k,:] = ulb[k % len(ulb)]
             UB["u",k,:] = uub[k % len(uub)]
             
-            F += .5*mtimes([VAR["u",k].T,R,VAR["u",k]]) 
-            G[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
+            qpF += .5*mtimes(VAR["u",k].T,R,VAR["u",k]) 
+            qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
         
         if k == 0:
             LB["x",0,:] = x0
             UB["x",0,:] = x0
+        else:
+            LB["x",k,:] = xlb[k % len(xlb)]
+            UB["x",k,:] = xub[k % len(xub)]
         
-        F += .5*mtimes([VAR["x",k].T,Q[k % len(Q)],VAR["x",k]]) + mtimes(q[k % len(q)].T,VAR["x",k])                
+        qpF += .5*mtimes(VAR["x",k].T,Q[k % len(Q)],VAR["x",k])
     
-    # Make G into a single large vector.     
-    G = casadi.vertcat(G) 
+    conlb = np.zeros((n*N,))
+    conub = np.zeros((n*N,))
+
+    # Now check optional stuff.
+    if q is not None:
+        for k in range(N):
+            qpF += mtimes(q[k % len(q)].T,VAR["x",k])
+    if r is not None:
+        for k in range(N-1):
+            qpF += mtimes(r[k % len(r)].T,VAR["u",k])
+    if M is not None:
+        for k in range(N-1):
+            qpF += mtimes(VAR["x",k].T,M[k % len(M)],VAR["u",k])                
+    
+    if D is not None:
+        for k in range(N-1):
+            qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
+                        - mtimes(G[k % len(d)],VAR["x"]) - d[k % len(d)])
+        s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
+        conlb = np.concatenate(conlb,-np.inf*np.ones(s))
+        conub = np.concatenate(conub,np.zeros(s))
+    
+    # Make qpG into a single large vector.     
+    qpG = casadi.vertcat(qpG) 
     
     # Create solver and stuff.
-    nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=F,g=G))
+    nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=qpF,g=qpG))
     solver = casadi.NlpSolver("ipopt",nlp)
     solver.init()
     solver.setInput(LB,"lbx")
     solver.setInput(UB,"ubx")
-    solver.setInput(0,"lbg")
-    solver.setInput(0,"ubg")
+    solver.setInput(conlb,"lbg")
+    solver.setInput(conub,"ubg")
     
     # Solve.    
     solver.evaluate()
@@ -123,13 +173,15 @@ def mtimes(*args):
     """
     Convenience wrapper for casadi.tools.mul.
     
-    Accepts variable number of arguments instead of a single tuple.
+    Matrix multiplies all of the given arguments and returns the result.
     """
-    return casadi.tools.mul(*args)
+    return casadi.tools.mul(args)
     
 def vcat(*args):
     """
     Convenience wrapper for np.vstack.
+    
+    Vertically concatenates all arguments and returns the result.
     
     Accepts variable number of arguments instead of a single tuple.
     """
@@ -138,6 +190,8 @@ def vcat(*args):
 def hcat(*args):
     """
     Convenience wrapper for np.hstack.
+    
+    Horizontally concatenates all arguments and returns the result.    
     
     Accepts variable number of arguments instead of a single tuple.
     """

@@ -39,7 +39,7 @@ for k in range(N+1):
 x0 = np.matrix([-2])
 
 # Solve linear MPC problem.
-(x,u) = mpc.lmpc(A,B,x0,N,Q,q,R,ulb,uub)
+(x,u) = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
 
 # Plot things.
 mpc.mpcplot(x,u,t,f(t[np.newaxis,:]))

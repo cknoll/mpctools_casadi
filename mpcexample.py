@@ -32,7 +32,7 @@ R = [np.eye(p)]
 x0 = np.matrix([[10],[0]])
 
 # Solve linear MPC problem.
-(x,u) = mpc.lmpc(A,B,x0,N,Q,q,R,ulb,uub)
+(x,u) = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
 
 # Plot things.
 mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
