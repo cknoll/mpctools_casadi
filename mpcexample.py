@@ -5,8 +5,8 @@ import numpy as np
 import mpc_tools_casadi as mpc
 
 # Define continuous time model.
-Acont = np.matrix([[0,1],[0,-1]])
-Bcont = np.matrix([[0],[10]])
+Acont = np.array([[0,1],[0,-1]])
+Bcont = np.array([[0],[10]])
 n = Acont.shape[0] # Number of states.
 p = Bcont.shape[1] # Number of control elements
 
@@ -29,10 +29,12 @@ q = [np.zeros((n,1))]
 R = [np.eye(p)]
 
 # Initial condition.
-x0 = np.matrix([[10],[0]])
+x0 = np.array([10,0])
 
 # Solve linear MPC problem.
-(x,u) = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
+solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub,verbosity=1)
+x = solution["x"]
+u = solution["u"]
 
 # Plot things.
 fig = mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])

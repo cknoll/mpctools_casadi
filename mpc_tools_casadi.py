@@ -3,6 +3,7 @@ import scipy.linalg
 import casadi
 import casadi.tools
 import matplotlib.pyplot as plt
+import pdb
 
 """
 Functions for solving linear MPC problems using Casadi and Ipopt.
@@ -17,7 +18,7 @@ long.function.name((args,as,tuple)) with f(args,as,args), although these are
 largely unnecessary.
 """
 
-def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D=None,G=None,d=None):
+def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D=None,G=None,d=None,verbosity=5):
     """
     Solves the canonical linear MPC problem using a discrete-time model.
     
@@ -46,9 +47,13 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     All arguments are optional except A, B,x0, N, Q, and R. If any of D, G, or d
     are given, then all must be given.    
     
-    Return value is a tuple (x,u) with both x and u as 2D arrays with the first
+    Optional argument verbosity controls how much solver output there is. This
+    value must be an integer between 0 and 12 (inclusive). Higher numbers
+    indicate more verbose output.    
+    
+    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
     index corresponding to individual states and the second index corresponding
-    to time.
+    to time. Entry "status" is a string with solver status.
     """    
     
     # Get shapes.    
@@ -125,7 +130,10 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     # Create solver and stuff.
     nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=qpF,g=qpG))
     solver = casadi.NlpSolver("ipopt",nlp)
+    solver.setOption("print_level",verbosity)
+    solver.setOption("print_time",verbosity > 2)   
     solver.init()
+
     solver.setInput(LB,"lbx")
     solver.setInput(UB,"ubx")
     solver.setInput(conlb,"lbg")
@@ -133,7 +141,10 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     
     # Solve.    
     solver.evaluate()
-
+    status = solver.getStat("return_status")
+    if verbosity > 0:
+        print "Solver Status:", status
+    
     # Get solution.
     OPTVAR = VAR(solver.getOutput("x"))
     x = np.hstack(OPTVAR["x",:,:])
@@ -145,7 +156,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     if p == 1:
         u = u.reshape(1,N)
     
-    return (x,u)
+    return {"x":x, "u":u, "status":status}
 
 def c2d(Ac,Bc,Delta):
     """
@@ -201,8 +212,8 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     """
     Makes a plot of the state and control trajectories for an mpc problem.
     
-    Inputs x and u should be n by N and p by N numpy arrays. xsp if provided
-    should be the same size as x. t should be a numpy N vector.
+    Inputs x and u should be n by N+1 and p by N numpy arrays. xsp if provided
+    should be the same size as x. t should be a numpy N+1 vector.
     
     If given, fig is the matplotlib figure handle to plot everything. If not
     given, a new figure is used.

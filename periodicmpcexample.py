@@ -10,8 +10,8 @@ T = 1
 f = lambda t : spsignal.sawtooth(2*np.pi/T*t + np.pi/2,.5)
 
 # Define continuous time model.
-Acont = np.matrix([-1])
-Bcont = np.matrix([10])
+Acont = np.array([[-1]])
+Bcont = np.array([[10]])
 n = Acont.shape[0] # Number of states.
 p = Bcont.shape[1] # Number of control elements
 
@@ -36,10 +36,12 @@ for k in range(N+1):
     q[k] = -Q[k % len(Q)]*f(t[k])
 
 # Initial condition.
-x0 = np.matrix([-2])
+x0 = np.array([-2])
 
 # Solve linear MPC problem.
-(x,u) = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
+solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
+x = solution["x"]
+u = solution["u"]
 
 # Plot things.
 fig = mpc.mpcplot(x,u,t,f(t[np.newaxis,:]))
