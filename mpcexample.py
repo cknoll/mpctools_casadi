@@ -35,4 +35,5 @@ x0 = np.matrix([[10],[0]])
 (x,u) = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub)
 
 # Plot things.
-mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
+fig = mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
+fig.show()
