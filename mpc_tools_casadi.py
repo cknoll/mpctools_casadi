@@ -1,22 +1,31 @@
+from __future__ import print_function
 import numpy as np
 import scipy.linalg
 import casadi
-import casadi.tools
+import casadi.tools as ctools
 import matplotlib.pyplot as plt
-import pdb
+import time
 
 """
-Functions for solving linear MPC problems using Casadi and Ipopt.
+Functions for solving MPC problems using Casadi and Ipopt.
 
 The main function is lmpc, which is analogous to the mpc-tools function of the
 same name. However, this function is currently missing a lot of the "advanced"
 functionality of Octave lmpc, e.g. soft constraints, solver tolerances, and
 returning lagrange multipliers.
 
+There is now a function for nonlinear MPC. This works with nonlinear discrete-
+time models. There is also a function to discretize continuous-time models using
+a 4th-order Runge-Kutta method.
+
 Most other functions are just convenience wrappers to replace calls like
 long.function.name((args,as,tuple)) with f(args,as,args), although these are
 largely unnecessary.
 """
+
+# =================================
+# Linear
+# =================================
 
 def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D=None,G=None,d=None,verbosity=5):
     """
@@ -55,6 +64,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     index corresponding to individual states and the second index corresponding
     to time. Entry "status" is a string with solver status.
     """    
+    starttime = time.clock()    
     
     # Get shapes.    
     n = A[0].shape[0]
@@ -75,9 +85,9 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
         raise ValueError("D, G, and d must be specified all or none.")
     
     # Define NLP variables.
-    VAR = casadi.tools.struct_symMX([(
-        casadi.tools.entry("x",shape=(n,1),repeat=N+1),
-        casadi.tools.entry("u",shape=(p,1),repeat=N),
+    VAR = ctools.struct_symMX([(
+        ctools.entry("x",shape=(n,1),repeat=N+1),
+        ctools.entry("u",shape=(p,1),repeat=N),
     )])
     LB = VAR(-np.Inf) # Default all bounds to +/- Inf.
     UB = VAR(np.Inf)
@@ -90,7 +100,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
             LB["u",k,:] = ulb[k % len(ulb)]
             UB["u",k,:] = uub[k % len(uub)]
             
-            qpF += .5*mtimes(VAR["u",k].T,R,VAR["u",k]) 
+            qpF += .5*mtimes(VAR["u",k].T,R[k % len(R)],VAR["u",k]) 
             qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
         
         if k == 0:
@@ -143,7 +153,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     solver.evaluate()
     status = solver.getStat("return_status")
     if verbosity > 0:
-        print "Solver Status:", status
+        print("Solver Status:", status)
     
     # Get solution.
     OPTVAR = VAR(solver.getOutput("x"))
@@ -156,7 +166,11 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
     if p == 1:
         u = u.reshape(1,N)
     
-    return {"x":x, "u":u, "status":status}
+    endtime = time.clock()
+    if verbosity > 1:
+        print("Took %g s." % (endtime - starttime))
+    
+    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}
 
 def c2d(Ac,Bc,Delta):
     """
@@ -186,7 +200,7 @@ def mtimes(*args):
     
     Matrix multiplies all of the given arguments and returns the result.
     """
-    return casadi.tools.mul(args)
+    return ctools.mul(args)
     
 def vcat(*args):
     """
@@ -207,6 +221,233 @@ def hcat(*args):
     Accepts variable number of arguments instead of a single tuple.
     """
     return np.hstack(args)
+# =================================
+# Nonlinear
+# =================================
+    
+# Nonlinear functions adapted from scripts courtesy of Lars Petersen.
+
+def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
+    """
+    Takes a function handle and turns it into a Casadi function.
+    
+    f should be defined to take three keyword arguments x, u, and d. It should
+    be written so that x, u, and d are python LISTs of length Nx, Nu, and Nd
+    respectively. It must return a LIST of length Nx.
+    """
+    
+    # Create symbolic variables.
+    x  = casadi.MX.sym("x",Nx) # States
+    args = {"x" : x}
+    invar = [x]
+    if Nu > 0:
+        u  = casadi.MX.sym("u",Nu) # Control
+        args["u"] = u
+        invar += [u]
+        if Nd > 0: # Only consider disturbances if there are control inputs.
+            d  = casadi.MX.sym("d",Nd) # Other (e.g. parameters or disturbances)
+            args["d"] = d
+            invar += [d]
+    
+    # Create symbolic function.
+    outvar = [casadi.vertcat(f(**args))]
+    fcasadi = casadi.MXFunction(invar,outvar)
+    fcasadi.setOption("name",name if name is not None else "f")
+    fcasadi.init()
+    
+    return fcasadi
+
+def getModelArgs(f):
+    """
+    Checks number and sizes of arguments for the casadi function f.
+    
+    Returns a tuple (Nx, Nu, Nd) with sizes for x, u, and d. The first argument
+    is always x, the second u (if present), and the third d (if present).
+    
+    The function may take more than three arguments, but these aren't returned.
+    """
+    sizes = []
+    for i in range(f.getNumInputs()):
+        sizes.append(f.getInput(i).size())
+    sizes += [0]*(3 - len(sizes))
+    return tuple(sizes[:3])
+
+def getRungeKutta4(f,Delta,M=1,name=None):
+    """
+    Uses RK4 to discretize xdot = f(x,u,d) with M points and timestep Delta.
+
+    f must be a Casadi SX function with 1, 2, or 3 inputs in the order shown.
+    All inputs must be vectors.
+    """
+
+    # First find out how many arguments f takes.
+    (Nx, Nu, Nd) = getModelArgs(f)
+    
+    # Now make relevant symbolic variables.
+    x0 = casadi.MX.sym("x0",Nx)
+    zoh = []  # Zero-order hold variables.
+    if Nu > 0:    
+        u = casadi.MX.sym("u",Nu)
+        zoh += [u]
+        if Nd > 0: # Only consider disturbances if there are control inputs.
+            d = casadi.MX.sym("d",Nd)
+            zoh += [d]
+        
+    h = Delta/float(M) # h in Runge-Kutta.
+    
+    # Do M RK4 steps.
+    x = x0
+    for j in range(M):
+        [k1] = f([x] + zoh)
+        [k2] = f([x + h/2*k1] + zoh)
+        [k3] = f([x + h/2*k2] + zoh)
+        [k4] = f([x + h*k3] + zoh)
+        x += h/6*(k1 + 2*k2 + 2*k3 + k4)
+    
+    # Build casadi function and initialize.
+    F = casadi.MXFunction([x0] + zoh,[x])
+    F.setOption("name",name if name is not None else "F")
+    F.init()
+    
+    return F
+        
+def nmpc(F,l,Pf,x0,N,bounds={},d=None,verbosity=5):
+    """
+    Solves a nonlinear MPC problem using a discrete-time model.
+    
+    Inputs are discrete-time state-space model, stage costs, terminal weight,
+    initial state, prediction horizon, and any known disturbances. Output is a
+    tuple (x,u) with the optimal state and input trajectories.    
+    
+    The actual optimization problem is as follows:
+    
+        min \sum_{k=0}^{N} l[k](x[k],u[k]) + Pf(x[N])     
+    
+        s.t. x[k+1] = F(x[k],u[k],d[k])   k = 0,...,N-1
+             ulb[k] <= u[k] <= uub[k]     k = 0,...,N-1
+             xlb[k] <= x[k] <= xlb[k]     k = 0,...,N
+    
+    F and l should be lists of Casadi functions. Pf is just a single Casadi
+    function. Each F must take two or three arguments. Each l must take two,
+    and Pf must take one.
+    
+    All of these lists are accessed modulo their respective length; thus,
+    time-invariant models can be lists with one element, while time-varying
+    periodic model with period T should have T elements.
+    
+    Input bounds is a dictionary that can contain box constraints on x or u.
+    The corresponding entries are "xlb", "xub", "ulb", and "uub". Bounds must
+    be lists of vectors of appropriate size.
+    
+    d should be a list of "disturbances" known a-priori. It can be None to
+    indicate that they are all zero, or that they they simply aren't present.
+    
+    Optional argument verbosity controls how much solver output there is. This
+    value must be an integer between 0 and 12 (inclusive). Higher numbers
+    indicate more verbose output.    
+    
+    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
+    index corresponding to individual states and the second index corresponding
+    to time. Entry "status" is a string with solver status.
+    """
+    starttime = time.clock()    
+    
+    # Get shapes.    
+    (Nx, Nu, Nd) = getModelArgs(F[0])
+    
+    # Check what bounds were supplied.
+    defaultbounds = [("xlb",Nx,-np.Inf),("xub",Nx,np.Inf),("ulb",Nu,-np.Inf),("uub",Nu,np.Inf)]
+    for (k,n,M) in defaultbounds:
+        if k not in bounds:
+            bounds[k] = [M*np.ones((n,))]
+    
+    # Define NLP variables.
+    VAR = ctools.struct_symMX([(
+        ctools.entry("x",shape=(Nx,1),repeat=N+1),
+        ctools.entry("u",shape=(Nu,1),repeat=N),
+    )])
+    
+    # Decide whether we need to include d or not.    
+    if Nd > 0:
+        if d is None:
+            d = [[0]*Nd] # All zero if unspecified.
+        Z = [[VAR["x",k], VAR["u",k], d[k % len(d)]] for k in range(N)]
+    else:
+        Z = [[VAR["x",k], VAR["u",k]] for k in range(N)]
+    
+    # Preallocate.
+    GUESS = VAR(0) # Guess all variables zero.
+    LB = VAR(-np.Inf) # Default all bounds to +/- Inf.
+    UB = VAR(np.Inf)
+    nlpObj = casadi.MX(0) # Start with dummy objective.
+    nlpCon = [None]*N
+    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
+    
+    # Steps 0 to N-1.    
+    for k in range(N):
+        # Model and objective.        
+        nlpCon[k] = F[k % len(F)](Z[k])[0] - VAR["x",k+1]
+        nlpObj += l[k % len(l)]([VAR["x",k],VAR["u",k]])[0]        
+        
+        # Variable bounds.
+        LB["x",k,:] = getBounds("xlb",k)
+        UB["x",k,:] = getBounds("xub",k)
+        LB["u",k,:] = getBounds("ulb",k)
+        UB["u",k,:] = getBounds("uub",k)
+    
+    # Adjust bounds for x0 and xN.
+    LB["x",0,:] = x0
+    UB["x",0,:] = x0
+    LB["x",N,:] = getBounds("xlb",N)
+    UB["x",N,:] = getBounds("xub",N)
+     
+    # Bounds for constraints (all are equality constraints).
+    conlb = np.zeros((n*N,))
+    conub = np.zeros((n*N,))
+    
+    # Make constraints into a single large vector.     
+    nlpCon = casadi.vertcat(nlpCon) 
+    
+    # Create solver and stuff.
+    nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=nlpObj,g=nlpCon))
+    solver = casadi.NlpSolver("ipopt",nlp)
+    solver.setOption("print_level",verbosity)
+    solver.setOption("print_time",verbosity > 2)   
+    solver.init()
+
+    solver.setInput(GUESS,"x0")
+    solver.setInput(LB,"lbx")
+    solver.setInput(UB,"ubx")
+    solver.setInput(conlb,"lbg")
+    solver.setInput(conub,"ubg")
+    
+    # Solve.    
+    solver.evaluate()
+    status = solver.getStat("return_status")
+    if verbosity > 0:
+        print("Solver Status:", status)
+    
+    # Get solution.
+    OPTVAR = VAR(solver.getOutput("x"))
+    x = np.hstack(OPTVAR["x",:,:])
+    u = np.hstack(OPTVAR["u",:,:])
+    
+    # Add singleton dimension if n = 1 or p = 1.
+    if Nx == 1:    
+        x = x.reshape(1,N+1)
+    if Nu == 1:
+        u = u.reshape(1,N)
+    
+    endtime = time.clock()
+    if verbosity > 1:
+        print("Took %g s." % (endtime - starttime))    
+    
+    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}        
+    
+    
+# =================================
+# Plotting
+# =================================
     
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     """
@@ -259,6 +500,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     for i in range(len(xinds)):
         xind = xinds[i]
         a = fig.add_subplot(numrows,numcols,numcols*(i+1) - 1)
+        a.hold("on")
         a.plot(t,np.squeeze(x[xind,:]),xlspec,label="System")
         if plotxsp:
             a.plot(t,np.squeeze(xsp[xind,:]),"--r",label="Setpoint")
