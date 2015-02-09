@@ -311,7 +311,7 @@ def getRungeKutta4(f,Delta,M=1,name=None):
     
     return F
         
-def nmpc(F,l,Pf,x0,N,bounds={},d=None,verbosity=5):
+def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={}):
     """
     Solves a nonlinear MPC problem using a discrete-time model.
     
@@ -344,7 +344,12 @@ def nmpc(F,l,Pf,x0,N,bounds={},d=None,verbosity=5):
     
     Optional argument verbosity controls how much solver output there is. This
     value must be an integer between 0 and 12 (inclusive). Higher numbers
-    indicate more verbose output.    
+    indicate more verbose output.
+
+    guess is a dictionary with optional keys "x" and "u". If provided, these
+    should be Nx by N+1 and Nu by N arrays respectively. These are fed to the
+    solver as an initial guess. These points need not be feasible, but it
+    helps if they are.
     
     Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
     index corresponding to individual states and the second index corresponding
@@ -400,13 +405,23 @@ def nmpc(F,l,Pf,x0,N,bounds={},d=None,verbosity=5):
     UB["x",0,:] = x0
     LB["x",N,:] = getBounds("xlb",N)
     UB["x",N,:] = getBounds("xub",N)
+    if Pf is not None:
+        nlpObj += Pf([VAR["x",N]])[0]
      
     # Bounds for constraints (all are equality constraints).
-    conlb = np.zeros((n*N,))
-    conub = np.zeros((n*N,))
+    conlb = np.zeros((Nx*N,))
+    conub = np.zeros((Nx*N,))
     
     # Make constraints into a single large vector.     
     nlpCon = casadi.vertcat(nlpCon) 
+    
+    # Worry about user-supplied guesses.
+    if "x" in guess:    
+        for k in range(N+1):
+            GUESS["x",k,:] = guess["x"][:,k]
+    if "u" in guess:
+        for k in range(N):
+            GUESS["u",k,:] = guess["u"][:,k]
     
     # Create solver and stuff.
     nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=nlpObj,g=nlpCon))

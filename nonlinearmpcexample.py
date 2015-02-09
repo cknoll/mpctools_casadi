@@ -36,8 +36,9 @@ Q = [np.eye(2)]
 R = [np.eye(2)]
 
 l = lambda x,u : [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x) + mpc.mtimes(u.T,mpc.np2mx(R[0]),u)]
-l = [mpc.getCasadiFunc(l,2,2,0,"l")]
-Pf = lambda x: mpc.mtimes(x.T,mpc.np2mx(Q[0]),x)
+l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
+Pf = lambda x: [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x)]
+Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
 
 # Solve problem with linear mpc and plot.
 opt_lmpc = mpc.lmpc(A,B,x0,N,Q,R,ulb=bounds["ulb"],uub=bounds["uub"],verbosity=verb)
@@ -52,7 +53,7 @@ Bdisc = mpc.np2mx(Bdisc)
 Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
 F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
 
-opt_dnmpc = mpc.nmpc(F,l,Pf,x0,N,bounds,d=None,verbosity=verb)
+opt_dnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
 fig_dnmpc = mpc.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 fig_dnmpc.show()
@@ -65,7 +66,7 @@ f = lambda x,u : list(mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u))
 fcasadi = mpc.getCasadiFunc(f,Nx,Nu,Nd)
 F = [mpc.getRungeKutta4(fcasadi,Delta,5)]
 
-opt_cnmpc = mpc.nmpc(F,l,Pf,x0,N,bounds,d=None,verbosity=verb)
+opt_cnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
 fig_cnmpc = mpc.mpcplot(opt_cnmpc["x"],opt_cnmpc["u"],t,xsp,xinds=[0,1])
 fig_cnmpc.canvas.set_window_title("Continuous-time NMPC")
 fig_cnmpc.show()
