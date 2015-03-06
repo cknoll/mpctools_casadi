@@ -5,6 +5,7 @@ import casadi
 import casadi.tools as ctools
 import matplotlib.pyplot as plt
 import time
+import colloc
 
 """
 Functions for solving MPC problems using Casadi and Ipopt.
@@ -459,10 +460,69 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={}):
     
     return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}        
     
+ 
+def getCollocationConstraints(f,Delta,Nt,Nc,d=None):
+    """
+    Returns constraints for collocation of ODE f in variables x and u.
     
+    Nt is the number of time points and Nc is the number of collocation points
+    for each time period. Delta is the timestep between time points.
+    
+    If provided, d is a list of disturbances at each time point. It is acccessed
+    mod length, so periodic disturbances with period < Nt can be used.
+    
+    Returns a struct of variables and a list of all the constraints.
+    """
+
+    # Get shapes.        
+    (Nx, Nu, Nd) = getModelArgs(f)
+    
+    # Define NLP variables.
+    VAR = ctools.struct_symMX([(
+        ctools.entry("x",shape=(Nx,1),repeat=Nt+1), # States at time points.
+        ctools.entry("z",shape=(Nx,Nc),repeat=Nt), # Collocation points.
+        ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
+    )])
+    
+    # Get collocation weights.
+    [r,A,B,q] = colloc.colloc(Nc, True, True)
+    
+    # Preallocate.
+    CON = []
+    
+    for k in range(Nt):
+        # Decide about disturbances.        
+        if d is not None:
+            thisd = [d[k % len(d)]]
+        else:
+            thisd = []
+        
+        # Build a convenience list.
+        zaug = [VAR["x",k]] + [VAR["z",k,:,j] for j in range(Nc)] + [VAR["x",k+1]]
+        
+        # Loop through interior points.        
+        for j in range(1,len(zaug) - 1):
+            thisargs = [zaug[j],VAR["u",k]] + thisd
+            thiscon = Delta*f(thisargs)[0] # Start with function evaluation.
+            
+            #import pdb; pdb.set_trace()
+            # Add collocation weights.
+            for jprime in range(len(zaug)):
+                thiscon -= A[j,jprime]*zaug[jprime]
+            
+            CON.append(thiscon)
+    
+    CONLB = np.zeros((Nx*Nt*Nc,))
+    CONUB = CONLB.copy()
+        
+    return [VAR, CON, CONLB, CONUB]
+    
+   
 # =================================
 # Plotting
 # =================================
+
+
     
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     """
