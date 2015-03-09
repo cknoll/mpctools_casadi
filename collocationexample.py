@@ -15,11 +15,11 @@ Nu = 1
 Nd = 0
 f = mpc.getCasadiFunc(f,Nx,Nu,Nd,"f")
 x0 = [1, 1]
-Delta = 1
+Delta = .5
 
 # Pick horizon and number of collocation points.
-Nt = 5
-Nc = 25
+Nt = 10
+Nc = 10
 
 [r,A,B,q] = colloc.colloc(Nc, True, True)
 
@@ -36,7 +36,7 @@ nlpObj = casadi.MX(0) # Start with dummy objective.
 nlpCon = casadi.vertcat(CON)
 
 # Create solver and stuff.
-[OPTVAR, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, verbosity)
+[OPTVAR, obj, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, verbosity)
 x = np.hstack(OPTVAR["x",:])
 u = np.hstack(OPTVAR["u",:])
 z = np.hstack(OPTVAR["c",:])

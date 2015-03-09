@@ -22,6 +22,7 @@ B = [Bdisc]
 umax = 1
 ulb = [np.array([-umax])]
 uub = [np.array([umax])]
+bounds = dict(uub=uub,ulb=ulb)
 
 # Define Q and R matrices and q penalty for periodic solution.
 Q = [np.diag([1,0])]
@@ -32,7 +33,7 @@ R = [np.eye(p)]
 x0 = np.array([10,0])
 
 # Solve linear MPC problem.
-solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub,verbosity=1)
+solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=1)
 x = solution["x"]
 u = solution["u"]
 

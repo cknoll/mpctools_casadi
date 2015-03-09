@@ -54,7 +54,7 @@ def jacobi(n,alpha,beta,include0=True,include1=True):
     
     # Get polynomial and find roots.
     Pn = special.sh_jacobi(n,p,q)
-    r = list(Pn.weights[:,0]) # Get list of roots in ascending order.    
+    r = list(np.real(Pn.weights[:,0]))    
     
     # Decide what to do about endpoints.
     if include0:

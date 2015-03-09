@@ -41,7 +41,7 @@ Pf = lambda x: [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
 
 # Solve problem with linear mpc and plot.
-opt_lmpc = mpc.lmpc(A,B,x0,N,Q,R,ulb=bounds["ulb"],uub=bounds["uub"],verbosity=verb)
+opt_lmpc = mpc.lmpc(A,B,x0,N,Q,R,bounds=bounds,verbosity=verb)
 fig_lmpc = mpc.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp,xinds=[0,1])
 fig_lmpc.canvas.set_window_title("Linear MPC")
 fig_lmpc.show()
@@ -53,21 +53,26 @@ Bdisc = mpc.np2mx(Bdisc)
 Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
 F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
 
-#opt_dnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
-opt_dnmpc = mpc.nmpc_dev(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
+opt_dnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
 fig_dnmpc = mpc.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 fig_dnmpc.show()
 
-# Continuous-time example with RK4 discretization.
+# Continuous time interfaces in nmpc.
 Acont = mpc.np2mx(Acont) # Cast to Casadi MX object.
 Bcont = mpc.np2mx(Bcont)
 
 f = lambda x,u : list(mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u))
-fcasadi = mpc.getCasadiFunc(f,Nx,Nu,Nd)
-F = [mpc.getRungeKutta4(fcasadi,Delta,5)]
+fcasadi = [mpc.getCasadiFunc(f,Nx,Nu,Nd)]
+Mrk4 = 5
+Mcolloc = 5
 
-opt_cnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
-fig_cnmpc = mpc.mpcplot(opt_cnmpc["x"],opt_cnmpc["u"],t,xsp,xinds=[0,1])
-fig_cnmpc.canvas.set_window_title("Continuous-time NMPC")
-fig_cnmpc.show()
+opt_crk4nmpc = mpc.nmpc(fcasadi,l,x0,N,Pf,bounds,d=None,verbosity=verb,timemodel="rk4",M=Mrk4,Delta=Delta)
+fig_crk4nmpc = mpc.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,xsp,xinds=[0,1])
+fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
+fig_crk4nmpc.show()
+
+opt_ccollocnmpc = mpc.nmpc(fcasadi,l,x0,N,Pf,bounds,d=None,verbosity=verb,timemodel="colloc",M=Mcolloc,Delta=Delta)
+fig_ccollocnmpc = mpc.mpcplot(opt_ccollocnmpc["x"],opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
+fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
+fig_ccollocnmpc.show()

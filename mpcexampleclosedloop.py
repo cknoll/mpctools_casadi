@@ -21,6 +21,7 @@ B = [Bdisc]
 umax = 1
 ulb = [np.array([-umax])]
 uub = [np.array([umax])]
+bounds = dict(uub=uub,ulb=ulb)
 
 # Define Q and R matrices and q penalty for periodic solution.
 Q = [np.diag([1,0])]
@@ -37,7 +38,7 @@ xcl[:,0] = x0
 ucl = np.zeros((m,nsim))
 for k in range(nsim):
     # Solve linear MPC problem.
-    sol = mpc.lmpc(A,B,x0,N,Q,R,q=q,ulb=ulb,uub=uub,verbosity=0)
+    sol = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=0)
     print "Iteration %d Status: %s" % (k,sol["status"])
     xcl[:,k] = sol["x"][:,0]
     ucl[:,k] = sol["u"][:,0]

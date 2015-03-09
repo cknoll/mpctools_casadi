@@ -1,7 +1,7 @@
 # Example 2.8 from Rawlings and Mayne (2009)
 
 # Pick whether to enforce terminal x as constraint or with a penalty.
-usePf = True
+usePf = False
 
 # Imports.
 import numpy as np
@@ -51,7 +51,7 @@ def uselastguess(var,prevguess,x0):
     if "status" not in var or var["status"] != "Solve_Succeeded":
         return prevguess
     else:
-        return {"x" : opt["x"], "u" : opt["u"]}
+        return {"x" : var["x"], "u" : var["u"]}
 def alternateuguess(var,prevguess,x0,u0):
     u = np.zeros((Nu,N))
     u[:,0] = u0
@@ -70,6 +70,7 @@ Nguessmethods = len(guessfuncs)
 
 verb = 0
 uopt = {}
+phiopt = {}
 figure = plt.figure(figsize=(4,8))
 guessmethod = 0
 for guessmethod in range(Nguessmethods):
@@ -78,6 +79,7 @@ for guessmethod in range(Nguessmethods):
     f = guessfuncs[guessmethod][0]
     getguess = guessfuncs[guessmethod][1]
     uopt[f] = np.zeros(theta.shape)
+    phiopt[f] = np.zeros(theta.shape)
     for i in range(Npts):
         if i % 50 == 0:        
             print "%s (%3d of %d)" % (f,i+1,Npts)
@@ -86,15 +88,26 @@ for guessmethod in range(Nguessmethods):
         opt = mpc.nmpc(Fcasadi, lcasadi, x0, N, Pfcasadi, bounds, verbosity=verb,guess=guess)
         if opt["status"] == "Solve_Succeeded":
             uopt[f][i] = opt["u"][0,0]
+            phiopt[f][i] = opt["obj"]
         else:
             uopt[f][i] = np.NaN
+            phiopt[f][i] = np.NaN
     
-    ax = figure.add_subplot(Nguessmethods, 1, guessmethod + 1)
+    # Plot optimal u[0].
+    ax = figure.add_subplot(Nguessmethods, 2, 2*guessmethod + 1)
     c = guessfuncs[guessmethod][2]
-    ax.plot(theta/np.pi,uopt[f],"-o",color=c,label=f,markerfacecolor=c,markeredgecolor="none",markersize=2)
+    ax.plot(theta/np.pi,uopt[f],"-o",color=c,label=f,markerfacecolor=c,markeredgecolor="none",markersize=3)
     ax.set_ylabel(r"Guess: %s" % f)
+    ax.set_xlabel(r"$\theta/\pi$")
+
+    # Plot optimal cost.    
+    ax = figure.add_subplot(Nguessmethods, 2, 2*guessmethod + 2)
+    c = guessfuncs[guessmethod][2]
+    ax.plot(theta/np.pi,phiopt[f],"-o",color=c,label=f,markerfacecolor=c,markeredgecolor="none",markersize=3)
+    ax.set_ylabel(r"Guess: %s" % f)
+    ax.set_xlabel(r"$\theta/\pi$")
+    
     if guessmethod == 0:
         plt.title("Guess Strategies")
-plt.xlabel(r"$\theta/\pi$")
 plt.tight_layout(pad=.5)
 plt.savefig("example2-8%s.pdf" % "Pf" if usePf else "")
