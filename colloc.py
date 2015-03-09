@@ -9,7 +9,9 @@ routines from "Solution of Differential Equation Models by Polynomial
 Approximation," by J. Villadsen and M. L. Michelsen.
 
 Code makes use of numpy/scipy's polynomial and rootfinding capabilities so that
-we don't have to do any rootfinding.
+we don't have to do any rootfinding. We do, however, use recursive functions
+to evaluate polynomials because numpy/scipy's built-in evaluation is
+numerically unstable for high-order polynomials.
 
 - Michael Risbeck
   risbeck@wisc.edu
@@ -46,36 +48,37 @@ def jacobi(n,alpha,beta,include0=True,include1=True):
     d1, d2, and d3 are derivatives at the roots which are given in r.
     """
     
-    # Note: this quick version uses numpy's roots capability to make this
-    # a short script. However, if n is very large (above 30), then there is
-    # roundoff error, and these values may become complex. Eventually, we
-    # should rewrite this using Newton methods and the recursive formulas like
-    # is is in Octave.    
-    
     # Scipy uses different parameters for shifted Jacobi polynomials.
     q = beta + 1
     p = alpha + q
     
     # Get polynomial and find roots.
     Pn = special.sh_jacobi(n,p,q)
-    r = list(np.roots(Pn)) # Descending order.
+    r = list(Pn.weights[:,0]) # Get list of roots in ascending order.    
     
     # Decide what to do about endpoints.
     if include0:
-        r.append(0)
-        Pn *= np.poly1d([1,0])
-    r.reverse() # Now in ascending order.
+        r = [0] + r
     if include1:
-        r.append(1)
-        Pn *= np.poly1d([-1,1])
+        r = r + [1]
         
-    # Now calculate derivatives.
-    derivs = []
-    for i in range(3):
-        Pn = Pn.deriv()
-        derivs.append(list(Pn(r)))
+    # Now calculate derivatives.    
+    N = len(r) # Total number of points.
+    d1 = [1]*N
+    d2 = [0]*N
+    d3 = [0]*N
+    
+    # Use recursive formulas. Could probably be vectorized for speed.
+    for i in range(N):
+        x = r[i]
+        for j in range(N):
+            if j != i:
+                y = x - r[j]
+                d3[i] = y*d3[i] + 3*d2[i]
+                d2[i] = y*d2[i] + 2*d1[i]
+                d1[i] = y*d1[i]
         
-    return derivs + [np.array(r)]
+    return [d1, d2, d3, np.array(r)]
         
 def dfopr(n,d1,d2,d3,r,mode="weights"):
     """    
@@ -121,10 +124,12 @@ def dfopr(n,d1,d2,d3,r,mode="weights"):
         [d2i, d2j] = ijify(d2)
         
         y = ri - rj
+        badInds = (y == 0)
+        y[badInds] = 1 # We will fix this later.
         M = d1i/(d1j*y)
         if mode == "second":
             M *= (d2i/d1i - 2/y)
-        M[y == 0] = 0 # Get rid of bad elements.
+        M[badInds] = 0 # Get rid of bad elements.
         
         # Add back in diagonal.
         M += np.diag(m)

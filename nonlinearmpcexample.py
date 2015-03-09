@@ -53,7 +53,8 @@ Bdisc = mpc.np2mx(Bdisc)
 Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
 F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
 
-opt_dnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
+#opt_dnmpc = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
+opt_dnmpc = mpc.nmpc_dev(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
 fig_dnmpc = mpc.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 fig_dnmpc.show()

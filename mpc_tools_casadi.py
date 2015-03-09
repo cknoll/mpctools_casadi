@@ -24,6 +24,27 @@ long.function.name((args,as,tuple)) with f(args,as,args), although these are
 largely unnecessary.
 """
 
+# Developer notes:
+#
+#
+# - Documentation is very important. Try to use descriptive variable names as
+#   much as possible, and make sure every function has a docstring.
+#
+#
+# - We use the print function here, so any calls to print must have the
+#   arguments surrounded by parentheses.
+#
+#
+# - Since casadi is actively being developed, we should avoid duplicated code
+#   as much as possible. If you ever find yourself copy/pasting more than a few
+#   lines of code in this module, consider writing a separate function.
+#
+#   An exception to this rule is the lmpc function. In its current form, it is
+#   a lot like nmpc. Ideally casadi will eventually allow us to solve QPs
+#   explicitly instead of solving it as a general NLP, so we keep this a
+#   separate function now because at some point it will become fundamentally
+#   different from nmpc.
+
 # =================================
 # Linear
 # =================================
@@ -172,6 +193,96 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D
         print("Took %g s." % (endtime - starttime))
     
     return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}
+
+def lmpc_dev(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbosity=5):
+    """
+    Temporary duplicate of lmpc to make sure stuff doesn't get deleted.
+    """    
+    starttime = time.clock()    
+    
+    # Get shapes.    
+    n = A[0].shape[0]
+    m = B[0].shape[1]
+    
+    # Fill in default bounds.
+    bounds = fillBoundsDict(bounds)
+    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
+    
+    # Define NLP variables.
+    [VAR, LB, UB, GUESS] = getCasadiVars(n,m,N)
+    
+    # Preallocate.
+    qpF = casadi.MX(0) # Start with dummy objective.
+    qpG = [None]*N # Preallocate, although we could just append.
+    
+    # First handle objective/constraint terms that aren't optional.    
+    for k in range(N):
+        if k != N:
+            LB["u",k,:] = getBounds("ulb",k)
+            UB["u",k,:] = getBounds("uub",k)
+            
+            qpF += .5*mtimes(VAR["u",k].T,R[k % len(R)],VAR["u",k]) 
+            qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
+        
+        if k == 0:
+            LB["x",0,:] = x0
+            UB["x",0,:] = x0
+        else:
+            LB["x",k,:] = getBounds("xlb",k)
+            UB["x",k,:] = getBounds("ulb")
+        
+        qpF += .5*mtimes(VAR["x",k].T,Q[k % len(Q)],VAR["x",k])
+    
+    conlb = np.zeros((n*N,))
+    conub = np.zeros((n*N,))
+
+    # Now check optional stuff.
+    if q is not None:
+        for k in range(N):
+            qpF += mtimes(q[k % len(q)].T,VAR["x",k])
+    if r is not None:
+        for k in range(N-1):
+            qpF += mtimes(r[k % len(r)].T,VAR["u",k])
+    if M is not None:
+        for k in range(N-1):
+            qpF += mtimes(VAR["x",k].T,M[k % len(M)],VAR["u",k])                
+    
+    if D is not None:
+        for k in range(N-1):
+            qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
+                        - mtimes(G[k % len(d)],VAR["x"]) - d[k % len(d)])
+        s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
+        conlb = np.concatenate(conlb,-np.inf*np.ones(s))
+        conub = np.concatenate(conub,np.zeros(s))
+    
+    # Make qpG into a single large vector.     
+    qpG = casadi.vertcat(qpG) 
+    
+    # Create solver and stuff.
+    [OPTVAR,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity)
+    x = np.hstack(OPTVAR["x",:,:])
+    u = np.hstack(OPTVAR["u",:,:])
+    
+    # Add singleton dimension if n = 1 or p = 1.
+    x = atleastnd(x)
+    u = atleastnd(u)
+
+    endtime = time.clock()
+    if verbosity > 1:
+        print("Took %g s." % (endtime - starttime))
+    
+    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}
+
+
+def atleastnd(arr,n=2):
+    """
+    Adds an initial singleton dimension to arrays with fewer than n dimensions.
+    """
+    
+    if len(arr.shape) < n:
+        arr = arr.reshape((1,) + arr.shape)
+    
+    return arr
 
 def c2d(Ac,Bc,Delta):
     """
@@ -459,11 +570,108 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={}):
         print("Took %g s." % (endtime - starttime))    
     
     return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}        
+
+def fillBoundsDict(bounds,Nx,Nu):
+    """
+    Fills a given bounds dictionary with any unspecified defaults.
+    """
     
+    # Check what bounds were supplied.
+    defaultbounds = [("xlb",Nx,-np.Inf),("xub",Nx,np.Inf),("ulb",Nu,-np.Inf),("uub",Nu,np.Inf)]
+    for (k,n,M) in defaultbounds:
+        if k not in bounds:
+            bounds[k] = [M*np.ones((n,))]
+            
+    return bounds
+    
+def nmpc_dev(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={}):
+    """
+    Temporary development version of nmpc. We're keeping both versions for now
+    so that I can make sure I don't break anything for the time-being.
+    """
+    starttime = time.clock()    
+    
+    # Get shapes.    
+    (Nx, Nu, Nd) = getModelArgs(F[0])
+    
+    # Check what bounds were supplied.
+    bounds = fillBoundsDict(bounds)
+    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
+    
+    # Define NLP variables.
+    [VAR, LB, UB, GUESS] = getCasadiVars(Nx,Nu,N)
+    
+    # Decide whether we need to include d or not.    
+    if Nd > 0:
+        if d is None:
+            d = [[0]*Nd] # All zero if unspecified.
+        Z = [[VAR["x",k], VAR["u",k], d[k % len(d)]] for k in range(N)]
+    else:
+        Z = [[VAR["x",k], VAR["u",k]] for k in range(N)]
+    
+    # Preallocate.
+    nlpObj = casadi.MX(0) # Start with dummy objective.
+    nlpCon = [None]*N
+    
+    # Steps 0 to N-1.    
+    for k in range(N):
+        # Model and objective.        
+        nlpCon[k] = F[k % len(F)](Z[k])[0] - VAR["x",k+1]
+        nlpObj += l[k % len(l)]([VAR["x",k],VAR["u",k]])[0]        
+        
+        # Variable bounds.
+        LB["x",k,:] = getBounds("xlb",k)
+        UB["x",k,:] = getBounds("xub",k)
+        LB["u",k,:] = getBounds("ulb",k)
+        UB["u",k,:] = getBounds("uub",k)
+    
+    # Adjust bounds for x0 and xN.
+    LB["x",0,:] = x0
+    UB["x",0,:] = x0
+    LB["x",N,:] = getBounds("xlb",N)
+    UB["x",N,:] = getBounds("xub",N)
+    if Pf is not None:
+        nlpObj += Pf([VAR["x",N]])[0]
+     
+    # Bounds for constraints (all are equality constraints).
+    conlb = np.zeros((Nx*N,))
+    conub = np.zeros((Nx*N,))
+    
+    # Make constraints into a single large vector.     
+    nlpCon = casadi.vertcat(nlpCon) 
+    
+    # Worry about user-supplied guesses.
+    if "x" in guess:    
+        for k in range(N+1):
+            GUESS["x",k,:] = guess["x"][:,k]
+    if "u" in guess:
+        for k in range(N):
+            GUESS["u",k,:] = guess["u"][:,k]
+    
+    # Call solver and stuff.
+    [OPTVAR,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity)
+    
+    x = np.hstack(OPTVAR["x",:,:])
+    u = np.hstack(OPTVAR["u",:,:])
+    
+    # Add singleton dimension if n = 1 or p = 1.
+    if Nx == 1:    
+        x = x.reshape(1,N+1)
+    if Nu == 1:
+        u = u.reshape(1,N)
+    
+    endtime = time.clock()
+    if verbosity > 1:
+        print("Took %g s." % (endtime - starttime))    
+    
+    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}        
  
-def getCollocationConstraints(f,Delta,Nt,Nc,d=None):
+def getCollocationConstraints(f,var,Delta,d=None):
     """
     Returns constraints for collocation of ODE f in variables x and u.
+    
+    var should be a casadi struct_symMX object, e.g. the output of
+    getCasadiVars.    
     
     Nt is the number of time points and Nc is the number of collocation points
     for each time period. Delta is the timestep between time points.
@@ -477,13 +685,14 @@ def getCollocationConstraints(f,Delta,Nt,Nc,d=None):
     # Get shapes.        
     (Nx, Nu, Nd) = getModelArgs(f)
     
-    # Define NLP variables.
-    VAR = ctools.struct_symMX([(
-        ctools.entry("x",shape=(Nx,1),repeat=Nt+1), # States at time points.
-        ctools.entry("z",shape=(Nx,Nc),repeat=Nt), # Collocation points.
-        ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
-    )])
-    
+    # Check sizes and find number of collocation points.
+    sizes = checkCasadiVars(var,colloc=True)
+    Nc = sizes["c"]
+    Nt = sizes["t"]
+    for (N, k) in [(Nx,"x"), (Nu,"u")]:
+        if N != sizes[k]:
+            print("*** Warning: size mismatch for %s!" % (k,))
+        
     # Get collocation weights.
     [r,A,B,q] = colloc.colloc(Nc, True, True)
     
@@ -498,31 +707,120 @@ def getCollocationConstraints(f,Delta,Nt,Nc,d=None):
             thisd = []
         
         # Build a convenience list.
-        zaug = [VAR["x",k]] + [VAR["z",k,:,j] for j in range(Nc)] + [VAR["x",k+1]]
+        xaug = [var["x",k]] + [var["c",k,:,j] for j in range(Nc)] + [var["x",k+1]]
         
         # Loop through interior points.        
-        for j in range(1,len(zaug) - 1):
-            thisargs = [zaug[j],VAR["u",k]] + thisd
+        for j in range(1,len(xaug) - 1):
+            thisargs = [xaug[j],var["u",k]] + thisd
             thiscon = Delta*f(thisargs)[0] # Start with function evaluation.
             
             #import pdb; pdb.set_trace()
             # Add collocation weights.
-            for jprime in range(len(zaug)):
-                thiscon -= A[j,jprime]*zaug[jprime]
+            for jprime in range(len(xaug)):
+                thiscon -= A[j,jprime]*xaug[jprime]
             
             CON.append(thiscon)
     
     CONLB = np.zeros((Nx*Nt*Nc,))
     CONUB = CONLB.copy()
         
-    return [VAR, CON, CONLB, CONUB]
+    return [CON, CONLB, CONUB]
     
+def getCasadiVars(Nx,Nu,Nt,Nc=None):
+    """
+    Returns a casadi struct_symMX with the appropriate variables.
+    
+    [var, lb, ub guess] = getCasadiVars(Nx,Nu,Nt,Nc=None)    
+    
+    Also returns objects with default bounds: -inf for lower bounds,
+    0 for initial guess, and inf for upper bounds.
+    
+    Variables are accessed as var[*,t] where t is the time point and * is one
+    of the following variable names:
+    
+    "x" : system states.
+    "u" : control inputs.
+    "c" : collocation points (not present if Nc = None)
+    """
+    
+    args = (
+        ctools.entry("x",shape=(Nx,1),repeat=Nt+1), # States at time points.
+        ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
+    )
+    if Nc is not None:
+        args += (ctools.entry("c",shape=(Nx,Nc),repeat=Nt),) # Collocation points.
+    
+    VAR =  ctools.struct_symMX([args])
+    LB = VAR(-np.inf)
+    UB = VAR(np.inf)
+    GUESS = VAR(0)
+    
+    return [VAR, LB, UB, GUESS]
+
+def checkCasadiVars(var,colloc=False):
+    """
+    Checks the entries of a casadi struct_symMX for the proper fields and returns sizes.
+    
+    Raises a ValueError if something is missing.
+    """
+    
+    # Check entries.
+    needKeys = ["x", "u"]
+    if colloc:
+        needKeys.append("c")
+    givenKeys = var.keys()
+    for k in needKeys:
+        if k not in givenKeys:
+            raise ValueError("Entry %s missing from var! Consider using getCasadiVars for proper structure." % (k,))
+            
+    # Grab sizes for everything.
+    sizes = {}
+    sizeLocations = {"x": 0, "u": 0, "c": 1}
+    sizes["t"] = len(var["x"]) - 1
+    for k in givenKeys:
+        if k in needKeys:
+            sizes[k] = var[k,0].shape[sizeLocations[k]]
+            
+    return sizes
+    
+def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,verbosity=5):
+    """
+    Calls ipopt to solve an NLP.
+    
+    Arguments are mostly self-explainatory. var, varlb, varub, and varguess
+    should be casadi struct_symMX objects, e.g. the outputs of getCasadiVars.
+    obj should be a scalar casadi MX object, and con should be a vector casadi
+    MX object (possibly from calling casadi.vertcat on a list of constraints).
+    conlb and conub should be numpy vectors of the appropriate size.
+    
+    Returns the optimal variables, a status string, and the solver object.
+    """
+    
+    nlp = casadi.MXFunction(casadi.nlpIn(x=var),casadi.nlpOut(f=obj,g=con))
+    solver = casadi.NlpSolver("ipopt",nlp)
+    solver.setOption("print_level",verbosity)
+    solver.setOption("print_time",verbosity > 2)   
+    solver.init()
+
+    solver.setInput(varguess,"x0")
+    solver.setInput(varlb,"lbx")
+    solver.setInput(varub,"ubx")
+    solver.setInput(conlb,"lbg")
+    solver.setInput(conub,"ubg")
+    
+    # Solve.    
+    solver.evaluate()
+    status = solver.getStat("return_status")
+    if verbosity > 0:
+        print("Solver Status:", status)
+     
+    optvar = var(solver.getOutput("x"))     
+     
+    return [optvar, status, solver]
    
 # =================================
 # Plotting
 # =================================
-
-
     
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     """
