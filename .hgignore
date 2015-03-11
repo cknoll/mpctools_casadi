@@ -2,3 +2,11 @@ syntax: glob
 
 *.pyc
 *.pdf
+doc/*.nav
+doc/*.vrb
+doc/*.out
+doc/*.log
+doc/*.aux
+doc/*.synctex.gz
+doc/*.snm
+doc/*.toc
