@@ -5,6 +5,7 @@ import casadi
 import casadi.tools as ctools
 import matplotlib.pyplot as plt
 import time
+import itertools
 import colloc
 
 """
@@ -405,6 +406,7 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     nlpObj = casadi.MX(0) # Start with dummy objective.
     if timemodel == "colloc":
         [nlpCon, conlb, conub] = getCollocationConstraints(F[0],VAR,Delta,d)
+        nlpCon = flattenlist(nlpCon)
     else:
         nlpCon = getDiscreteTimeConstraints(F,VAR,d)
         
@@ -470,8 +472,9 @@ def getVarShapes(f,var,error=False):
     (Nx, Nu, Nd) = getModelArgs(f)
     
     # Check sizes and find number of collocation points.
-    colloc = "c" in var.keys() 
-    sizes = checkCasadiVars(var,colloc)
+    colloc = "xc" in var.keys()
+    algebraic = "z" in var.keys()
+    sizes = getCasadiVarsSizes(var,colloc,algebraic)
     for (N, k) in [(Nx,"x"), (Nu,"u")]:
         if N != sizes[k]:
             print("*** Warning: size mismatch for %s!" % (k,))
@@ -507,7 +510,7 @@ def getCollocationConstraints(f,var,Delta,d=None):
     # Get collocation weights.
     [r,A,B,q] = colloc.colloc(Nc, True, True)
     
-    # Preallocate.
+    # Preallocate. CON will be a list of lists.
     CON = []
     
     for k in range(Nt):
@@ -518,19 +521,19 @@ def getCollocationConstraints(f,var,Delta,d=None):
             thisd = []
         
         # Build a convenience list.
-        xaug = [var["x",k]] + [var["c",k,:,j] for j in range(Nc)] + [var["x",k+1]]
+        xaug = [var["x",k]] + [var["xc",k,:,j] for j in range(Nc)] + [var["x",k+1]]
+        thesecon = []        
         
         # Loop through interior points.        
         for j in range(1,len(xaug) - 1):
             thisargs = [xaug[j],var["u",k]] + thisd
             thiscon = Delta*f(thisargs)[0] # Start with function evaluation.
             
-            #import pdb; pdb.set_trace()
             # Add collocation weights.
             for jprime in range(len(xaug)):
                 thiscon -= A[j,jprime]*xaug[jprime]
-            
-            CON.append(thiscon)
+            thesecon.append(thiscon)
+        CON.append(thesecon)
     
     CONLB = np.zeros((Nx*Nt*Nc,))
     CONUB = CONLB.copy()
@@ -571,11 +574,11 @@ def getDiscreteTimeConstraints(F,var,d=None):
     
     return nlpCon
     
-def getCasadiVars(Nx,Nu,Nt,Nc=None):
+def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
     """
     Returns a casadi struct_symMX with the appropriate variables.
     
-    [var, lb, ub guess] = getCasadiVars(Nx,Nu,Nt,Nc=None)    
+    [var, lb, ub guess] = getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None)    
     
     Also returns objects with default bounds: -inf for lower bounds,
     0 for initial guess, and inf for upper bounds.
@@ -585,7 +588,9 @@ def getCasadiVars(Nx,Nu,Nt,Nc=None):
     
     "x" : system states.
     "u" : control inputs.
-    "c" : collocation points (not present if Nc = None)
+    "xc" : collocation points (not present if Nc is None)
+    "z" : algebraic variables (not present if Nz is None)
+    "zc" : collocation albegraic variables (not present if Nc or Nz are None)
     """
     
     args = (
@@ -593,7 +598,11 @@ def getCasadiVars(Nx,Nu,Nt,Nc=None):
         ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
     )
     if Nc is not None:
-        args += (ctools.entry("c",shape=(Nx,Nc),repeat=Nt),) # Collocation points.
+        args += (ctools.entry("xc",shape=(Nx,Nc),repeat=Nt),) # Collocation points.
+    if Nz is not None:
+        args += (ctools.entry("z",shape=(Nz,1),repeat=Nt+1),) # Algebraic variables.
+        if Nc is not None:
+            args += (ctools.entry("zc",shape=(Nz,Nc),repeat=Nt),) # Coll. Alg. variables.
     
     VAR =  ctools.struct_symMX([args])
     LB = VAR(-np.inf)
@@ -602,7 +611,7 @@ def getCasadiVars(Nx,Nu,Nt,Nc=None):
     
     return [VAR, LB, UB, GUESS]
 
-def checkCasadiVars(var,colloc=False):
+def getCasadiVarsSizes(var,colloc=False,algebraic=False):
     """
     Checks the entries of a casadi struct_symMX for the proper fields and returns sizes.
     
@@ -610,21 +619,29 @@ def checkCasadiVars(var,colloc=False):
     """
     
     # Check entries.
-    needKeys = ["x", "u"]
+    needSizeKeys = ["x", "u"]
+    needVarKeys = ["x", "u"]
     if colloc:
-        needKeys.append("c")
+        needSizeKeys.append("c")
+        needVarKeys.append("xc")
+    if algebraic:
+        needSizeKeys.append("z")
+        needVarKeys.append("z")
+        if colloc:
+            needVarKeys.append("zc")
     givenKeys = var.keys()
-    for k in needKeys:
+    for k in needVarKeys:
         if k not in givenKeys:
             raise ValueError("Entry %s missing from var! Consider using getCasadiVars for proper structure." % (k,))
             
-    # Grab sizes for everything.
-    sizes = {}
-    sizeLocations = {"x": 0, "u": 0, "c": 1}
-    sizes["t"] = len(var["x"]) - 1
-    for k in givenKeys:
-        if k in needKeys:
-            sizes[k] = var[k,0].shape[sizeLocations[k]]
+    # Grab sizes for everything. Format is "sizename" : ("varname", dimension)
+    sizes = {"x": ("x",0), "u": ("u",0), "c": ("xc",1), "z": ("z",0)}
+    for k in sizes.keys():
+        (v,i) = sizes.pop(k) # Get variable name and index.
+        if k in needSizeKeys: # Save size if we need it.
+            sizes[k] = var[v,0].shape[i]
+            
+    sizes["t"] = len(var["x"]) - 1 # Time is slightly different.
             
     return sizes
     
@@ -664,6 +681,17 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,verbosity=5):
     obj = float(solver.getOutput("f"))   
      
     return [optvar, obj, status, solver]
+
+def flattenlist(l,depth=1):
+    """
+    Flattens a nested list of lists of the given depth.
+    
+    E.g. flattenlist([[1,2,3],[4,5],[6]]) returns [1,2,3,4,5,6]. Note that
+    all sublists must have the same depth.
+    """
+    for i in range(depth):
+        l = list(itertools.chain.from_iterable(l))
+    return l
    
 # =================================
 # Plotting

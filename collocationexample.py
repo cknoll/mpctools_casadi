@@ -26,6 +26,7 @@ Nc = 10
 verbosity = 3
 [VAR, LB, UB, GUESS] = mpc.getCasadiVars(Nx,Nu,Nt,Nc)    
 [CON, CONLB, CONUB] = mpc.getCollocationConstraints(f,VAR,Delta)
+CON = mpc.flattenlist(CON)
 
 # Initial condition.
 GUESS["x",0,:] = x0
@@ -39,7 +40,7 @@ nlpCon = casadi.vertcat(CON)
 [OPTVAR, obj, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, verbosity)
 x = np.hstack(OPTVAR["x",:])
 u = np.hstack(OPTVAR["u",:])
-z = np.hstack(OPTVAR["c",:])
+z = np.hstack(OPTVAR["xc",:])
 
 # Plot some stuff.
 tx = Delta*np.arange(Nt + 1)
