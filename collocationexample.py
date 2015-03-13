@@ -19,7 +19,7 @@ Delta = .5
 
 # Pick horizon and number of collocation points.
 Nt = 10
-Nc = 10
+Nc = 5
 
 [r,A,B,q] = colloc.colloc(Nc, True, True)
 
@@ -27,6 +27,8 @@ verbosity = 3
 [VAR, LB, UB, GUESS] = mpc.getCasadiVars(Nx,Nu,Nt,Nc)    
 [CON, CONLB, CONUB] = mpc.getCollocationConstraints(f,VAR,Delta)
 CON = mpc.flattenlist(CON)
+CONLB.shape = (CONLB.size,) # In-place flatten.
+CONUB.shape = (CONUB.size,)
 
 # Initial condition.
 GUESS["x",0,:] = x0

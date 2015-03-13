@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division # Grab some handy Python3 stuff.
 import numpy as np
 import scipy.linalg
 import casadi
@@ -259,31 +259,19 @@ def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
     
     return fcasadi
 
-def getModelArgs(f):
+def getRungeKutta4(f,Delta,M=1,d=False,name=None):
     """
-    Checks number and sizes of arguments for the casadi function f.
-    
-    Returns a tuple (Nx, Nu, Nd) with sizes for x, u, and d. The first argument
-    is always x, the second u (if present), and the third d (if present).
-    
-    The function may take more than three arguments, but these aren't returned.
-    """
-    sizes = []
-    for i in range(f.getNumInputs()):
-        sizes.append(f.getInput(i).size())
-    sizes += [0]*(3 - len(sizes))
-    return tuple(sizes[:3])
+    Uses RK4 to discretize xdot = f(x,u) with M points and timestep Delta.
 
-def getRungeKutta4(f,Delta,M=1,name=None):
-    """
-    Uses RK4 to discretize xdot = f(x,u,d) with M points and timestep Delta.
+    A disturbance argument can be specified by setting d=True. If present, d
+    must come last in the list of arguments (i.e. f(x,u,d))
 
-    f must be a Casadi SX function with 1, 2, or 3 inputs in the order shown.
-    All inputs must be vectors.
+    f must be a Casadi SX function with inputs in the proper order.
     """
 
     # First find out how many arguments f takes.
-    (Nx, Nu, Nd) = getModelArgs(f)
+    fargs = getModelArgSizes(f,d=d)
+    [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
     
     # Now make relevant symbolic variables.
     x0 = casadi.MX.sym("x0",Nx)
@@ -391,8 +379,9 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     if timemodel == "rk4":
         F = [getRungeKutta4(f,Delta,M) for f in F]
     
-    # Get shapes.    
-    (Nx, Nu, Nd) = getModelArgs(F[0])
+    # Get shapes.
+    Fargs = getModelArgSizes(F[0],d=(d is not None),z=False)
+    [Nx, Nu, Nd] = [Fargs[a] for a in ["x","u","d"]]    
     
     # Check what bounds were supplied.
     bounds = fillBoundsDict(bounds,Nx,Nu)
@@ -402,19 +391,19 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     [VAR, LB, UB, GUESS] = getCasadiVars(Nx,Nu,N,Nc)
     
     
-    # Preallocate objective and get constraints.
-    nlpObj = casadi.MX(0) # Start with dummy objective.
+    # Get constraints.
     if timemodel == "colloc":
         [nlpCon, conlb, conub] = getCollocationConstraints(F[0],VAR,Delta,d)
-        nlpCon = flattenlist(nlpCon)
     else:
-        nlpCon = getDiscreteTimeConstraints(F,VAR,d)
-        
-        # Bounds for constraints (all are equality constraints).
-        conlb = np.zeros((Nx*N,))
-        conub = np.zeros((Nx*N,))
+        [nlpCon, conlb, conub] = getDiscreteTimeConstraints(F,VAR,d)
     
-    # Steps 0 to N-1.    
+    # Need to flatten everything.
+    nlpCon = flattenlist(nlpCon)
+    conlb.shape = (conlb.size,)
+    conub.shape = (conlb.size,)
+    
+    # Steps 0 to N-1.
+    nlpObj = casadi.MX(0) # Start with dummy objective.    
     for k in range(N):
         # Model and objective.        
         nlpObj += l[k % len(l)]([VAR["x",k],VAR["u",k]])[0]        
@@ -458,9 +447,54 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     if verbosity > 1:
         print("Took %g s." % (endtime - starttime))    
     
-    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime, "obj" : obj}        
+    optDict = {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime, "obj" : obj}
 
-def getVarShapes(f,var,error=False):
+    # Return collocation points if present.
+    if Nc is not None:
+        xc = np.hstack(OPTVAR["xc",:,:,:])
+        optDict["xc"] = xc
+    
+    return optDict      
+
+def getModelArgSizes(f,u=True,d=False,z=False,error=True):
+    """
+    Checks number and sizes of arguments for the casadi function f.
+    
+    Returns a dictionary with sizes for x, z, u, and d. Arguments must always
+    be specified in the order (x,z,u,d), with the presence or absence of each
+    argument specified by the corresponding optional argument. x must always
+    be present.
+    
+    If the number of suggested arguments does not match the number of arguments
+    taken by f, then an error is raised. You can turn off this error by setting
+    the optional argument error=False.
+    """
+    
+    # Figure out what arguments f is supposed to have.
+    sizes = {}
+    args = []
+    for (var,tf) in [("x",True), ("z",z), ("u",u), ("d",d)]:
+        if tf:
+            args += [var]
+        else:
+            sizes[var] = None
+    
+    # Figure out what arguments f does have.
+    argsizes = []
+    for i in range(f.getNumInputs()):
+        argsizes.append(f.getInput(i).size())
+        
+    # Error of something doesn't match.
+    if len(args) != len(argsizes) and error:
+        raise ValueError("Arguments of f are inconsistent with supplied arguments!")
+    
+    # Store sizes.
+    for (arg, size) in zip(args, argsizes):
+        sizes[arg] = size
+    
+    return sizes
+
+def getVarShapes(f,var,disturbancemodel=False,error=False):
     """
     Returns a dictionary of various sizes for the model f and variables var.
     
@@ -468,15 +502,18 @@ def getVarShapes(f,var,error=False):
     """
     issueError = False    
     
-    # Get shapes.        
-    (Nx, Nu, Nd) = getModelArgs(f)
+    # First check if there are algebraic variables.
+    algebraic = "z" in var.keys()    
+    
+    # Get shapes.
+    fargs = getModelArgSizes(f,d=disturbancemodel,z=algebraic)
+    [Nx, Nu, Nd, Nz] = [fargs[a] for a in ["x","u","d","z"]]        
     
     # Check sizes and find number of collocation points.
     colloc = "xc" in var.keys()
-    algebraic = "z" in var.keys()
     sizes = getCasadiVarsSizes(var,colloc,algebraic)
-    for (N, k) in [(Nx,"x"), (Nu,"u")]:
-        if N != sizes[k]:
+    for (N, k) in [(Nx,"x"), (Nu,"u"), (Nz,"z")]:
+        if k in sizes and N != sizes[k]:
             print("*** Warning: size mismatch for %s!" % (k,))
             issueError = error
     sizes["d"] = Nd
@@ -504,7 +541,7 @@ def getCollocationConstraints(f,var,Delta,d=None):
     """
 
     # Get shapes.
-    shapes = getVarShapes(f,var)
+    shapes = getVarShapes(f,var,disturbancemodel=(d is not None))
     [Nx, Nu, Nd, Nc, Nt] = [shapes[k] for k in ["x","u","d","c","t"]]
         
     # Get collocation weights.
@@ -522,10 +559,10 @@ def getCollocationConstraints(f,var,Delta,d=None):
         
         # Build a convenience list.
         xaug = [var["x",k]] + [var["xc",k,:,j] for j in range(Nc)] + [var["x",k+1]]
-        thesecon = []        
+        thesecon = []
         
         # Loop through interior points.        
-        for j in range(1,len(xaug) - 1):
+        for j in range(1,Nc+2):
             thisargs = [xaug[j],var["u",k]] + thisd
             thiscon = Delta*f(thisargs)[0] # Start with function evaluation.
             
@@ -535,7 +572,9 @@ def getCollocationConstraints(f,var,Delta,d=None):
             thesecon.append(thiscon)
         CON.append(thesecon)
     
-    CONLB = np.zeros((Nx*Nt*Nc,))
+    # Return bounds a a NumPy array. This is more convenient, and we choose
+    # this order so we can flatten in C order (NumPy's default).
+    CONLB = np.zeros((Nt,Nc+1,Nx))
     CONUB = CONLB.copy()
         
     return [CON, CONLB, CONUB]
@@ -553,15 +592,18 @@ def getDiscreteTimeConstraints(F,var,d=None):
     If provided, d is a list of disturbances at each time point. It is acccessed
     mod length, so periodic disturbances with period < Nt can be used.
     
-    Returns a a list of all the constraints and bounds for the constraints.
+    Returns a list of three elements [con, conlb, conub]. con is a list with
+    each element a list of constraints for each time point. conlb and conub
+    are 3D numpy arrays with conlb[t,n,x] giving the constraint bound at time
+    t for constraint n and element x.
     """
     
     # Get shapes.
-    shapes = getVarShapes(F[0],var)
+    shapes = getVarShapes(F[0],var,disturbancemodel=(d is not None))
     [Nx, Nu, Nd, Nt] = [shapes[k] for k in ["x","u","d","t"]]    
     
     # Decide whether we need to include d or not.    
-    if Nd > 0:
+    if Nd is not None and Nd > 0:
         if d is None:
             d = [[0]*Nd] # All zero if unspecified.
         Z = [[var["x",k], var["u",k], d[k % len(d)]] for k in range(Nt)]
@@ -570,9 +612,12 @@ def getDiscreteTimeConstraints(F,var,d=None):
    
     nlpCon = []
     for k in range(Nt):
-        nlpCon.append(F[k % len(F)](Z[k])[0] - var["x",k+1])
+        nlpCon.append([F[k % len(F)](Z[k])[0] - var["x",k+1]])
     
-    return nlpCon
+    conlb = np.zeros((Nt,1,Nx))
+    conub = conlb.copy()
+    
+    return [nlpCon, conlb, conub]
     
 def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
     """
@@ -614,6 +659,9 @@ def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
 def getCasadiVarsSizes(var,colloc=False,algebraic=False):
     """
     Checks the entries of a casadi struct_symMX for the proper fields and returns sizes.
+    
+    The return value is a dictionary. The only keys correspond to elements that
+    are actually present in the variable struct.
     
     Raises a ValueError if something is missing.
     """
@@ -761,305 +809,4 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
         fig.tight_layout(pad=tightness)        
     
     return fig
-
-# =================================
-# Old functions
-# =================================
-
-    
-def _OLD_nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={}):
-    """
-    OLD VERSION INCLUDED ONLY FOR BENCHMARKING.
-    
-    Solves a nonlinear MPC problem using a discrete-time model.
-    
-    Inputs are discrete-time state-space model, stage costs, terminal weight,
-    initial state, prediction horizon, and any known disturbances. Output is a
-    tuple (x,u) with the optimal state and input trajectories.    
-    
-    The actual optimization problem is as follows:
-    
-        min \sum_{k=0}^{N} l[k](x[k],u[k]) + Pf(x[N])     
-    
-        s.t. x[k+1] = F(x[k],u[k],d[k])   k = 0,...,N-1
-             ulb[k] <= u[k] <= uub[k]     k = 0,...,N-1
-             xlb[k] <= x[k] <= xlb[k]     k = 0,...,N
-    
-    F and l should be lists of Casadi functions. Pf is just a single Casadi
-    function. Each F must take two or three arguments. Each l must take two,
-    and Pf must take one.
-    
-    All of these lists are accessed modulo their respective length; thus,
-    time-invariant models can be lists with one element, while time-varying
-    periodic model with period T should have T elements.
-    
-    Input bounds is a dictionary that can contain box constraints on x or u.
-    The corresponding entries are "xlb", "xub", "ulb", and "uub". Bounds must
-    be lists of vectors of appropriate size.
-    
-    d should be a list of "disturbances" known a-priori. It can be None to
-    indicate that they are all zero, or that they they simply aren't present.
-    
-    Optional argument verbosity controls how much solver output there is. This
-    value must be an integer between 0 and 12 (inclusive). Higher numbers
-    indicate more verbose output.
-
-    guess is a dictionary with optional keys "x" and "u". If provided, these
-    should be Nx by N+1 and Nu by N arrays respectively. These are fed to the
-    solver as an initial guess. These points need not be feasible, but it
-    helps if they are.
-    
-    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
-    index corresponding to individual states and the second index corresponding
-    to time. Entry "status" is a string with solver status.
-    """
-    starttime = time.clock()    
-    
-    # Get shapes.    
-    (Nx, Nu, Nd) = getModelArgs(F[0])
-    
-    # Check what bounds were supplied.
-    defaultbounds = [("xlb",Nx,-np.Inf),("xub",Nx,np.Inf),("ulb",Nu,-np.Inf),("uub",Nu,np.Inf)]
-    for (k,n,M) in defaultbounds:
-        if k not in bounds:
-            bounds[k] = [M*np.ones((n,))]
-    
-    # Define NLP variables.
-    VAR = ctools.struct_symMX([(
-        ctools.entry("x",shape=(Nx,1),repeat=N+1),
-        ctools.entry("u",shape=(Nu,1),repeat=N),
-    )])
-    
-    # Decide whether we need to include d or not.    
-    if Nd > 0:
-        if d is None:
-            d = [[0]*Nd] # All zero if unspecified.
-        Z = [[VAR["x",k], VAR["u",k], d[k % len(d)]] for k in range(N)]
-    else:
-        Z = [[VAR["x",k], VAR["u",k]] for k in range(N)]
-    
-    # Preallocate.
-    GUESS = VAR(0) # Guess all variables zero.
-    LB = VAR(-np.Inf) # Default all bounds to +/- Inf.
-    UB = VAR(np.Inf)
-    nlpObj = casadi.MX(0) # Start with dummy objective.
-    nlpCon = [None]*N
-    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
-    
-    # Steps 0 to N-1.    
-    for k in range(N):
-        # Model and objective.        
-        nlpCon[k] = F[k % len(F)](Z[k])[0] - VAR["x",k+1]
-        nlpObj += l[k % len(l)]([VAR["x",k],VAR["u",k]])[0]        
-        
-        # Variable bounds.
-        LB["x",k,:] = getBounds("xlb",k)
-        UB["x",k,:] = getBounds("xub",k)
-        LB["u",k,:] = getBounds("ulb",k)
-        UB["u",k,:] = getBounds("uub",k)
-    
-    # Adjust bounds for x0 and xN.
-    LB["x",0,:] = x0
-    UB["x",0,:] = x0
-    LB["x",N,:] = getBounds("xlb",N)
-    UB["x",N,:] = getBounds("xub",N)
-    if Pf is not None:
-        nlpObj += Pf([VAR["x",N]])[0]
      
-    # Bounds for constraints (all are equality constraints).
-    conlb = np.zeros((Nx*N,))
-    conub = np.zeros((Nx*N,))
-    
-    # Make constraints into a single large vector.     
-    nlpCon = casadi.vertcat(nlpCon) 
-    
-    # Worry about user-supplied guesses.
-    if "x" in guess:    
-        for k in range(N+1):
-            GUESS["x",k,:] = guess["x"][:,k]
-    if "u" in guess:
-        for k in range(N):
-            GUESS["u",k,:] = guess["u"][:,k]
-    
-    # Create solver and stuff.
-    nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=nlpObj,g=nlpCon))
-    solver = casadi.NlpSolver("ipopt",nlp)
-    solver.setOption("print_level",verbosity)
-    solver.setOption("print_time",verbosity > 2)   
-    solver.init()
-
-    solver.setInput(GUESS,"x0")
-    solver.setInput(LB,"lbx")
-    solver.setInput(UB,"ubx")
-    solver.setInput(conlb,"lbg")
-    solver.setInput(conub,"ubg")
-    
-    # Solve.    
-    solver.evaluate()
-    status = solver.getStat("return_status")
-    if verbosity > 0:
-        print("Solver Status:", status)
-    
-    # Get solution.
-    OPTVAR = VAR(solver.getOutput("x"))
-    x = np.hstack(OPTVAR["x",:,:])
-    u = np.hstack(OPTVAR["u",:,:])
-    
-    # Add singleton dimension if n = 1 or p = 1.
-    if Nx == 1:    
-        x = x.reshape(1,N+1)
-    if Nu == 1:
-        u = u.reshape(1,N)
-    
-    endtime = time.clock()
-    if verbosity > 1:
-        print("Took %g s." % (endtime - starttime))    
-    
-    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}
-
-def _OLD_lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,xlb=None,xub=None,ulb=None,uub=None,D=None,G=None,d=None,verbosity=5):
-    """
-    OLD VERSION INCLUDED ONLY TO CHECK COMPATIBILITY.    
-    
-    Solves the canonical linear MPC problem using a discrete-time model.
-    
-    Inputs are discrete-time state-space model, objective function weights, and
-    input constraints. Output is a tuple (x,u) with the optimal state and input
-    trajectories.    
-    
-    The actual optimization problem is as follows:
-    
-        min \sum_{k=0}^N        0.5*x[k]'*Q[k]*x[k] + q[k]'*x[k]      
-            + \sum_{k=0}^{N-1}  0.5*u[k]'*R[k]*u[k] + r[k]'*u[k]
-                                 + x[k]'*M[k]*u[k]
-    
-        s.t. x[k+1] = A[k]*x[k] + B[k]*u[k]               k = 0,...,N-1
-             ulb[k] <= u[k] <= uub[k]                     k = 0,...,N-1
-             xlb[k] <= x[k] <= xlb[k]                     k = 0,...,N
-             D[k]*u[k] - G[k]*x[k] <= d[k]                k = 0,...,N-1
-    
-    A, B, Q, R, M, D, and G should be lists of numPy matrices. x0 should be a
-    numPy vector. q, r, xlb, xub, ulb, uub, and d should be lists of numpy vectors.
-    
-    All of these lists are accessed modulo their respective length;hus,
-    time-invariant models can be lists with one element, while time-varying
-    periodic model with period T should have T elements.
-    
-    All arguments are optional except A, B,x0, N, Q, and R. If any of D, G, or d
-    are given, then all must be given.    
-    
-    Optional argument verbosity controls how much solver output there is. This
-    value must be an integer between 0 and 12 (inclusive). Higher numbers
-    indicate more verbose output.    
-    
-    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
-    index corresponding to individual states and the second index corresponding
-    to time. Entry "status" is a string with solver status.
-    """    
-    starttime = time.clock()    
-    
-    # Get shapes.    
-    n = A[0].shape[0]
-    p = B[0].shape[1]
-    
-    # Sort out arguments.
-    if xlb is None:
-        xlb = [-np.inf*np.ones((n,1))]
-    if xub is None:
-        xub = [np.inf*np.ones((n,1))]
-    if ulb is None:
-        ulb = [-np.inf*np.ones((p,1))]
-    if uub is None:
-        uub = [np.inf*np.ones((p,1))]
-    
-    argcheck = [D is None, G is None, d is None]    
-    if any(argcheck) and not all(argcheck):
-        raise ValueError("D, G, and d must be specified all or none.")
-    
-    # Define NLP variables.
-    VAR = ctools.struct_symMX([(
-        ctools.entry("x",shape=(n,1),repeat=N+1),
-        ctools.entry("u",shape=(p,1),repeat=N),
-    )])
-    LB = VAR(-np.Inf) # Default all bounds to +/- Inf.
-    UB = VAR(np.Inf)
-    qpF = casadi.MX(0) # Start with dummy objective.
-    qpG = [None]*N # Preallocate, although we could just append.
-    
-    # First handle objective/constraint terms that aren't optional.    
-    for k in range(N):
-        if k != N:
-            LB["u",k,:] = ulb[k % len(ulb)]
-            UB["u",k,:] = uub[k % len(uub)]
-            
-            qpF += .5*mtimes(VAR["u",k].T,R[k % len(R)],VAR["u",k]) 
-            qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
-        
-        if k == 0:
-            LB["x",0,:] = x0
-            UB["x",0,:] = x0
-        else:
-            LB["x",k,:] = xlb[k % len(xlb)]
-            UB["x",k,:] = xub[k % len(xub)]
-        
-        qpF += .5*mtimes(VAR["x",k].T,Q[k % len(Q)],VAR["x",k])
-    
-    conlb = np.zeros((n*N,))
-    conub = np.zeros((n*N,))
-
-    # Now check optional stuff.
-    if q is not None:
-        for k in range(N):
-            qpF += mtimes(q[k % len(q)].T,VAR["x",k])
-    if r is not None:
-        for k in range(N-1):
-            qpF += mtimes(r[k % len(r)].T,VAR["u",k])
-    if M is not None:
-        for k in range(N-1):
-            qpF += mtimes(VAR["x",k].T,M[k % len(M)],VAR["u",k])                
-    
-    if D is not None:
-        for k in range(N-1):
-            qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
-                        - mtimes(G[k % len(d)],VAR["x"]) - d[k % len(d)])
-        s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
-        conlb = np.concatenate(conlb,-np.inf*np.ones(s))
-        conub = np.concatenate(conub,np.zeros(s))
-    
-    # Make qpG into a single large vector.     
-    qpG = casadi.vertcat(qpG) 
-    
-    # Create solver and stuff.
-    nlp = casadi.MXFunction(casadi.nlpIn(x=VAR),casadi.nlpOut(f=qpF,g=qpG))
-    solver = casadi.NlpSolver("ipopt",nlp)
-    solver.setOption("print_level",verbosity)
-    solver.setOption("print_time",verbosity > 2)   
-    solver.init()
-
-    solver.setInput(LB,"lbx")
-    solver.setInput(UB,"ubx")
-    solver.setInput(conlb,"lbg")
-    solver.setInput(conub,"ubg")
-    
-    # Solve.    
-    solver.evaluate()
-    status = solver.getStat("return_status")
-    if verbosity > 0:
-        print("Solver Status:", status)
-    
-    # Get solution.
-    OPTVAR = VAR(solver.getOutput("x"))
-    x = np.hstack(OPTVAR["x",:,:])
-    u = np.hstack(OPTVAR["u",:,:])
-    
-    # Add singleton dimension if n = 1 or p = 1.
-    if n == 1:    
-        x = x.reshape(1,N+1)
-    if p == 1:
-        u = u.reshape(1,N)
-    
-    endtime = time.clock()
-    if verbosity > 1:
-        print("Took %g s." % (endtime - starttime))
-    
-    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime}     
