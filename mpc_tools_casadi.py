@@ -106,7 +106,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     qpG = [None]*N # Preallocate, although we could just append.
     
     # First handle objective/constraint terms that aren't optional.    
-    for k in range(N):
+    for k in range(N+1):
         if k != N:
             LB["u",k,:] = getBounds("ulb",k)
             UB["u",k,:] = getBounds("uub",k)
@@ -149,19 +149,26 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     qpG = casadi.vertcat(qpG) 
     
     # Create solver and stuff.
+    ipoptstart = time.clock()
     [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity)
+    ipoptend = time.clock()
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
     
     # Add singleton dimension if n = 1 or p = 1.
     x = atleastnd(x)
     u = atleastnd(u)
-
+    
+    optVars = {"x" : x, "u" : u, "status" : status}
+    optVars["obj"] = obj
+    optVars["ipopttime"] = ipoptend - ipoptstart
+    
     endtime = time.clock()
     if verbosity > 1:
         print("Took %g s." % (endtime - starttime))
+    optVars["time"] = endtime - starttime
     
-    return {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime, "obj" : obj}
+    return optVars
 
 
 def atleastnd(arr,n=2):
@@ -239,17 +246,7 @@ def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
     """
     
     # Create symbolic variables.
-    x  = casadi.MX.sym("x",Nx) # States
-    args = {"x" : x}
-    invar = [x]
-    if Nu > 0:
-        u  = casadi.MX.sym("u",Nu) # Control
-        args["u"] = u
-        invar += [u]
-        if Nd > 0: # Only consider disturbances if there are control inputs.
-            d  = casadi.MX.sym("d",Nd) # Other (e.g. parameters or disturbances)
-            args["d"] = d
-            invar += [d]
+    [args, invar, _] = __getCasadiSymbols(Nx,Nu,Nd)    
     
     # Create symbolic function.
     outvar = [casadi.vertcat(f(**args))]
@@ -258,6 +255,50 @@ def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
     fcasadi.init()
     
     return fcasadi
+
+def getCasadiIntegrator(f,Delta,Nx,Nu=0,Nd=0,name=None,dae=False,abstol=1e-8,reltol=1e-8):
+    """
+    Gets a Casadi integrator for function f from 0 to Delta.
+    
+    Set d to True or False to decide whether there is a disturbance model.
+    
+    Note that this is really hacky to get it to function like a general discrete-time
+    function, but it is what it is for now.
+    """
+    
+    if dae:
+        raise NotImplementedError("DAE systems not implemented yet.")
+    
+    # Create symbolic variables for integrator I(x0,p).
+    [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd,combine=True)
+    x0 = args["x"]
+    fode = casadi.vertcat(f(**args))   
+    
+    # Build ODE and integrator.
+    invar = casadi.daeIn(x=x0,p=casadi.vertcat(zoh))
+    outvar = casadi.daeOut(ode=fode)
+    ode = casadi.MXFunction(invar,outvar)
+    
+    integrator = casadi.Integrator("cvodes",ode)
+    integrator.setOption("abstol",abstol)
+    integrator.setOption("reltol",reltol)
+    integrator.setOption("tf",Delta)
+    integrator.setOption("name","int_f")
+    integrator.init()
+    
+    # Now do the hacky bits. Integrator has arguments x0 and p, but we need
+    # arguments x, u, d. What we do below appears to work but seems like we're
+    # putting an extra wrapper around things.
+    
+    # Create symbolic variables for function F(x,u,d).
+    [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd,combine=False)  
+    
+    wrappedIntegrator = integrator(x0=args["x"],p=casadi.vertcat(zoh))
+    F = casadi.MXFunction(invar,wrappedIntegrator)
+    F.setOption("name",name if name is not None else "F")
+    F.init()
+    
+    return F
 
 def getRungeKutta4(f,Delta,M=1,d=False,name=None):
     """
@@ -268,21 +309,15 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None):
 
     f must be a Casadi SX function with inputs in the proper order.
     """
-
+    
     # First find out how many arguments f takes.
     fargs = getModelArgSizes(f,d=d)
     [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
+
+    # Get symbolic variables.
+    [args, _, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
+    x0 = args["x"]
     
-    # Now make relevant symbolic variables.
-    x0 = casadi.MX.sym("x0",Nx)
-    zoh = []  # Zero-order hold variables.
-    if Nu > 0:    
-        u = casadi.MX.sym("u",Nu)
-        zoh += [u]
-        if Nd > 0: # Only consider disturbances if there are control inputs.
-            d = casadi.MX.sym("d",Nd)
-            zoh += [d]
-        
     h = Delta/float(M) # h in Runge-Kutta.
     
     # Do M RK4 steps.
@@ -300,7 +335,54 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None):
     F.init()
     
     return F
-        
+
+def __getCasadiSymbols(Nx,Nu=None,Nd=None,combine=False):
+    """
+    Returns symbolic variables of appropriate sizes.
+
+    [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
+
+    args is a dictionary of the input variables. invar is a list in [x,u,d]
+    order. zoh is a list of the variables that are constant on a given
+    interval (i.e. u and d).
+    
+    If combine is true, u and d will be combined into a single parameter p.
+    The entries args['u'] and args['d'] will access the appropriate entries of
+    p, and invar/zoh will contain only p and not the individual u and d. This
+    is useful, e.g. for building integrators.
+    """
+    
+    # Create symbolic variables.
+    x  = casadi.MX.sym("x",Nx) # States
+    args = {"x" : x}
+    zoh = []
+    if combine:
+        Np = Nu + Nd
+        if Np > 0:
+            p = casadi.MX.sym("p",Np)
+            zoh = [p]
+            things = casadi.vertsplit(p,Nu)
+            if Nu > 0:
+                args["u"] = things[0]
+                if Nd > 0:
+                    args["d"] = things[1]
+            elif Nd > 0:
+                args["d"] = things[0]
+        else:
+            zoh = []
+    else:
+        if Nu > 0:
+            u  = casadi.MX.sym("u",Nu) # Control
+            args["u"] = u
+            zoh += [u]
+        if Nd > 0:
+            d  = casadi.MX.sym("d",Nd) # Other (e.g. parameters or disturbances)
+            args["d"] = d
+            zoh += [d]
+    invar = [x] + zoh
+    
+    return [args, invar, zoh]
+           
 def fillBoundsDict(bounds,Nx,Nu):
     """
     Fills a given bounds dictionary with any unspecified defaults.
@@ -389,7 +471,6 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     
     # Define NLP variables.
     [VAR, LB, UB, GUESS] = getCasadiVars(Nx,Nu,N,Nc)
-    
     
     # Get constraints.
     if timemodel == "colloc":

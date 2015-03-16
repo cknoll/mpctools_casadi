@@ -76,3 +76,11 @@ opt_ccollocnmpc = mpc.nmpc(fcasadi,l,x0,N,Pf,bounds,d=None,verbosity=verb,timemo
 fig_ccollocnmpc = mpc.mpcplot(opt_ccollocnmpc["x"],opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
 fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
 fig_ccollocnmpc.show()
+
+# Discrete-time but with Casadi's integrators.
+Fintegrator = [mpc.getCasadiIntegrator(f,Delta,Nx,Nu,Nd)]
+opt_integrator = mpc.nmpc(F,l,x0,N,Pf,bounds,d=None,verbosity=verb)
+fig_integrator = mpc.mpcplot(opt_integrator["x"],opt_integrator["u"],t,xsp,xinds=[0,1])
+fig_integrator.canvas.set_window_title("NMPC with Casadi Integrators")
+fig_integrator.show()
+
