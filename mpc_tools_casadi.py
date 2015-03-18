@@ -18,7 +18,11 @@ returning lagrange multipliers.
 
 There is now a function for nonlinear MPC. This works with nonlinear discrete-
 time models. There is also a function to discretize continuous-time models using
-a 4th-order Runge-Kutta method.
+a 4th-order Runge-Kutta method. Collocation is also available.
+
+Finally, there is a draft version of NMHE. These functions use different
+input arguments, but I think this way is better than how the MPC functions are
+done, and so the MPC function call syntax may change in the future.
 
 Most other functions are just convenience wrappers to replace calls like
 long.function.name((args,as,tuple)) with f(args,as,args), although these are
@@ -150,7 +154,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     
     # Create solver and stuff.
     ipoptstart = time.clock()
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity)
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity=verbosity)
     ipoptend = time.clock()
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
@@ -170,70 +174,9 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     
     return optVars
 
-def atleastnd(arr,n=2):
-    """
-    Adds an initial singleton dimension to arrays with fewer than n dimensions.
-    """
-    
-    if len(arr.shape) < n:
-        arr = arr.reshape((1,) + arr.shape)
-    
-    return arr
-
-def c2d(Ac,Bc,Delta):
-    """
-    Converts continuous-time model (Ac,Bc) to discrete time (Ad,Bd) with sample time Delta.
-    
-    Inputs Ac and Bc should be numpy matrices of the appropriate size. Delta should be a
-    scalar. Output is a tuple with discretized (Ad,Bd).
-    """
-    n = Ac.shape[0]
-    m = Bc.shape[1]
-    
-    D = scipy.linalg.expm(Delta*np.vstack((np.hstack((Ac, Bc)), np.zeros((m,m+n)))))
-    Ad = D[0:n,0:n];
-    Bd = D[0:n,n:];
-    
-    return (Ad,Bd)
-  
-def np2mx(x):
-    """
-    Casts a numpy array or matrix x to a casadi MX variable.
-    """
-    return casadi.MX(casadi.DMatrix(x))
-    
-def mtimes(*args):
-    """
-    Convenience wrapper for casadi.tools.mul.
-    
-    Matrix multiplies all of the given arguments and returns the result.
-    """
-    return ctools.mul(args)
-    
-def vcat(*args):
-    """
-    Convenience wrapper for np.vstack.
-    
-    Vertically concatenates all arguments and returns the result.
-    
-    Accepts variable number of arguments instead of a single tuple.
-    """
-    return np.vstack(args)
-    
-def hcat(*args):
-    """
-    Convenience wrapper for np.hstack.
-    
-    Horizontally concatenates all arguments and returns the result.    
-    
-    Accepts variable number of arguments instead of a single tuple.
-    """
-    return np.hstack(args)
 # =================================
-# Nonlinear
+# Building CasADi Functions
 # =================================
-    
-# Nonlinear functions adapted from scripts courtesy of Lars Petersen.
 
 def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
     """
@@ -288,9 +231,6 @@ def getCasadiIntegrator(f,Delta,Nx,Nu=0,Nd=0,name=None,dae=False,abstol=1e-8,rel
     Gets a Casadi integrator for function f from 0 to Delta.
     
     Set d to True or False to decide whether there is a disturbance model.
-    
-    Note that this is really hacky to get it to function like a general discrete-time
-    function, but it is what it is for now.
     """
     
     if dae:
@@ -313,9 +253,8 @@ def getCasadiIntegrator(f,Delta,Nx,Nu=0,Nd=0,name=None,dae=False,abstol=1e-8,rel
     integrator.setOption("name","int_f")
     integrator.init()
     
-    # Now do the hacky bits. Integrator has arguments x0 and p, but we need
-    # arguments x, u, d. What we do below appears to work but seems like we're
-    # putting an extra wrapper around things.
+    # Now do the subtle bits. Integrator has arguments x0 and p, but we need
+    # arguments x, u, d.
     
     # Create symbolic variables for function F(x,u,d).
     [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd,combine=False)  
@@ -327,103 +266,13 @@ def getCasadiIntegrator(f,Delta,Nx,Nu=0,Nd=0,name=None,dae=False,abstol=1e-8,rel
     
     return F
 
-def getRungeKutta4(f,Delta,M=1,d=False,name=None):
-    """
-    Uses RK4 to discretize xdot = f(x,u) with M points and timestep Delta.
+# =================================
+# Nonlinear
+# =================================
+    
+# Nonlinear functions adapted from scripts courtesy of Lars Petersen.
 
-    A disturbance argument can be specified by setting d=True. If present, d
-    must come last in the list of arguments (i.e. f(x,u,d))
-
-    f must be a Casadi SX function with inputs in the proper order.
-    """
-    
-    # First find out how many arguments f takes.
-    fargs = getModelArgSizes(f,d=d)
-    [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
-
-    # Get symbolic variables.
-    [args, _, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
-    x0 = args["x"]
-    
-    h = Delta/float(M) # h in Runge-Kutta.
-    
-    # Do M RK4 steps.
-    x = x0
-    for j in range(M):
-        [k1] = f([x] + zoh)
-        [k2] = f([x + h/2*k1] + zoh)
-        [k3] = f([x + h/2*k2] + zoh)
-        [k4] = f([x + h*k3] + zoh)
-        x += h/6*(k1 + 2*k2 + 2*k3 + k4)
-    
-    # Build casadi function and initialize.
-    F = casadi.MXFunction([x0] + zoh,[x])
-    F.setOption("name",name if name is not None else "F")
-    F.init()
-    
-    return F
-
-def __getCasadiSymbols(Nx,Nu=None,Nd=None,combine=False):
-    """
-    Returns symbolic variables of appropriate sizes.
-
-    [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
-
-    args is a dictionary of the input variables. invar is a list in [x,u,d]
-    order. zoh is a list of the variables that are constant on a given
-    interval (i.e. u and d).
-    
-    If combine is true, u and d will be combined into a single parameter p.
-    The entries args['u'] and args['d'] will access the appropriate entries of
-    p, and invar/zoh will contain only p and not the individual u and d. This
-    is useful, e.g. for building integrators.
-    """
-    
-    # Create symbolic variables.
-    x  = casadi.MX.sym("x",Nx) # States
-    args = {"x" : x}
-    zoh = []
-    if combine:
-        Np = Nu + Nd
-        if Np > 0:
-            p = casadi.MX.sym("p",Np)
-            zoh = [p]
-            things = casadi.vertsplit(p,Nu)
-            if Nu > 0:
-                args["u"] = things[0]
-                if Nd > 0:
-                    args["d"] = things[1]
-            elif Nd > 0:
-                args["d"] = things[0]
-        else:
-            zoh = []
-    else:
-        if Nu > 0:
-            u  = casadi.MX.sym("u",Nu) # Control
-            args["u"] = u
-            zoh += [u]
-        if Nd > 0:
-            d  = casadi.MX.sym("d",Nd) # Other (e.g. parameters or disturbances)
-            args["d"] = d
-            zoh += [d]
-    invar = [x] + zoh
-    
-    return [args, invar, zoh]
-           
-def fillBoundsDict(bounds,Nx,Nu):
-    """
-    Fills a given bounds dictionary with any unspecified defaults.
-    """
-    
-    # Check what bounds were supplied.
-    defaultbounds = [("xlb",Nx,-np.Inf),("xub",Nx,np.Inf),("ulb",Nu,-np.Inf),("uub",Nu,np.Inf)]
-    for (k,n,M) in defaultbounds:
-        if k not in bounds:
-            bounds[k] = [M*np.ones((n,))]
-            
-    return bounds
-    
-def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discrete",M=None,Delta=None):
+def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discrete",M=None,Delta=None,returnTimeInvariantSolver=False):
     """
     Solves a nonlinear MPC problem using a discrete-time model.
     
@@ -541,6 +390,11 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
         for k in range(N):
             GUESS["u",k,:] = guess["u"][:,k]
     
+    # Now decide what to do based on what the user has said.
+    if returnTimeInvariantSolver:
+        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,None,verbosity)    
+        return solver
+    
     # Call solver and stuff.
     [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity)
     
@@ -563,6 +417,19 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
         optDict["xc"] = xc
     
     return optDict      
+           
+def fillBoundsDict(bounds,Nx,Nu):
+    """
+    Fills a given bounds dictionary with any unspecified defaults.
+    """
+    
+    # Check what bounds were supplied.
+    defaultbounds = [("xlb",Nx,-np.Inf),("xub",Nx,np.Inf),("ulb",Nu,-np.Inf),("uub",Nu,np.Inf)]
+    for (k,n,M) in defaultbounds:
+        if k not in bounds:
+            bounds[k] = [M*np.ones((n,))]
+            
+    return bounds
 
 def getModelArgSizes(f,u=True,d=False,z=False,error=True):
     """
@@ -631,6 +498,131 @@ def getVarShapes(f,var,disturbancemodel=False,error=False):
         raise ValueError("Inconsistent sizes for one or more variables.")
     
     return sizes
+
+def __getCasadiSymbols(Nx,Nu=None,Nd=None,combine=False):
+    """
+    Returns symbolic variables of appropriate sizes.
+
+    [args, invar, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
+
+    args is a dictionary of the input variables. invar is a list in [x,u,d]
+    order. zoh is a list of the variables that are constant on a given
+    interval (i.e. u and d).
+    
+    If combine is true, u and d will be combined into a single parameter p.
+    The entries args['u'] and args['d'] will access the appropriate entries of
+    p, and invar/zoh will contain only p and not the individual u and d. This
+    is useful, e.g. for building integrators.
+    """
+    
+    # Create symbolic variables.
+    x  = casadi.MX.sym("x",Nx) # States
+    args = {"x" : x}
+    zoh = []
+    if combine:
+        Np = Nu + Nd
+        if Np > 0:
+            p = casadi.MX.sym("p",Np)
+            zoh = [p]
+            things = casadi.vertsplit(p,Nu)
+            if Nu > 0:
+                args["u"] = things[0]
+                if Nd > 0:
+                    args["d"] = things[1]
+            elif Nd > 0:
+                args["d"] = things[0]
+        else:
+            zoh = []
+    else:
+        if Nu > 0:
+            u  = casadi.MX.sym("u",Nu) # Control
+            args["u"] = u
+            zoh += [u]
+        if Nd > 0:
+            d  = casadi.MX.sym("d",Nd) # Other (e.g. parameters or disturbances)
+            args["d"] = d
+            zoh += [d]
+    invar = [x] + zoh
+    
+    return [args, invar, zoh]
+
+def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
+    """
+    Returns a casadi struct_symMX with the appropriate variables.
+    
+    [var, lb, ub guess] = getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None)    
+    
+    Also returns objects with default bounds: -inf for lower bounds,
+    0 for initial guess, and inf for upper bounds.
+    
+    Variables are accessed as var[*,t] where t is the time point and * is one
+    of the following variable names:
+    
+    "x" : system states.
+    "u" : control inputs.
+    "xc" : collocation points (not present if Nc is None)
+    "z" : algebraic variables (not present if Nz is None)
+    "zc" : collocation albegraic variables (not present if Nc or Nz are None)
+    """
+    
+    args = (
+        ctools.entry("x",shape=(Nx,1),repeat=Nt+1), # States at time points.
+        ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
+    )
+    if Nc is not None:
+        args += (ctools.entry("xc",shape=(Nx,Nc),repeat=Nt),) # Collocation points.
+    if Nz is not None:
+        args += (ctools.entry("z",shape=(Nz,1),repeat=Nt+1),) # Algebraic variables.
+        if Nc is not None:
+            args += (ctools.entry("zc",shape=(Nz,Nc),repeat=Nt),) # Coll. Alg. variables.
+    
+    VAR =  ctools.struct_symMX([args])
+    LB = VAR(-np.inf)
+    UB = VAR(np.inf)
+    GUESS = VAR(0)
+    
+    return [VAR, LB, UB, GUESS]
+
+def getCasadiVarsSizes(var,colloc=False,algebraic=False):
+    """
+    Checks the entries of a casadi struct_symMX for the proper fields and returns sizes.
+    
+    The return value is a dictionary. The only keys correspond to elements that
+    are actually present in the variable struct.
+    
+    Raises a ValueError if something is missing.
+    """
+    
+    # Check entries.
+    needSizeKeys = ["x", "u"]
+    needVarKeys = ["x", "u"]
+    if colloc:
+        needSizeKeys.append("c")
+        needVarKeys.append("xc")
+    if algebraic:
+        needSizeKeys.append("z")
+        needVarKeys.append("z")
+        if colloc:
+            needVarKeys.append("zc")
+    givenKeys = var.keys()
+    for k in needVarKeys:
+        if k not in givenKeys:
+            raise ValueError("Entry %s missing from var! Consider using getCasadiVars for proper structure." % (k,))
+            
+    # Grab sizes for everything. Format is "sizename" : ("varname", dimension)
+    sizes = {"x": ("x",0), "u": ("u",0), "c": ("xc",1), "z": ("z",0)}
+    for k in sizes.keys():
+        (v,i) = sizes.pop(k) # Get variable name and index.
+        if k in needSizeKeys: # Save size if we need it.
+            sizes[k] = var[v,0].shape[i]
+            
+    sizes["t"] = len(var["x"]) - 1 # Time is slightly different.
+            
+    return sizes
+
+# =================================
+# Constraint Building
+# =================================
  
 def getCollocationConstraints(f,var,Delta,d=None):
     """
@@ -727,6 +719,134 @@ def getDiscreteTimeConstraints(F,var,d=None):
     
     return [nlpCon, conlb, conub]
 
+def getRungeKutta4(f,Delta,M=1,d=False,name=None):
+    """
+    Uses RK4 to discretize xdot = f(x,u) with M points and timestep Delta.
+
+    A disturbance argument can be specified by setting d=True. If present, d
+    must come last in the list of arguments (i.e. f(x,u,d))
+
+    f must be a Casadi SX function with inputs in the proper order.
+    """
+    
+    # First find out how many arguments f takes.
+    fargs = getModelArgSizes(f,d=d)
+    [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
+
+    # Get symbolic variables.
+    [args, _, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
+    x0 = args["x"]
+    
+    h = Delta/float(M) # h in Runge-Kutta.
+    
+    # Do M RK4 steps.
+    x = x0
+    for j in range(M):
+        [k1] = f([x] + zoh)
+        [k2] = f([x + h/2*k1] + zoh)
+        [k3] = f([x + h/2*k2] + zoh)
+        [k4] = f([x + h*k3] + zoh)
+        x += h/6*(k1 + 2*k2 + 2*k3 + k4)
+    
+    # Build casadi function and initialize.
+    F = casadi.MXFunction([x0] + zoh,[x])
+    F.setOption("name",name if name is not None else "F")
+    F.init()
+    
+    return F
+
+# =================================
+# MHE and Functions
+# =================================
+
+# Note that the MHE function uses a different paradigm than the MPC functions
+# above. I think this method is better, so eventually the MPC functions should
+# be rewritten. Basically, the MHE functions were written to be much more
+# flexible with respect to function arguments, what variables are present,
+# etc., and so it permits a lot more functionality in less code.
+
+def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
+    """
+    Solves nonlinear MHE problem.
+    
+    N muste be a dictionary with at least entries "x", "y", and "t". "w" may be
+    specified, but it is assumed to be equal to "x" if not given. "v" is always
+    taken to be equal to "y". If parameters are present, you must also specify
+    a "p" entry.
+    
+    u, y, and p must be 2D arrays with the time dimension first. Note that y
+    should have N["t"] + 1 rows, and u and p should have N["t"] rows.
+    """
+    # Check specified sizes.
+    try:
+        for i in ["t","x","y"]:
+            if N[i] <= 0:
+                N[i] = 1
+        if "w" not in N:
+            N["w"] = N["x"]
+        N["v"] = N["y"] 
+    except KeyError:
+        raise KeyError("Invalid or missing entries in N dictionary!")
+        
+    # Now get the shapes of all the variables that are present.
+    allShapes = __generalVariableShapes(N)
+    
+    # Build Casadi symbolic structures. These need to be separate because one
+    # is passed as a set of variables and one is a set of parameters.
+    parNames = set(["u","p","y"])
+    parStruct = __casadiSymStruct(allShapes.copy(),parNames)(0)
+        
+    varNames = set(["x","z","w","v","xc","zc"])
+    varStruct = __casadiSymStruct(allShapes.copy(),varNames)
+    varlbStruct = varStruct(-np.inf)
+    varubStruct = varStruct(np.inf)
+    varguessStruct = varStruct(0)
+    
+    # Now we fill up the parameters.
+    for (name,val) in [("u",u),("p",p),("y",y)]:
+        if name in parStruct.keys():
+            for t in range(N["t"]):
+                parStruct[name,t] = val[t,:]
+    
+    # Now smush everything back together to get the constraints.
+    varAndPar = {}
+    for k in parStruct.keys():
+        varAndPar[k] = parStruct[k]
+    for k in varStruct.keys():
+        varAndPar[k] = varStruct[k]
+    
+    # Buid up constraints.
+    if "z" in allShapes.keys(): # Need to decide about algebraic constraints.
+        Ng = N["z"]
+    else:
+        Ng = None
+    constraints = __generalDiscreteConstraints(varAndPar,N["t"],f=f,Nf=N["x"],
+        g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs)
+    
+    con = []
+    conlb = np.zeros((0,))
+    conub = conlb.copy()
+    for f in ["state","measurement","algebra"]:
+        if f in constraints.keys():
+            con += flattenlist(constraints[f]["con"])
+            conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
+            conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
+    con = casadi.vertcat(con)
+    
+    obj = casadi.MX(0)
+    for t in range(N["t"]):
+        obj += constraints["cost"][t]
+    if lx is not None and x0hat is not None:
+        obj += lx([varStruct["x",0] - x0hat])[0]
+        
+    # Now call the solver.
+    solverReturn = callSolver(varStruct,varlbStruct,varubStruct,varguessStruct,
+        obj,con,conlb,conub,par=parStruct,verbosity=verbosity)
+    
+    # Should probably do a bit more post-processing to make these return
+    # values a bit more user-friendly.                         
+    return solverReturn
+
 def __generalVariableShapes(sizeDict):
     """
     Generates variable shapes from the size dictionary N.
@@ -787,26 +907,18 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
     """
     Creates general state evolution constraints for the following system:
     
-       x^+ = f(x,z,u,w,p)
-       
-       g(x,z,p) = 0
-       
-       y = h(x,z,p) + v
+       x^+ = f(x,z,u,w,p)                        \n
+       g(x,z,p) = 0                              \n
+       y = h(x,z,p) + v                          \n
        
     The variables are intended as follows:
     
-        x: differential states
-        
-        z: algebraic states
-        
-        u: control actions
-        
-        w: state disturbances
-        
-        p: fixed system parameters
-        
-        y: meadured outputs
-        
+        x: differential states                  \n
+        z: algebraic states                     \n
+        u: control actions                      \n
+        w: state disturbances                   \n
+        p: fixed system parameters              \n
+        y: meadured outputs                     \n
         v: noise on outputs
     
     Also builds up a list of stage costs l(...). Note that if l is given, its
@@ -912,86 +1024,6 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
         returnDict["cost"] = cost
     
     return returnDict
-
-def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
-    """
-    Solves nonlinear MHE problem.
-    
-    N muste be a dictionary with at least entries "x", "y", and "t". "w" may be
-    specified, but it is assumed to be equal to "x" if not given. "v" is always
-    taken to be equal to "y". If parameters are present, you must also specify
-    a "p" entry.
-    
-    u, y, and p must be 2D arrays with the time dimension first. Note that y
-    should have N["t"] + 1 rows, and u and p should have N["t"] rows.
-    """
-    # Check specified sizes.
-    try:
-        for i in ["t","x","y"]:
-            if N[i] <= 0:
-                N[i] = 1
-        if "w" not in N:
-            N["w"] = N["x"]
-        N["v"] = N["y"] 
-    except KeyError:
-        raise KeyError("Invalid or missing entries in N dictionary!")
-        
-    # Now get the shapes of all the variables that are present.
-    allShapes = __generalVariableShapes(N)
-    
-    # Build Casadi symbolic structures. These need to be separate because one
-    # is passed as a set of variables and one is a set of parameters.
-    parNames = set(["u","p","y"])
-    parStruct = __casadiSymStruct(allShapes.copy(),parNames)(0)
-        
-    varNames = set(["x","z","w","v","xc","zc"])
-    varStruct = __casadiSymStruct(allShapes.copy(),varNames)
-    varlbStruct = varStruct(-np.inf)
-    varubStruct = varStruct(np.inf)
-    varguessStruct = varStruct(0)
-    
-    # Now we fill up the parameters.
-    for (name,val) in [("u",u),("p",p),("y",y)]:
-        if name in parStruct.keys():
-            for t in range(N["t"]):
-                parStruct[name,t] = val[t,:]
-    
-    # Now smush everything back together to get the constraints.
-    varAndPar = {}
-    for k in parStruct.keys():
-        varAndPar[k] = parStruct[k]
-    for k in varStruct.keys():
-        varAndPar[k] = varStruct[k]
-    
-    # Buid up constraints.
-    if "z" in allShapes.keys(): # Need to decide about algebraic constraints.
-        Ng = N["z"]
-    else:
-        Ng = None
-    constraints = __generalDiscreteConstraints(varAndPar,N["t"],f=f,Nf=N["x"],
-        g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs)
-    
-    con = []
-    conlb = np.zeros((0,))
-    conub = conlb.copy()
-    for f in ["state","measurement","algebra"]:
-        if f in constraints.keys():
-            con += flattenlist(constraints[f]["con"])
-            conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
-            conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
-    con = casadi.vertcat(con)
-    
-    obj = casadi.MX(0)
-    for t in range(N["t"]):
-        obj += constraints["cost"][t]
-    if lx is not None and x0hat is not None:
-        obj += lx([varStruct["x",0] - x0hat])[0]
-        
-    # Now call the solver and return the stuff.
-    returnStuff = callSolver(varStruct,varlbStruct,varubStruct,varguessStruct,
-                             obj,con,conlb,conub,par=parStruct,
-                             verbosity=verbosity)
-    return returnStuff
     
 def __casadiSymStruct(allVars,theseVars=None):
     """
@@ -1012,80 +1044,9 @@ def __casadiSymStruct(allVars,theseVars=None):
     structArgs = tuple([ctools.entry(name,**args) for (name,args) in allVars.items()])
     return ctools.struct_symMX([structArgs])
     
-                    
-def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
-    """
-    Returns a casadi struct_symMX with the appropriate variables.
-    
-    [var, lb, ub guess] = getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None)    
-    
-    Also returns objects with default bounds: -inf for lower bounds,
-    0 for initial guess, and inf for upper bounds.
-    
-    Variables are accessed as var[*,t] where t is the time point and * is one
-    of the following variable names:
-    
-    "x" : system states.
-    "u" : control inputs.
-    "xc" : collocation points (not present if Nc is None)
-    "z" : algebraic variables (not present if Nz is None)
-    "zc" : collocation albegraic variables (not present if Nc or Nz are None)
-    """
-    
-    args = (
-        ctools.entry("x",shape=(Nx,1),repeat=Nt+1), # States at time points.
-        ctools.entry("u",shape=(Nu,1),repeat=Nt), # Control actions.
-    )
-    if Nc is not None:
-        args += (ctools.entry("xc",shape=(Nx,Nc),repeat=Nt),) # Collocation points.
-    if Nz is not None:
-        args += (ctools.entry("z",shape=(Nz,1),repeat=Nt+1),) # Algebraic variables.
-        if Nc is not None:
-            args += (ctools.entry("zc",shape=(Nz,Nc),repeat=Nt),) # Coll. Alg. variables.
-    
-    VAR =  ctools.struct_symMX([args])
-    LB = VAR(-np.inf)
-    UB = VAR(np.inf)
-    GUESS = VAR(0)
-    
-    return [VAR, LB, UB, GUESS]
-
-def getCasadiVarsSizes(var,colloc=False,algebraic=False):
-    """
-    Checks the entries of a casadi struct_symMX for the proper fields and returns sizes.
-    
-    The return value is a dictionary. The only keys correspond to elements that
-    are actually present in the variable struct.
-    
-    Raises a ValueError if something is missing.
-    """
-    
-    # Check entries.
-    needSizeKeys = ["x", "u"]
-    needVarKeys = ["x", "u"]
-    if colloc:
-        needSizeKeys.append("c")
-        needVarKeys.append("xc")
-    if algebraic:
-        needSizeKeys.append("z")
-        needVarKeys.append("z")
-        if colloc:
-            needVarKeys.append("zc")
-    givenKeys = var.keys()
-    for k in needVarKeys:
-        if k not in givenKeys:
-            raise ValueError("Entry %s missing from var! Consider using getCasadiVars for proper structure." % (k,))
-            
-    # Grab sizes for everything. Format is "sizename" : ("varname", dimension)
-    sizes = {"x": ("x",0), "u": ("u",0), "c": ("xc",1), "z": ("z",0)}
-    for k in sizes.keys():
-        (v,i) = sizes.pop(k) # Get variable name and index.
-        if k in needSizeKeys: # Save size if we need it.
-            sizes[k] = var[v,0].shape[i]
-            
-    sizes["t"] = len(var["x"]) - 1 # Time is slightly different.
-            
-    return sizes
+# =================================
+# Solver Interfaces
+# =================================                    
     
 def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
     """
@@ -1100,8 +1061,11 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     Returns the optimal variables, the objective functiona status string, and
     the solver object.
     """
+    nlpInputs = {"x" : var}
+    if par is not None:
+        nlpInputs["p"] = par
     
-    nlp = casadi.MXFunction(casadi.nlpIn(x=var),casadi.nlpOut(f=obj,g=con))
+    nlp = casadi.MXFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(f=obj,g=con))
     solver = casadi.NlpSolver("ipopt",nlp)
     solver.setOption("print_level",verbosity)
     solver.setOption("print_time",verbosity > 2)   
@@ -1112,8 +1076,6 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     solver.setInput(varub,"ubx")
     solver.setInput(conlb,"lbg")
     solver.setInput(conub,"ubg")
-    if par is not None:
-        solver.setInput(par,"p")
     
     # Solve.    
     solver.evaluate()
@@ -1126,17 +1088,148 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
      
     return [optvar, obj, status, solver]
 
-def flattenlist(l,depth=1):
+class TimeInvariantSolver(object):
     """
-    Flattens a nested list of lists of the given depth.
+    A simple class to reduce overhead for solving time-invariant problems.
     
-    E.g. flattenlist([[1,2,3],[4,5],[6]]) returns [1,2,3,4,5,6]. Note that
-    all sublists must have the same depth.
+    Creates one casadi solver object at the beginning and then just adjusts
+    bounds and/or parameters so that re-solving is quick.
+    
+    This is most helpful for moving-horizon simulations for time-invariant
+    systems.
     """
-    for i in range(depth):
-        l = list(itertools.chain.from_iterable(l))
-    return l
-   
+    
+    @property
+    def var(self):
+        return self.__var
+        
+    @property
+    def lb(self):
+        return self.__lb
+        
+    @property
+    def ub(self):
+        return self.__ub
+    
+    @property
+    def guess(self):
+        return self.__guess    
+    
+    @property
+    def con(self):
+        return self.__con
+    
+    @property
+    def obj(self):
+        return self.__obj
+    
+    @property
+    def conlb(self):
+        return self.__conlb
+        
+    @property
+    def conub(self):
+        return self.__conub
+    
+    @property
+    def par(self):
+        return self.__par
+        
+    @property
+    def verbosity(self):
+        return self.__verbosity
+        
+    @verbosity.setter
+    def verbosity(self,v):
+        self.__verbosity = min(max(v,0),12)
+    
+    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
+        """
+        Store variables, constraints, etc., and generate the solver.
+        """
+        self.__var = var
+        self.__lb = varlb
+        self.__ub = varub
+        self.__guess = varguess
+        
+        self.__obj = obj
+        self.__con = con
+        self.__conlb = conlb
+        self.__conub = conub
+        
+        self.__par = par
+        
+        self.verbosity = verbosity
+        self.initializeSolver()
+        
+        
+    def initializeSolver(self):
+        """
+        Recreates the solver object completely.
+        
+        You shouldn't really ever need to do this manually because it is called
+        automatically when the object is first created.
+        """
+        
+        nlpInputs = {"x" : self.__var}
+        if self.__par is not None:
+            nlpInputs["p"] = self.__par
+        nlpInputs = casadi.nlpIn(**nlpInputs)
+        nlpOutputs = casadi.nlpOut(f=self.__obj,g=self.__con)
+        nlp = casadi.MXFunction(nlpInputs,nlpOutputs)
+        
+        solver = casadi.NlpSolver("ipopt",nlp)
+        solver.setOption("print_level",self.verbosity)
+        solver.setOption("print_time",self.verbosity > 2)   
+        solver.init()
+    
+        solver.setInput(self.__guess,"x0")
+        solver.setInput(self.__lb,"lbx")
+        solver.setInput(self.__ub,"ubx")
+        solver.setInput(self.__conlb,"lbg")
+        solver.setInput(self.__conub,"ubg")
+        
+        self.__solver = solver
+        
+    def solve(self):
+        """
+        Calls the nlp solver and solves the current problem.
+        """
+        solver = self.__solver        
+        
+        starttime = time.clock()
+        solver.evaluate()
+        ipoptendtime = time.clock()
+        status = solver.getStat("return_status")
+        if self.verbosity > 0:
+            print("Solver Status:", status)
+         
+        optvar = self.__var(solver.getOutput("x"))
+        optvarDict = casadiStruct2numpyDict(optvar)       
+        
+        obj = float(solver.getOutput("f"))   
+        optvarDict["obj"] = obj
+        optvarDict["status"] = status
+        optvarDict["ipopttime"] = ipoptendtime - starttime                
+        
+        endtime = time.clock()
+        optvarDict["time"] = endtime - starttime                
+        
+        return optvarDict        
+    
+    def fixvar(self,var,t,val):
+        """
+        Fixes variable var at time t to val.
+        """
+        
+        self.__lb[var,t] = val
+        self.__ub[var,t] = val
+        self.__guess[var,t] = val
+        
+        self.__solver.setInput(self.__lb,"lbx")
+        self.__solver.setInput(self.__ub,"ubx")
+        self.__solver.setInput(self.__guess,"x0")
+    
 # =================================
 # Plotting
 # =================================
@@ -1205,4 +1298,106 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
         fig.tight_layout(pad=tightness)        
     
     return fig
-     
+
+# =================================
+# Helper Functions
+# =================================
+
+# First, we grab a few things from the CasADi module.
+DMatrix = casadi.DMatrix
+
+
+def atleastnd(arr,n=2):
+    """
+    Adds an initial singleton dimension to arrays with fewer than n dimensions.
+    """
+    
+    if len(arr.shape) < n:
+        arr = arr.reshape((1,) + arr.shape)
+    
+    return arr
+
+def c2d(Ac,Bc,Delta):
+    """
+    Converts continuous-time model (Ac,Bc) to discrete time (Ad,Bd) with sample time Delta.
+    
+    Inputs Ac and Bc should be numpy matrices of the appropriate size. Delta should be a
+    scalar. Output is a tuple with discretized (Ad,Bd).
+    """
+    n = Ac.shape[0]
+    m = Bc.shape[1]
+    
+    D = scipy.linalg.expm(Delta*np.vstack((np.hstack((Ac, Bc)), np.zeros((m,m+n)))))
+    Ad = D[0:n,0:n];
+    Bd = D[0:n,n:];
+    
+    return (Ad,Bd)
+    
+def mtimes(*args):
+    """
+    Convenience wrapper for casadi.tools.mul.
+    
+    Matrix multiplies all of the given arguments and returns the result.
+    """
+    return ctools.mul(args)
+    
+def vcat(*args):
+    """
+    Convenience wrapper for np.vstack.
+    
+    Vertically concatenates all arguments and returns the result.
+    
+    Accepts variable number of arguments instead of a single tuple.
+    """
+    return np.vstack(args)
+    
+def hcat(*args):
+    """
+    Convenience wrapper for np.hstack.
+    
+    Horizontally concatenates all arguments and returns the result.    
+    
+    Accepts variable number of arguments instead of a single tuple.
+    """
+    return np.hstack(args)
+
+def flattenlist(l,depth=1):
+    """
+    Flattens a nested list of lists of the given depth.
+    
+    E.g. flattenlist([[1,2,3],[4,5],[6]]) returns [1,2,3,4,5,6]. Note that
+    all sublists must have the same depth.
+    """
+    for i in range(depth):
+        l = list(itertools.chain.from_iterable(l))
+    return l
+
+def casadiStruct2numpyDict(struct):
+    """
+    Takes a casadi struct and turns int into a dictionary of numpy arrays.
+    
+    Access patterns are now as follows:
+
+        struct["var",t,...] = dict["var"][t,...]    
+    """ 
+
+    npdict = {}
+    for k in struct.keys():
+        npdict[k] = listcatfirstdim(struct[k])
+        
+    return npdict
+
+def listcatfirstdim(l):
+    """
+    Takes a list of numpy arrays, prepends a dimension, and concatenates.
+    """
+    
+    newl = []
+    for a in l:
+        a = np.array(a)
+        if len(a.shape) == 2 and a.shape[1] == 1:
+            a.shape = (a.shape[0],)
+        a.shape = (1,) + a.shape
+        newl.append(a)
+    
+    return np.concatenate(newl)    

@@ -43,48 +43,60 @@ R = [np.eye(Nu)]
 Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
 F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
 
-l = lambda x,u : [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x) + mpc.mtimes(u.T,mpc.np2mx(R[0]),u)]
+l = lambda x,u : [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x) + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)]
 l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
 
-Pf = lambda x: [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x)]
+Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
 
 # Now make class.
 nsim = 100
+verbosity = 0
 
 controller = mpcoop.Mpc(Nx,Nu,Nt+nsim-1,dt)
 controller.setBounds(**bounds)
 controller.setDiscreteModel(F)
 controller.setObjective(l,Pf)
 
+# Finally, make TimeInvariantSolver object.
+solver = mpc.nmpc(F,l,[0,0],Nt,Pf,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
+
 # Solve.
-verbosity = 0
 t = np.arange(nsim+1)*dt
 xcl = {}
 ucl = {}
 solvetimes = {}
 tottimes = {}
-for method in ["functional","oop"]:
+for method in ["functional","oop","solver"]:
     starttime = time.clock()
     x0 = np.array([10,0])
     xcl[method] = np.zeros((Nx,nsim+1))
     xcl[method][:,0] = x0
     ucl[method] = np.zeros((Nu,nsim))
-    solvetimes[method] = np.zeros((nsim,))
+    solvetimes[method] = np.zeros((nsim,))    
     for k in range(nsim):
         # Solve linear MPC problem.
         if method == "functional": # Old functional way.      
             sol = mpc.lmpc(A,B,x0,Nt,Q,R,q=q,bounds=bounds,verbosity=verbosity)
-            x0 = np.dot(A[0],x0) + np.dot(B[0],sol["u"][:,0])
-        else: # New oop way.
+            #x0 = np.dot(A[0],x0) + np.dot(B[0],sol["u"][:,0])
+        elif method == "oop": # New oop way.
             sol = controller.solve(Nt,t0=k,x0=x0,verbosity=verbosity)
             controller.acceptSolve(sol)
-            x0 = sol["x"][:,1]
+        elif method == "solver":
+            solver.fixvar("x",0,x0)
+            sol = solver.solve()
+            
+            # Need to flip these because time comes first for these guys.
+            sol["x"] = sol["x"].T
+            sol["u"] = sol["u"].T
+        else:
+            raise ValueError("Invalid choice for method.")
         
         print "%s Iteration %d Status: %s" % (method,k,sol["status"])
         xcl[method][:,k] = sol["x"][:,0]
         ucl[method][:,k] = sol["u"][:,0]
         solvetimes[method][k] = sol["ipopttime"]
+        x0 = sol["x"][:,1]
     xcl[method][:,nsim] = x0 # Store final state.
     endtime = time.clock()
     tottimes[method] = endtime - starttime
@@ -93,3 +105,6 @@ for method in ["functional","oop"]:
     fig = mpc.mpcplot(xcl[method],ucl[method],t,np.zeros(xcl[method].shape),xinds=[0])
     fig.canvas.set_window_title(method)    
     fig.show()
+
+for m in tottimes.keys():
+    print "%15s: %10.5g s total time, %10.5g s avg. sol. time" % (m,tottimes[m],np.mean(solvetimes[m]))

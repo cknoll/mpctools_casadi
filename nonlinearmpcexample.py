@@ -35,9 +35,9 @@ x0 = [10,10]
 Q = [np.eye(2)]
 R = [np.eye(2)]
 
-l = lambda x,u : [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x) + mpc.mtimes(u.T,mpc.np2mx(R[0]),u)]
+l = lambda x,u : [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x) + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)]
 l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
-Pf = lambda x: [mpc.mtimes(x.T,mpc.np2mx(Q[0]),x)]
+Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
 
 # Solve problem with linear mpc and plot.
@@ -47,8 +47,8 @@ fig_lmpc.canvas.set_window_title("Linear MPC")
 fig_lmpc.show()
 
 # Discrete-time example
-Adisc = mpc.np2mx(Adisc) # Cast to Casadi MX object.
-Bdisc = mpc.np2mx(Bdisc)
+Adisc = mpc.DMatrix(Adisc) # Cast to Casadi matrix type.
+Bdisc = mpc.DMatrix(Bdisc)
 
 Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
 F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
@@ -59,8 +59,8 @@ fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 fig_dnmpc.show()
 
 # Continuous time interfaces in nmpc.
-Acont = mpc.np2mx(Acont) # Cast to Casadi MX object.
-Bcont = mpc.np2mx(Bcont)
+Acont = mpc.DMatrix(Acont) # Cast to Casadi matrix type.
+Bcont = mpc.DMatrix(Bcont)
 
 f = lambda x,u : list(mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u))
 fcasadi = [mpc.getCasadiFunc(f,Nx,Nu,Nd)]

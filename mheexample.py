@@ -32,12 +32,9 @@ Ccont = np.array([[1,1,0],[0,1,1]])
 Cdisc = Ccont
 
 # Discrete-time example
-#A = mpc.np2mx(Adisc) # Cast to Casadi MX object.
-#B = mpc.np2mx(Bdisc)
-#C = mpc.np2mx(Cdisc)
-A = casadi.DMatrix(Adisc) # Cast to Casadi MX object.
-B = casadi.DMatrix(Bdisc)
-C = casadi.DMatrix(Cdisc)
+A = mpc.DMatrix(Adisc) # Cast to Casadi matrix type.
+B = mpc.DMatrix(Bdisc)
+C = mpc.DMatrix(Cdisc)
 
 Fdiscrete = lambda x,u,w : [mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u) + w]
 F = [mpc.getCasadiFuncGeneralArgs(Fdiscrete,[Nx,Nu,Nw],["x","u","w"],"F")]
@@ -94,7 +91,7 @@ if doPlots:
     f.tight_layout(pad=.5)
 
 # Now we're ready to try some state estimation. First define stage cost and prior.
-l = lambda w,v : [mpc.mtimes(w.T,mpc.np2mx(Qinv),w) + mpc.mtimes(v.T,mpc.np2mx(Rinv),v)]
+l = lambda w,v : [mpc.mtimes(w.T,mpc.DMatrix(Qinv),w) + mpc.mtimes(v.T,mpc.DMatrix(Rinv),v)]
 l = [mpc.getCasadiFuncGeneralArgs(l,[Nw,Nv],["w","v"],"l")]
 lx = lambda x: [10*mpc.mtimes(x.T,x)]
 lx = mpc.getCasadiFuncGeneralArgs(lx,[Nx],["x"],"lx")
