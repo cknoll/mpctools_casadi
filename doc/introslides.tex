@@ -33,8 +33,11 @@
 \newcommand{\smallurl}[2][\footnotesize]{\texttt{#1 #2}}
 
 \title{MPC with Casadi/Python}
-\date{March 11, 2015}
+\date{March 18, 2015}
 \author{Michael Risbeck}
+
+\usepackage{graphicx}
+\graphicspath{{./}{../}}
 
 \usepackage{lmodern}
 %\renewcommand{\ttdefault}{pcr} % Use different tt font.
@@ -178,6 +181,11 @@ for j in range(deg+1):
             \item Runge-Kutta discretization
             \item Collocation
         \end{itemize}
+        \item Discrete-time nonlinear MHE
+        \begin{itemize}
+            \item Explicit models
+            \item Runge-Kutta discretization
+        \end{itemize}
         \item Basic plotting function
         \item Example scripts
         \begin{itemize}
@@ -266,7 +274,7 @@ fig.show()
             \item Generate all constraints once
             \item Select appropriate subset for each step
             \item Use previous solution as initial guess
-            \item OOP approach would be nice
+            \item ``Version 0.1'' of OOP approach (needs a big rewrite though)
         \end{itemize}
     \end{itemize}
 \end{frame}

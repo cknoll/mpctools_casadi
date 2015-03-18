@@ -140,7 +140,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     if D is not None:
         for k in range(N-1):
             qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
-                        - mtimes(G[k % len(d)],VAR["x"]) - d[k % len(d)])
+                        - mtimes(G[k % len(d)],VAR["x",k]) - d[k % len(d)])
         s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
         conlb = np.concatenate(conlb,-np.inf*np.ones(s))
         conub = np.concatenate(conub,np.zeros(s))
@@ -169,7 +169,6 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     optVars["time"] = endtime - starttime
     
     return optVars
-
 
 def atleastnd(arr,n=2):
     """
@@ -252,6 +251,34 @@ def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
     outvar = [casadi.vertcat(f(**args))]
     fcasadi = casadi.MXFunction(invar,outvar)
     fcasadi.setOption("name",name if name is not None else "f")
+    fcasadi.init()
+    
+    return fcasadi
+
+def getCasadiFuncGeneralArgs(f,varsizes,varnames=None,funcname="f"):
+    """
+    Takes a function handle and turns it into a Casadi function.
+    
+    f should be defined to take a specified number of arguments and return a
+    LIST of outputs. varnames, if specified, gives names to each of the inputs,
+    but this is unnecessary. sizes should be a list of how many elements are
+    in each one of the inputs.
+    
+    This version is more general because it lets you specify arbitrary
+    arguments, but you have to make sure you do everything properly.
+    """
+    
+    # Create symbolic variables.
+    if varnames is None:
+        varnames = ["x%d" % (i,) for i in range(len(varsizes))]
+    elif len(varsizes) != len(varnames):
+        raise ValueError("varnames must be the same length as varsizes!")    
+    args = [casadi.MX.sym(name,size) for (name,size) in zip(varnames,varsizes)]
+    
+    # Now evaluate function and make a Casadi object.    
+    fval = [casadi.vertcat(f(*args))]
+    fcasadi = casadi.MXFunction(args,fval)
+    fcasadi.setOption("name",funcname)
     fcasadi.init()
     
     return fcasadi
@@ -699,7 +726,293 @@ def getDiscreteTimeConstraints(F,var,d=None):
     conub = conlb.copy()
     
     return [nlpCon, conlb, conub]
+
+def __generalVariableShapes(sizeDict):
+    """
+    Generates variable shapes from the size dictionary N.
     
+    The keys of N must be a subset of
+        ["x","z","u","w","p","y","v","c"]    
+    
+    If present, "c" will specify collocation, at which point extra variables
+    will be created.
+    
+    Each entry in the returned dictionary will be a 3-element tuple. The first
+    is the number of copies for each variable, the second is the variable's
+    shape, and the third is a boolean flag that is True to indicate the
+    variable is pointwise and False otherwise. 
+    """
+
+    # Figure out what variables are supplied.
+    allsizes = set(["x","z","u","w","p","y","v","c","t"])
+    givensizes = allsizes.intersection(sizeDict.keys())
+    
+    # Make sure we were given a time.
+    try:
+        Nt = sizeDict["t"]
+    except KeyError:
+        raise KeyError("Entry 't' must be provided!")
+    
+    # Now we're going to build a data structure that says how big each of the
+    # variables should be. The first entry 1 if there should be N+1 copies of
+    # the variable and 0 if there should be N. The second is a tuple of sizes.
+    allvars = {
+        "x" : (1,("x",)),
+        "z" : (1,("z",)),
+        "u" : (0,("u",)),
+        "w" : (0,("w",)),
+        "p" : (0,("p",)),
+        "y" : (0,("y",)),
+        "v" : (0,("v",)),
+        "xc": (0,("x","c")),
+        "zc": (0,("z","c")),        
+    }    
+    
+    # Now loop through all the variables, and if we've been given all of the
+    # necessary sizes, then add that variable
+    shapeDict = {}
+    for (v, (t0, shapeinds)) in allvars.items():
+        if givensizes.issuperset(shapeinds):
+            shape = [sizeDict[i] for i in shapeinds]
+            if len(shape) == 0:
+                shape = [1,1]
+            elif len(shape) == 1:
+                shape += [1]
+            shapeDict[v] = {"repeat" : Nt + t0, "shape" : tuple(shape)}
+    
+    return shapeDict
+    
+
+def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[]):
+    """
+    Creates general state evolution constraints for the following system:
+    
+       x^+ = f(x,z,u,w,p)
+       
+       g(x,z,p) = 0
+       
+       y = h(x,z,p) + v
+       
+    The variables are intended as follows:
+    
+        x: differential states
+        
+        z: algebraic states
+        
+        u: control actions
+        
+        w: state disturbances
+        
+        p: fixed system parameters
+        
+        y: meadured outputs
+        
+        v: noise on outputs
+    
+    Also builds up a list of stage costs l(...). Note that if l is given, its
+    arguments must be specified in largs as a tuple of variable names.
+    
+    In principle, you can use the variables for whatever you want, but they
+    must show up in the proper order. We do very little checking of this, so
+    if this function errors, make sure you are passing the proper variables.
+    
+    var should be a dictionary with entries "x", "u", "y", etc., that give
+    either casadi variables or data values. Data must be accessed as follows:
+
+        var["x"][t][k] gives the kth state of x at time t
+        
+    In particular, if struct is a casadi.tools.struct_symMX object, then
+    setting var["x"] = struct["x"] will suffice. If you want to use your own
+    data structure, so be it.
+    
+    Note that f, g, and h should be LISTS of functions that will be accessed
+    modulo length. For a time-invariant system, the lists should only have
+    one element. Note that in principle, if you can define your time-varying
+    system using parameters p, this is perferrable to actually having different
+    f, g, and h at each time point. However, for logical conditions, parameters
+    might not be sufficient, at which point you will have to use the
+    time-varying list.    
+    
+    Returns a dictionary with entries "state", "algebra", and "measurement".
+    Note that the relevant fields will be missing if f, g, or h are set to
+    None. Each entry in the return dictionary will be a list of lists, although
+    for this class of constraint, each of those lists will have only one
+    element. The list of stage costs is in "cost". This one is just a list.
+    """
+    
+    # Figure out what variables are supplied.
+    allvars = set(["x","z","u","w","p","y","v"])
+    givenvars = allvars.intersection(var.keys())
+    
+    # Now sort out arguments for each function.
+    isGiven = lambda v: v in givenvars # Membership function.
+    args = {
+        "f" : filter(isGiven,["x","z","u","w","p"]),
+        "g" : filter(isGiven, ["x","z","p"]),
+        "h" : filter(isGiven, ["x","z","p"]),
+        "l" : filter(isGiven, largs)
+    }
+    getArgs = lambda func, times: [[var[v][t] for v in args[func]] for t in times]
+    tintervals = range(t0,t0+Nt)
+    tpoints = range(t0,t0+Nt+1)
+    
+    # Preallocate return dictionary.
+    returnDict = {}    
+    
+    # State evolution f.   
+    if f is not None:
+        if Nf <= 0:
+            raise ValueError("Nf must be a positive integer!")
+        fargs = getArgs("f",tintervals)
+        state = []
+        for t in tintervals:
+            thiscon = f[t % len(f)](fargs[t])[0]
+            if "x" in givenvars:
+                thiscon -= var["x"][t+1]
+            state.append([thiscon])
+        lb = np.zeros((Nt,Nf))
+        ub = lb.copy()
+        returnDict["state"] = dict(con=state,lb=lb,ub=ub)
+            
+    # Algebraic constraints g.
+    if g is not None:
+        if Ng <= 0:
+            raise ValueError("Ng must be a positive integer!")
+        gargs = getArgs("g",tpoints)
+        algebra = []
+        for t in tpoints:
+            algebra.append([g[t % len(g)](gargs[t])[0]])
+        lb = np.zeros((Nt+1,Ng))
+        ub = lb.copy()
+        returnDict["algebra"] = dict(con=algebra,lb=lb,ub=ub)
+        
+    # Measurements h.
+    if h is not None:
+        if Nh <= 0:
+            raise ValueError("Nh must be a positive integer!")
+        hargs = getArgs("h",tintervals)
+        measurement = []
+        for t in tintervals:
+            thiscon = h[t % len(h)](hargs[t])[0]
+            if "y" in givenvars:
+                thiscon -= var["y"][t]
+            if "v" in givenvars:
+                thiscon += var["v"][t]
+            measurement.append([thiscon])
+        lb = np.zeros((Nt,Nh))
+        ub = lb.copy()
+        returnDict["measurement"] = dict(con=measurement,lb=lb,ub=ub)
+    
+    # Stage costs.
+    if l is not None:
+        largs = getArgs("l",tintervals)
+        cost = []
+        for t in tintervals:
+            cost.append(l[t % len(l)](largs[t])[0])
+        returnDict["cost"] = cost
+    
+    return returnDict
+
+def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
+    """
+    Solves nonlinear MHE problem.
+    
+    N muste be a dictionary with at least entries "x", "y", and "t". "w" may be
+    specified, but it is assumed to be equal to "x" if not given. "v" is always
+    taken to be equal to "y". If parameters are present, you must also specify
+    a "p" entry.
+    
+    u, y, and p must be 2D arrays with the time dimension first. Note that y
+    should have N["t"] + 1 rows, and u and p should have N["t"] rows.
+    """
+    # Check specified sizes.
+    try:
+        for i in ["t","x","y"]:
+            if N[i] <= 0:
+                N[i] = 1
+        if "w" not in N:
+            N["w"] = N["x"]
+        N["v"] = N["y"] 
+    except KeyError:
+        raise KeyError("Invalid or missing entries in N dictionary!")
+        
+    # Now get the shapes of all the variables that are present.
+    allShapes = __generalVariableShapes(N)
+    
+    # Build Casadi symbolic structures. These need to be separate because one
+    # is passed as a set of variables and one is a set of parameters.
+    parNames = set(["u","p","y"])
+    parStruct = __casadiSymStruct(allShapes.copy(),parNames)(0)
+        
+    varNames = set(["x","z","w","v","xc","zc"])
+    varStruct = __casadiSymStruct(allShapes.copy(),varNames)
+    varlbStruct = varStruct(-np.inf)
+    varubStruct = varStruct(np.inf)
+    varguessStruct = varStruct(0)
+    
+    # Now we fill up the parameters.
+    for (name,val) in [("u",u),("p",p),("y",y)]:
+        if name in parStruct.keys():
+            for t in range(N["t"]):
+                parStruct[name,t] = val[t,:]
+    
+    # Now smush everything back together to get the constraints.
+    varAndPar = {}
+    for k in parStruct.keys():
+        varAndPar[k] = parStruct[k]
+    for k in varStruct.keys():
+        varAndPar[k] = varStruct[k]
+    
+    # Buid up constraints.
+    if "z" in allShapes.keys(): # Need to decide about algebraic constraints.
+        Ng = N["z"]
+    else:
+        Ng = None
+    constraints = __generalDiscreteConstraints(varAndPar,N["t"],f=f,Nf=N["x"],
+        g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs)
+    
+    con = []
+    conlb = np.zeros((0,))
+    conub = conlb.copy()
+    for f in ["state","measurement","algebra"]:
+        if f in constraints.keys():
+            con += flattenlist(constraints[f]["con"])
+            conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
+            conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
+    con = casadi.vertcat(con)
+    
+    obj = casadi.MX(0)
+    for t in range(N["t"]):
+        obj += constraints["cost"][t]
+    if lx is not None and x0hat is not None:
+        obj += lx([varStruct["x",0] - x0hat])[0]
+        
+    # Now call the solver and return the stuff.
+    returnStuff = callSolver(varStruct,varlbStruct,varubStruct,varguessStruct,
+                             obj,con,conlb,conub,par=parStruct,
+                             verbosity=verbosity)
+    return returnStuff
+    
+def __casadiSymStruct(allVars,theseVars=None):
+    """
+    Returns a Casadi sym struct for the variables in allVars.
+    
+    To use only a subset of variables, set theseVars to the subset of variables
+    that you need. If theseVars is not None, then only variable names appearing
+    in allVars and theseVars will be created.
+    """
+    
+    # Figure out what names we need.
+    varNames = set(allVars.keys())
+    if theseVars is not None:
+        for v in varNames.difference(theseVars):
+            allVars.pop(v)
+    
+    # Build casadi sym_structMX    
+    structArgs = tuple([ctools.entry(name,**args) for (name,args) in allVars.items()])
+    return ctools.struct_symMX([structArgs])
+    
+                    
 def getCasadiVars(Nx,Nu,Nt,Nc=None,Nz=None):
     """
     Returns a casadi struct_symMX with the appropriate variables.
@@ -774,7 +1087,7 @@ def getCasadiVarsSizes(var,colloc=False,algebraic=False):
             
     return sizes
     
-def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,verbosity=5):
+def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
     """
     Calls ipopt to solve an NLP.
     
@@ -799,6 +1112,8 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,verbosity=5):
     solver.setInput(varub,"ubx")
     solver.setInput(conlb,"lbg")
     solver.setInput(conub,"ubg")
+    if par is not None:
+        solver.setInput(par,"p")
     
     # Solve.    
     solver.evaluate()
