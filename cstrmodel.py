@@ -253,6 +253,9 @@ def sstarg(A,B,C,Q,R,ysp,H,d=None,Bd=None,Cd=None,unique=False):
     
 # Some printing functions.
 def numberformat(n,nzeros=3):
+    """
+    Formats a float as a string with proper sig figs.
+    """
     s = ("%%.%dg" % nzeros) % (n,)
     # Add trailing period for floats.        
     if round(n) != n and s.find(".") == -1 and n < 10**(nzeros+1):
@@ -280,7 +283,11 @@ def numberformat(n,nzeros=3):
     else:
         s += addstr
     return s
+
 def printmatrix(A,before="     "):
+    """
+    Prints a matrix for copy/paste into LaTeX.
+    """
     for i in range(A.shape[0]):
         print(before + " & ".join([numberformat(a) for a in 
                                     np.array(A)[i,:].tolist()]) + r" \\")    

@@ -1143,6 +1143,10 @@ class TimeInvariantSolver(object):
     def verbosity(self,v):
         self.__verbosity = min(max(v,0),12)
     
+    @property
+    def guesser(self):
+        return self.__guesser    
+    
     def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
         """
         Store variables, constraints, etc., and generate the solver.
@@ -1161,8 +1165,8 @@ class TimeInvariantSolver(object):
         
         self.verbosity = verbosity
         self.initializeSolver()
-        
-        
+        self.__guesser = None
+            
     def initializeSolver(self):
         """
         Recreates the solver object completely.
@@ -1171,11 +1175,11 @@ class TimeInvariantSolver(object):
         automatically when the object is first created.
         """
         
-        nlpInputs = {"x" : self.__var}
-        if self.__par is not None:
-            nlpInputs["p"] = self.__par
+        nlpInputs = {"x" : self.var}
+        if self.par is not None:
+            nlpInputs["p"] = self.par
         nlpInputs = casadi.nlpIn(**nlpInputs)
-        nlpOutputs = casadi.nlpOut(f=self.__obj,g=self.__con)
+        nlpOutputs = casadi.nlpOut(f=self.obj,g=self.con)
         nlp = casadi.MXFunction(nlpInputs,nlpOutputs)
         
         solver = casadi.NlpSolver("ipopt",nlp)
@@ -1183,19 +1187,19 @@ class TimeInvariantSolver(object):
         solver.setOption("print_time",self.verbosity > 2)   
         solver.init()
     
-        solver.setInput(self.__guess,"x0")
-        solver.setInput(self.__lb,"lbx")
-        solver.setInput(self.__ub,"ubx")
-        solver.setInput(self.__conlb,"lbg")
-        solver.setInput(self.__conub,"ubg")
+        solver.setInput(self.guess,"x0")
+        solver.setInput(self.lb,"lbx")
+        solver.setInput(self.ub,"ubx")
+        solver.setInput(self.conlb,"lbg")
+        solver.setInput(self.conub,"ubg")
         
-        self.__solver = solver
+        self.solver = solver
         
     def solve(self):
         """
         Calls the nlp solver and solves the current problem.
         """
-        solver = self.__solver        
+        solver = self.solver        
         
         starttime = time.clock()
         solver.evaluate()
@@ -1204,7 +1208,7 @@ class TimeInvariantSolver(object):
         if self.verbosity > 0:
             print("Solver Status:", status)
          
-        optvar = self.__var(solver.getOutput("x"))
+        optvar = self.var(solver.getOutput("x"))
         optvarDict = casadiStruct2numpyDict(optvar)       
         
         obj = float(solver.getOutput("f"))   
@@ -1215,20 +1219,78 @@ class TimeInvariantSolver(object):
         endtime = time.clock()
         optvarDict["time"] = endtime - starttime                
         
-        return optvarDict        
+        return optvarDict            
+    
+    def saveguess(self,guess,toffset=1):
+        """
+        Stores the vales from the numpy Dict guess into the guess field.
+        
+        This is useful to store the results of the previous step as a guess for
+        the next step. toffset defaults to 1, which means the time indices are
+        shifted by 1, but you can set this to whatever you want.
+        """
+        for k in set(guess.keys()).intersection(self.guess.keys()):
+            val = guess[k].copy()
+            
+            # These values and the guess structure can potentially have a
+            # different number of time points. So, we need to figure out
+            # what range of times will be valid for both things. The offset
+            # makes things a bit weird.
+            tmaxVal = val.shape[0]
+            tmaxGuess = len(self.guess[k]) + toffset
+            tmax = min(tmaxVal,tmaxGuess)
+            
+            tmin = max(toffset,0)
+            
+            # Now actually store the stuff.            
+            for t in range(tmin,tmax):
+                self.guess[k,t-toffset] = val[t,...]
     
     def fixvar(self,var,t,val):
         """
         Fixes variable var at time t to val.
         """
+        self.lb[var,t] = val
+        self.ub[var,t] = val
+        self.guess[var,t] = val
         
-        self.__lb[var,t] = val
-        self.__ub[var,t] = val
-        self.__guess[var,t] = val
+        self.solver.setInput(self.lb,"lbx")
+        self.solver.setInput(self.ub,"ubx")
+        self.solver.setInput(self.guess,"x0")
         
-        self.__solver.setInput(self.__lb,"lbx")
-        self.__solver.setInput(self.__ub,"ubx")
-        self.__solver.setInput(self.__guess,"x0")
+    def storeguesser(self,guesser):
+        """
+        Saves a one-timestep solver used to generate guesses.
+        """
+        # Should probably do some checking to make sure this a valid entry,
+        # i.e. is a TimeInvariantSolver object.
+        self.__guesser = guesser
+    
+    def calcguess(self,t,saveguess=True):
+        """
+        Calculates a one-step guess from time t to t+1.
+        
+        The initial state for the one-step subproblem is taken from the current
+        guess field. The optimal values are stored to the appropriate guess
+        fields.
+        
+        Note that the guesser must have already been initialized.
+        """
+        if self.guesser is None:
+            raise AttributeError("Guesser has not been initialized!")
+            
+        # Set the guesser's variable bounds.
+        for var in self.guess.keys():
+            toffset = len(self.guesser.guess[var]) - 1
+            if toffset == 1:
+                self.guesser.fixvar(var,0,self.guess[var,t])
+            self.guesser.lb[var,toffset] = self.lb[var,t+toffset]
+            self.guesser.ub[var,toffset] = self.ub[var,t+toffset]
+        
+        onestep = self.guesser.solve()
+        self.saveguess(onestep, toffset=-t)        
+        
+        return onestep
     
 # =================================
 # Plotting

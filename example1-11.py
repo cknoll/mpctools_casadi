@@ -5,6 +5,7 @@ import mpc_tools_casadi as mpc
 import numpy as np
 from scipy import linalg
 import matplotlib.pyplot as plt
+import time
 
 plt.close("all")
 
@@ -79,7 +80,7 @@ solver = {}
 guesser = {}
 x0 = [0,0,0]
 for k in kwargs.keys():
-    solver[k] = mpc.nmpc(N=Nt,verbosity=2,**kwargs[k])
+    solver[k] = mpc.nmpc(N=Nt,verbosity=3,**kwargs[k])
     solver[k].fixvar("x",0,x0)    
     guesser[k] = mpc.nmpc(N=1,verbosity=0,**kwargs[k])
     guesser[k].fixvar("x",0,x0)
@@ -110,7 +111,7 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
         fig.canvas.set_window_title(title)
     return fig
 
-# SImulate with a prespecified control profile.
+# Simulate with a prespecified control profile.
 u = np.zeros((Nt,Nu))
 u[:,0] = .02*Tcs*(np.sin(2*np.pi*np.arange(Nt)/50) - .75)
 u[:,1] = .01*Fs*np.cos(2*np.pi*np.arange(Nt)/50)
@@ -124,8 +125,12 @@ for t in range(Nt):
     
 cstrplot(x,u,title="Exact")
 
-# Now fix control elements and solve as nlp.
+# Now fix control elements and solve as nlp. Generate a good (actually exact)
+# guesss by solving a series of single-stage optimizations.
+solvetimes = {}
+solution = {}
 for method in solver.keys():
+    starttime = time.clock()
     for t in range(Nt):
         solver[method].fixvar("u",t,u[t,:])
         guesser[method].fixvar("u",0,u[t,:])
@@ -137,8 +142,30 @@ for method in solver.keys():
                 solver[method].guess["xc",t] = guess["xc"][0,...]
             guesser[method].fixvar("x",0,guess["x"][1,:])
         
-    sol = solver[method].solve()
-    cstrplot(sol["x"],sol["u"],title=method)
+    solution[method] = solver[method].solve()
+    solution[method]["xerr"] = (solution[method]["x"] + xs.A.T)/(x + xs.A.T) - 1
+    solvetimes[method] = time.clock() - starttime
+    cstrplot(solution[method]["x"],solution[method]["u"],title=method)
+print "\nSolution times:"
+print "\n".join([("  %10s took %10.4g s" % (method,solvetime)) for (method,solvetime) in solvetimes.items()])
+
+# Plot relative error in states.
+fig = plt.figure(figsize=(6,6))
+t = np.arange(0,x.shape[0])*cstr.Delta
+ylabels = ["Error in $c$", "Error in $T$", "Error in $h$"]
+for i in range(Nx):
+    ax = fig.add_subplot(Nx,1,i+1)
+    for m in solution.keys():
+        ax.plot(t,np.squeeze(solution[m]["xerr"][:,i]),label=m)
+    ax.set_ylabel(ylabels[i])
+    ax.legend(loc="upper center",ncol=len(solution.keys()))
+ax.set_xlabel("Time")
+fig.tight_layout(pad=.5)
+
+#s = solver["rk4"]
+#g = solution["rk4"]
+#import pdb; pdb.set_trace()
+#s.saveguess(g)
 
 def doPart(part,graphfilename=None,disturbanceModel=True,nonlinearModel=True):
     """
@@ -288,10 +315,10 @@ def doPart(part,graphfilename=None,disturbanceModel=True,nonlinearModel=True):
     return dict(x=x,xhat=xhat,xhatm=xhatm,dhat=dhat,dhatm=dhat,y=y,u=u,
                 err=err,d=d,ysp=ysp,v=v)
 
-#plt.close("all")
-#parts = [-1,0,1,2,3,4]
-#for p in parts:
-#    filename = ("part%d.pdf" % p).replace("-","m")
-#    doPart(p,filename)
+plt.close("all")
+parts = [-1,0] #[-1,0,1,2,3,4]
+for p in parts:
+    filename = ("part%d.pdf" % p).replace("-","m")
+    doPart(p,filename)
     
     
