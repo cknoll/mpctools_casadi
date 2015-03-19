@@ -39,7 +39,7 @@ nlpObj = casadi.MX(0) # Start with dummy objective.
 nlpCon = casadi.vertcat(CON)
 
 # Create solver and stuff.
-[OPTVAR, obj, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, verbosity)
+[OPTVAR, obj, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, None, verbosity)
 x = np.hstack(OPTVAR["x",:])
 u = np.hstack(OPTVAR["u",:])
 z = np.hstack(OPTVAR["xc",:])

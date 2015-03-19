@@ -392,11 +392,11 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     
     # Now decide what to do based on what the user has said.
     if returnTimeInvariantSolver:
-        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,None,verbosity)    
+        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity=verbosity)    
         return solver
     
     # Call solver and stuff.
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity)
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity=verbosity)
     
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
