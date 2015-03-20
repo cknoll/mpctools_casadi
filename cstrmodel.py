@@ -124,7 +124,7 @@ class CSTR(object):
         
         return {"A": A, "B": B, "C": C, "Bp": Bp, "f": f}
         
-    def sim(self,x0,u,d):
+    def sim(self,x0,u,d,matrix=True):
         """
         Simulates one timestep with the nonlinear models.
         
@@ -140,7 +140,10 @@ class CSTR(object):
         xf = self.__Integrator.getOutput("xf")
         self.__Integrator.reset()
         
-        return np.matrix(xf)
+        if matrix:
+            return np.matrix(xf)
+        else:
+            return np.array(xf).flatten()
 
 # *****************
 # Helper Functions

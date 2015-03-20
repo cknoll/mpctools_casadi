@@ -21,7 +21,7 @@ eps = 1e-8 # Use this as a small number.
 
 # Get discrete-time model.
 cstr = cstrmodel.CSTR()    
-cstr.Delta = 1
+cstr.Delta = .25
 
 # Update the steady-state values a few times to make sure they don't move.
 for i in range(10):
@@ -37,9 +37,9 @@ B = ss["B"]
 Bp = ss["Bp"]
 C = ss["C"]
 
-xs = np.matrix([[cs],[Ts],[hs]])
-us = np.matrix([[Tcs],[Fs]])
-ds = np.matrix([[F0s]])
+xs = np.array([cs,Ts,hs])
+us = np.array([Tcs,Fs])
+ds = np.array([F0s])
 
 # First, simulate the system, and then see if the various discretization
 # methods work well enough for the system.
@@ -57,8 +57,8 @@ model_casadi = [mpc.getCasadiFunc(model,Nx,Nu,name="cstr")]
 model_integrator = [mpc.getCasadiIntegrator(model,cstr.Delta,Nx,Nu,name="cstr")]
 
 # Weighting matrices for controller.
-Q = np.matrix(np.diag(np.array(xs).flatten()))**-2
-R = np.matrix(np.diag(np.array(us).flatten()))**-2
+Q = .5*np.matrix(np.diag(np.array(xs).flatten()))**-2
+R = 2*np.matrix(np.diag(np.array(us).flatten()))**-2
 
 [K, Pi] = cstrmodel.dlqr(A,B,Q,R)
 
@@ -72,28 +72,33 @@ l = [mpc.getCasadiFunc(l,Nx,Nu,name="l")]
 Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Pi),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,name="Pf")
 
-Nt = 50
+Nt = 25
 
+# Control bounds.
+umax = np.array([.01*Ts,.1*Fs])
+bounds = dict(uub=[umax],ulb=[-umax])
 
 # Define plotting function.
-def cstrplot(x,u,ysp=None,contVars=[],title=None):
-    x = x.T
-    u = u.T
-    u = np.concatenate((u,u[:,-1:]),axis=1)
-    t = np.arange(0,x.shape[1])*cstr.Delta
+def cstrplot(x,u,ysp=None,contVars=[],ulb=None,uub=None,title=None):
+    u = np.concatenate((u,u[-1:,:]))
+    t = np.arange(0,x.shape[0])*cstr.Delta
     ylabelsx = ["$c$ (mol/L)", "$T$ (K)", "$h$ (m)"]
     ylabelsu = ["$T_c$ (K)", "$F$ (kL/min)"]
     
     fig = plt.figure(figsize=(6,10))
     for i in range(Nx):
         ax = fig.add_subplot(Nx + Nu,1,i+1)
-        ax.plot(t,np.array(x[i,:]).flatten() + xs[i,0],'-ok')
+        ax.plot(t,np.array(x[:,i]).flatten() + xs[i],'-ok')
         if i in contVars:
-            ax.step(t,np.array(ysp[i,:]).flatten() + xs[i,0],'-r',where="post")
+            ax.step(t,np.array(ysp[:,i]).flatten() + xs[i],'-g',where="post")
         ax.set_ylabel(ylabelsx[i])
     for i in range(Nu):
         ax = fig.add_subplot(Nx + Nu,1,i+1+Nx)
-        ax.step(t,np.array(u[i,:]).flatten() + us[i,0],'-k',where="post")
+        ax.step(t,np.array(u[:,i]).flatten() + us[i],'-k',where="post")
+        if uub is not None:
+            ax.plot([t[0],t[-1]],(uub[i] + us[i])*np.ones(2,),'-r')
+        if ulb is not None:
+            ax.plot([t[0],t[-1]],(ulb[i] + us[i])*np.ones(2,),'-r')
         ax.set_ylabel(ylabelsu[i])
     ax.set_xlabel("Time (min)")
     fig.tight_layout(pad=.5)
@@ -102,12 +107,38 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
     return fig
 
 # Build a solver for the linear and nonlinear models.
-x0 = np.array([.75*cs,.9*Ts,1.25*hs])
-lmpc = mpc.nmpc(N=Nt,verbosity=3,F=Flinear,l=l,x0=x0,Pf=Pf,returnTimeInvariantSolver=True)
-nmpc = mpc.nmpc(N=Nt,verbosity=3,F=model_casadi,l=l,x0=x0,Pf=Pf,timemodel="rk4",M=1,Delta=cstr.Delta,returnTimeInvariantSolver=True)
+x0 = np.array([-.95*cs,-.25*Ts,-.5*hs])
+solvers = {}
+solvers["lmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=Flinear,l=l,x0=x0,Pf=Pf,returnTimeInvariantSolver=True,bounds=bounds)
+solvers["nmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=model_casadi,l=l,x0=x0,Pf=Pf,timemodel="rk4",M=1,Delta=cstr.Delta,returnTimeInvariantSolver=True,bounds=bounds)
+
+# Now simulate the process.
+Nsim = 40
+xcl = {}
+ucl = {}
+for method in solvers.keys():
+    xcl[method] = np.zeros((Nsim+1,Nx))
+    xcl[method][0,:] = x0
+    thisx = x0    
+    ucl[method] = np.zeros((Nsim,Nu))    
+    for t in range(Nsim):
+        sol = solvers[method].solve()
+        print "%10s %3d: %s" % (method,t,sol["status"])
+        if sol["status"] != "Solve_Succeeded":
+            break
+        else:
+            solvers[method].saveguess(sol)
+        thisu = sol["u"][0,...].copy()
+        ucl[method][t,:] = thisu
+        thisx = cstr.sim(thisx + xs,thisu + us,ds,matrix=False) - xs
+        xcl[method][t+1,:] = thisx
+        solvers[method].fixvar("x",0,thisx)
+    cstrplot(xcl[method],ucl[method],ysp=np.zeros(xcl[method].shape),title=method,contVars=range(Nx),uub=bounds["uub"][0],ulb=bounds["ulb"][0])
+
+
 
 # Now try control with the nonlinear solver.
-raise NotImplementedError("Work in progress.")
+#raise NotImplementedError("Work in progress.")
 
 ########
 #kwargs = {}
