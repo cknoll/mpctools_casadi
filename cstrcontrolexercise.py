@@ -20,8 +20,8 @@ F0s = .1
 eps = 1e-8 # Use this as a small number.
 
 # Get discrete-time model.
-cstr = cstrmodel.CSTR()    
-cstr.Delta = .25
+cstr = cstrmodel.CSTR(Delta=.2)    
+#cstr.Delta = .25
 
 # Update the steady-state values a few times to make sure they don't move.
 for i in range(10):
@@ -44,17 +44,23 @@ ds = np.array([F0s])
 # First, simulate the system, and then see if the various discretization
 # methods work well enough for the system.
 
-def model(x,u):
-    c = x[0] + cs
-    T = x[1] + Ts
-    h = x[2] + hs
-    Tc = u[0] + Tcs
-    F = u[1] + Fs
-    F0 = F0s
+# Define nonlinear model, but use the disturbance to denote the setpoint.
+Np = Nx + Nu + cstr.Nd()
+def model(x,u,d):
+    p = d # We use d to store parameters.
+    c = x[0] + p[0]
+    T = x[1] + p[1]
+    h = x[2] + p[2]
+    Tc = u[0] + p[3]
+    F = u[1] + p[4]
+    F0 = p[5]
     return cstr.ode(c,T,h,Tc,F,F0)
 
-model_casadi = [mpc.getCasadiFunc(model,Nx,Nu,name="cstr")]
-model_integrator = [mpc.getCasadiIntegrator(model,cstr.Delta,Nx,Nu,name="cstr")]
+ps = np.array([cs,Ts,hs,Tcs,Fs,F0s])
+
+model_casadi = [mpc.getCasadiFunc(model,Nx,Nu,Np,name="cstr")]
+#model_integrator = [mpc.getCasadiIntegrator(model,cstr.Delta,Nx,Nu,Np,name="cstr")]
+# This doesn't work, which is a problem.
 
 # Weighting matrices for controller.
 Q = .5*np.matrix(np.diag(np.array(xs).flatten()))**-2
@@ -72,7 +78,7 @@ l = [mpc.getCasadiFunc(l,Nx,Nu,name="l")]
 Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Pi),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,name="Pf")
 
-Nt = 25
+Nt = 10
 
 # Control bounds.
 umax = np.array([.01*Ts,.1*Fs])
@@ -88,17 +94,17 @@ def cstrplot(x,u,ysp=None,contVars=[],ulb=None,uub=None,title=None):
     fig = plt.figure(figsize=(6,10))
     for i in range(Nx):
         ax = fig.add_subplot(Nx + Nu,1,i+1)
-        ax.plot(t,np.array(x[:,i]).flatten() + xs[i],'-ok')
+        ax.plot(t,np.array(x[:,i]).flatten(),'-ok')
         if i in contVars:
-            ax.step(t,np.array(ysp[:,i]).flatten() + xs[i],'-g',where="post")
+            ax.step(t,np.array(ysp[:,i]).flatten(),'-g',where="post")
         ax.set_ylabel(ylabelsx[i])
     for i in range(Nu):
         ax = fig.add_subplot(Nx + Nu,1,i+1+Nx)
-        ax.step(t,np.array(u[:,i]).flatten() + us[i],'-k',where="post")
+        ax.step(t,np.array(u[:,i]).flatten(),'-k',where="post")
         if uub is not None:
-            ax.plot([t[0],t[-1]],(uub[i] + us[i])*np.ones(2,),'-r')
+            ax.plot([t[0],t[-1]],uub[i]*np.ones(2,),'-r')
         if ulb is not None:
-            ax.plot([t[0],t[-1]],(ulb[i] + us[i])*np.ones(2,),'-r')
+            ax.plot([t[0],t[-1]],ulb[i]*np.ones(2,),'-r')
         ax.set_ylabel(ylabelsu[i])
     ax.set_xlabel("Time (min)")
     fig.tight_layout(pad=.5)
@@ -107,33 +113,52 @@ def cstrplot(x,u,ysp=None,contVars=[],ulb=None,uub=None,title=None):
     return fig
 
 # Build a solver for the linear and nonlinear models.
-x0 = np.array([-.95*cs,-.25*Ts,-.5*hs])
+x0 = np.array([.05*cs,.75*Ts,.5*hs])
 solvers = {}
 solvers["lmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=Flinear,l=l,x0=x0,Pf=Pf,returnTimeInvariantSolver=True,bounds=bounds)
-solvers["nmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=model_casadi,l=l,x0=x0,Pf=Pf,timemodel="rk4",M=1,Delta=cstr.Delta,returnTimeInvariantSolver=True,bounds=bounds)
+solvers["nmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=model_casadi,l=l,x0=x0,Pf=Pf,timemodel="rk4",M=1,Delta=cstr.Delta,returnTimeInvariantSolver=True,bounds=bounds,d=[ps])
 
-# Now simulate the process.
+# First see what happens if we try to start up the reactor under no control.
 Nsim = 40
+
+xnocontrol = np.zeros((Nsim+1,Nx))
+xnocontrol[0,:] = x0
+unocontrol = np.tile(us,(Nsim,1))
+for t in range(Nsim):
+    xnocontrol[t+1,:] = cstr.sim(xnocontrol[t,:],unocontrol[t,:],ds,matrix=False)
+cstrplot(xnocontrol,unocontrol,title="Uncontrolled Startup")
+
+# Now simulate the process under control.
 xcl = {}
 ucl = {}
 for method in solvers.keys():
     xcl[method] = np.zeros((Nsim+1,Nx))
     xcl[method][0,:] = x0
     thisx = x0    
-    ucl[method] = np.zeros((Nsim,Nu))    
+    ucl[method] = np.zeros((Nsim,Nu))
+    xsp = np.tile(xs,(Nsim+1,1))
+    #xsp[Nsim/2:,0] = 1.5*cs # Make a setpoint change in the second half.    
     for t in range(Nsim):
+        thisxs = xsp[t,:]
+        if method == "nmpc":
+            thisp = np.concatenate((thisxs,us,ds))
+            solvers[method].changeparvals("d",[thisp])
+        solvers[method].fixvar("x",0,thisx - thisxs)
         sol = solvers[method].solve()
         print "%10s %3d: %s" % (method,t,sol["status"])
         if sol["status"] != "Solve_Succeeded":
             break
         else:
             solvers[method].saveguess(sol)
-        thisu = sol["u"][0,...].copy()
+            
+        if t == 0:
+            cstrplot(sol["x"] + xs,sol["u"] + us,title="Initial prediction (%s)" % method)            
+            
+        thisu = sol["u"][0,...].copy() + us
         ucl[method][t,:] = thisu
-        thisx = cstr.sim(thisx + xs,thisu + us,ds,matrix=False) - xs
+        thisx = cstr.sim(thisx,thisu,ds,matrix=False)
         xcl[method][t+1,:] = thisx
-        solvers[method].fixvar("x",0,thisx)
-    cstrplot(xcl[method],ucl[method],ysp=np.zeros(xcl[method].shape),title=method,contVars=range(Nx),uub=bounds["uub"][0],ulb=bounds["ulb"][0])
+    cstrplot(xcl[method],ucl[method],ysp=xsp,title=method,contVars=range(Nx),uub=bounds["uub"][0] + us,ulb=bounds["ulb"][0] + us)
 
 
 

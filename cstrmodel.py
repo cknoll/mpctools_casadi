@@ -66,10 +66,12 @@ class CSTR(object):
         
         return dxdt
 
-    def __init__(self):
+    def __init__(self,Delta=None):
         """
         Initializes model and does Casadi symbolic stuff.
         """
+        if Delta is not None:
+            self.Delta = Delta
         self.updateModel()
 
     def updateModel(self):
@@ -106,6 +108,7 @@ class CSTR(object):
         model.init()
         
         self.__Integrator = casadi.Integrator("cvodes",model)
+        self.__Integrator.setOption("tf",self.Delta)
         self.__Integrator.init()
         
     def getLinearization(self,cs,Ts,hs,Tcs,Fs,F0s):
@@ -133,7 +136,6 @@ class CSTR(object):
             u = [Tc,F]
             p = [F0]
         """
-        self.__Integrator.setOption("tf",self.Delta)
         self.__Integrator.setInput(x0,"x0")
         self.__Integrator.setInput(casadi.vertcat([u,d]),"p")
         self.__Integrator.evaluate()

@@ -335,7 +335,7 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
         Nc = None
         
     if timemodel == "rk4":
-        F = [getRungeKutta4(f,Delta,M) for f in F]
+        F = [getRungeKutta4(f,Delta,M,d=(d is not None)) for f in F]
     
     # Get shapes.
     Fargs = getModelArgSizes(F[0],d=(d is not None),z=False)
@@ -348,11 +348,23 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     # Define NLP variables.
     [VAR, LB, UB, GUESS] = getCasadiVars(Nx,Nu,N,Nc)
     
+    # Decide aboud disturbances.
+    if d is not None:
+        PAR = ctools.struct_symMX([(ctools.entry("d",shape=d[0].shape,repeat=N),)])
+        dsym = PAR["d"]
+        PARVAL = PAR(0)
+        for t in range(N):
+            PARVAL["d",t] = d[t % len(d)]
+    else:
+        dsym = None
+        PAR = None
+        PARVAL = None
+    
     # Get constraints.
     if timemodel == "colloc":
-        [nlpCon, conlb, conub] = getCollocationConstraints(F[0],VAR,Delta,d)
+        [nlpCon, conlb, conub] = getCollocationConstraints(F[0],VAR,Delta,dsym)
     else:
-        [nlpCon, conlb, conub] = getDiscreteTimeConstraints(F,VAR,d)
+        [nlpCon, conlb, conub] = getDiscreteTimeConstraints(F,VAR,dsym)
     
     # Need to flatten everything.
     nlpCon = flattenlist(nlpCon)
@@ -392,11 +404,11 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     
     # Now decide what to do based on what the user has said.
     if returnTimeInvariantSolver:
-        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity=verbosity)    
+        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL)    
         return solver
     
     # Call solver and stuff.
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,verbosity=verbosity)
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL)
     
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
@@ -525,6 +537,7 @@ def __getCasadiSymbols(Nx,Nu=None,Nd=None,combine=False):
             p = casadi.MX.sym("p",Np)
             zoh = [p]
             things = casadi.vertsplit(p,Nu)
+            import pdb; pdb.set_trace()
             if Nu > 0:
                 args["u"] = things[0]
                 if Nd > 0:
@@ -841,7 +854,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,gues
         
     # Now call the solver.
     solverReturn = callSolver(varStruct,varlbStruct,varubStruct,varguessStruct,
-        obj,con,conlb,conub,par=parStruct,verbosity=verbosity)
+        obj,con,conlb,conub,verbosity=verbosity)
     
     # Should probably do a bit more post-processing to make these return
     # values a bit more user-friendly.                         
@@ -1048,7 +1061,7 @@ def __casadiSymStruct(allVars,theseVars=None):
 # Solver Interfaces
 # =================================                    
     
-def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
+def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None):
     """
     Calls ipopt to solve an NLP.
     
@@ -1076,6 +1089,8 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     solver.setInput(varub,"ubx")
     solver.setInput(conlb,"lbg")
     solver.setInput(conub,"ubg")
+    if parval is not None:
+        solver.setInput(parval,"p")
     
     # Solve.    
     solver.evaluate()
@@ -1147,7 +1162,7 @@ class TimeInvariantSolver(object):
     def guesser(self):
         return self.__guesser    
     
-    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5):
+    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None):
         """
         Store variables, constraints, etc., and generate the solver.
         """
@@ -1161,7 +1176,8 @@ class TimeInvariantSolver(object):
         self.__conlb = conlb
         self.__conub = conub
         
-        self.__par = par
+        self.__parsym = par
+        self.__par = parval
         
         self.verbosity = verbosity
         self.initializeSolver()
@@ -1176,8 +1192,8 @@ class TimeInvariantSolver(object):
         """
         
         nlpInputs = {"x" : self.var}
-        if self.par is not None:
-            nlpInputs["p"] = self.par
+        if self.__parsym is not None:
+            nlpInputs["p"] = self.__parsym
         nlpInputs = casadi.nlpIn(**nlpInputs)
         nlpOutputs = casadi.nlpOut(f=self.obj,g=self.con)
         nlp = casadi.MXFunction(nlpInputs,nlpOutputs)
@@ -1192,6 +1208,8 @@ class TimeInvariantSolver(object):
         solver.setInput(self.ub,"ubx")
         solver.setInput(self.conlb,"lbg")
         solver.setInput(self.conub,"ubg")
+        if self.par is not None:
+            solver.setInput(self.par,"p")
         
         self.solver = solver
         
@@ -1257,7 +1275,20 @@ class TimeInvariantSolver(object):
         self.solver.setInput(self.lb,"lbx")
         self.solver.setInput(self.ub,"ubx")
         self.solver.setInput(self.guess,"x0")
+    
+    def changeparvals(self,name,values):
+        """
+        Updates time-varying parameter given a list of values.
         
+        values should be [p(0), p(1), ...], with numbers referring to time
+        points. If parameters are not time-varying, then values should be a
+        list with one element.
+        """
+        
+        for t in range(len(self.par[name])):
+            self.par[name,t] = values[t % len(values)]
+        self.solver.setInput(self.par,"p")
+    
     def storeguesser(self,guesser):
         """
         Saves a one-timestep solver used to generate guesses.
