@@ -266,6 +266,38 @@ def getCasadiIntegrator(f,Delta,Nx,Nu=0,Nd=0,name=None,dae=False,abstol=1e-8,rel
     
     return F
 
+def getLinearization(f,xs,us=None,ds=None,Delta=None):
+        """
+        Returns linear state-space model for the given function.
+        """
+        # Put together function arguments.
+        args = []
+        N = {}
+        for (arg,name) in [(xs,'x'),(us,'u'),(ds,'d')]:
+            if arg is not None:
+                arg = np.array(arg)
+                args.append(arg)
+                N[name] = arg.shape[0]
+            else:
+                N[name] = 0
+        
+        # Evalueate function.
+        fs = np.array(f(args)[0]) # Column vector.        
+        
+        # Get Jacobian.
+        jacobian = f.fullJacobian()
+        jacobian.init()
+        Js = np.array(jacobian(args)[0])        
+        
+        A = Js[:,:N["x"]]
+        B = Js[:,N["x"]:N["x"]+N["u"]]
+        Bp = Js[:,N["x"]+N["u"]:N["x"]+N["u"]+N["d"]]
+        
+        if Delta is not None:
+            [A, B, Bp, f] = c2d_augmented(A,B,Bp,fs,Delta)
+        
+        return {"A": A, "B": B, "Bp": Bp, "f": fs}
+
 # =================================
 # Nonlinear
 # =================================
@@ -536,14 +568,12 @@ def __getCasadiSymbols(Nx,Nu=None,Nd=None,combine=False):
         if Np > 0:
             p = casadi.MX.sym("p",Np)
             zoh = [p]
-            things = casadi.vertsplit(p,Nu)
-            import pdb; pdb.set_trace()
             if Nu > 0:
-                args["u"] = things[0]
+                args["u"] = p[:Nu]
                 if Nd > 0:
-                    args["d"] = things[1]
+                    args["d"] = p[Nu:]
             elif Nd > 0:
-                args["d"] = things[0]
+                args["d"] = p[:Nd]
         else:
             zoh = []
     else:
@@ -1322,12 +1352,61 @@ class TimeInvariantSolver(object):
         self.saveguess(onestep, toffset=-t)        
         
         return onestep
+
+# ================================
+# Simulation
+# ================================
+
+class OneStepSimulator(object):
+    """
+    Simulates a continuous-time system.
+    """
+    
+    def __init__(self,ode,Delta,Nx,Nu,Nd=0):
+        """
+        Initialize by specifying model and sizes of everything.
+        """
+        # Create variables.
+        x = casadi.MX.sym("x",Nx)
+        p = casadi.MX.sym("p",Nu+Nd)
+        u = p[:Nu]
+        odeargs = {"x":x, "u":u}
+        if Nd > 0:
+            d = p[Nu:]
+            odeargs["d"] = d
+        
+        # Save sizes.
+        self.Nx = Nx
+        self.Nu = Nu
+        self.Nd = Nd
+        
+        # Now define integrator for simulation.
+        model = casadi.MXFunction(casadi.daeIn(x=x,p=p),
+                                  casadi.daeOut(ode=casadi.vertcat(ode(**odeargs))))
+        model.init()
+        
+        self.__Integrator = casadi.Integrator("cvodes",model)
+        self.__Integrator.setOption("tf",Delta)
+        self.__Integrator.init()
+
+    def sim(self,x0,u,d=[]):
+        """
+        Simulate one timestep.
+        """
+        self.__Integrator.setInput(x0,"x0")
+        self.__Integrator.setInput(casadi.vertcat([u,d]),"p")
+        self.__Integrator.evaluate()
+        xf = self.__Integrator.getOutput("xf")
+        self.__Integrator.reset()
+        
+        return np.array(xf).flatten()
+        
     
 # =================================
 # Plotting
 # =================================
     
-def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
+def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,title=None):
     """
     Makes a plot of the state and control trajectories for an mpc problem.
     
@@ -1388,7 +1467,9 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5):
     
     # Layout tightness.
     if not tightness is None:
-        fig.tight_layout(pad=tightness)        
+        fig.tight_layout(pad=tightness)
+    if title is not None:
+        fig.canvas.set_window_title(title)       
     
     return fig
 
@@ -1425,6 +1506,27 @@ def c2d(Ac,Bc,Delta):
     Bd = D[0:n,n:];
     
     return (Ad,Bd)
+
+def c2d_augmented(A,B,Bp,f,Delta):
+    """
+    Discretizes affine system (A,B,Bp,f) with timestep Delta.
+    
+    This includes disturbances and a potentially nonzero steady-state.
+    """
+    
+    n = A.shape[0]
+    m = B.shape[1]
+    mp = Bp.shape[1]
+    M = m + mp + 1 # Extra 1 is for function column.
+    
+    D = scipy.linalg.expm(Delta*np.vstack((np.hstack([A, B, Bp, f]),
+                                     np.zeros((M,M+n)))))
+    Ad = np.matrix(D[0:n,0:n])
+    Bd = np.matrix(D[0:n,n:n+m])
+    Bpd = np.matrix(D[0:n,n+m:n+m+mp])
+    fd = np.matrix(D[0:n,n+m+mp:n+m+mp+1])    
+    
+    return [Ad,Bd,Bpd,fd]
     
 def mtimes(*args):
     """

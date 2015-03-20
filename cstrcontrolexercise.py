@@ -44,23 +44,23 @@ ds = np.array([F0s])
 # First, simulate the system, and then see if the various discretization
 # methods work well enough for the system.
 
-# Define nonlinear model, but use the disturbance to denote the setpoint.
+# Define nonlinear model. We use a "disturbance" to pass the offsets as
+# parameters to the problem. Thus, the nonlinear controller is always in
+# deviation variables and it's easy to change what point is the origin.
 Np = Nx + Nu + cstr.Nd()
 def model(x,u,d):
-    p = d # We use d to store parameters.
-    c = x[0] + p[0]
-    T = x[1] + p[1]
-    h = x[2] + p[2]
-    Tc = u[0] + p[3]
-    F = u[1] + p[4]
-    F0 = p[5]
+    c = x[0] + d[0]
+    T = x[1] + d[1]
+    h = x[2] + d[2]
+    Tc = u[0] + d[3]
+    F = u[1] + d[4]
+    F0 = d[5]
     return cstr.ode(c,T,h,Tc,F,F0)
 
 ps = np.array([cs,Ts,hs,Tcs,Fs,F0s])
 
 model_casadi = [mpc.getCasadiFunc(model,Nx,Nu,Np,name="cstr")]
-#model_integrator = [mpc.getCasadiIntegrator(model,cstr.Delta,Nx,Nu,Np,name="cstr")]
-# This doesn't work, which is a problem.
+model_integrator = [mpc.getCasadiIntegrator(model,cstr.Delta,Nx,Nu,Np,name="cstr")]
 
 # Weighting matrices for controller.
 Q = .5*np.matrix(np.diag(np.array(xs).flatten()))**-2
@@ -117,6 +117,9 @@ x0 = np.array([.05*cs,.75*Ts,.5*hs])
 solvers = {}
 solvers["lmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=Flinear,l=l,x0=x0,Pf=Pf,returnTimeInvariantSolver=True,bounds=bounds)
 solvers["nmpc"] = mpc.nmpc(N=Nt,verbosity=0,F=model_casadi,l=l,x0=x0,Pf=Pf,timemodel="rk4",M=1,Delta=cstr.Delta,returnTimeInvariantSolver=True,bounds=bounds,d=[ps])
+
+# This one is slow, which illustrates that we don't need to be exactly following the ODEs.
+solvers["nmpcint"] = mpc.nmpc(N=Nt,verbosity=0,F=model_integrator,l=l,x0=x0,Pf=Pf,returnTimeInvariantSolver=True,bounds=bounds,d=[ps])
 
 # First see what happens if we try to start up the reactor under no control.
 Nsim = 40
