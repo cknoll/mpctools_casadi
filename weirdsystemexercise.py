@@ -18,7 +18,7 @@ model = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
 
 # Then get nonlinear casadi functions and a linearization.
 ode_casadi = mpc.getCasadiFunc(ode, Nx, Nu, name="f")
-lin = mpc.getLinearization(ode_casadi,np.zeros((Nx,)),np.ones((Nu,)),Delta=Delta)
+lin = mpc.getLinearization(ode_casadi,np.zeros((Nx,)),np.zeros((Nu,)),Delta=Delta)
 
 # Define stage cost and terminal weight.
 lfunc = lambda x,u: [100*mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)]
@@ -47,7 +47,7 @@ commonargs = dict(
 )
 solvers = {}
 solvers["LMPC"] = mpc.nmpc(F=[F],**commonargs)
-solvers["NMPC"] = mpc.nmpc(F=[ode_casadi],timemodel="rk4",M=2,Delta=Delta,**commonargs)
+solvers["NMPC"] = mpc.nmpc(F=[ode_casadi],timemodel="colloc",M=2,Delta=Delta,**commonargs)
 
 # Now simulate.
 Nsim = 100
