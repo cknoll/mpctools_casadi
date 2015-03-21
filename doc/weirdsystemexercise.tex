@@ -1,0 +1,98 @@
+\documentclass[xcolor=dvipsnames]{beamer}
+
+\usepackage{listings}
+\providecommand{\lstinline}{}
+
+\lstdefinestyle{makefile}{
+    language={[gnu]make},
+    numbers=left,
+    frame=lines,
+    basicstyle=\ttfamily,
+    keywordstyle=\color{Blue}\ttfamily,
+    stringstyle=\color{Purple}\ttfamily,
+    commentstyle=\color{ForestGreen}\ttfamily,
+    escapechar=@
+}
+
+\lstdefinestyle{shell}{
+    language=bash,
+    basicstyle=\ttfamily\footnotesize,
+}
+
+\lstdefinestyle{python}{
+    language=Python,
+    basicstyle=\ttfamily,
+    keywordstyle=\color{Blue}\ttfamily,
+    stringstyle=\color{Purple}\ttfamily,
+    commentstyle=\color{ForestGreen}\ttfamily,
+    escapechar=@,
+}
+
+\newcommand{\codeemph}[1]{\textcolor{NavyBlue}{\small\bfseries #1}}
+
+\newcommand{\smallurl}[2][\footnotesize]{\texttt{#1 #2}}
+
+\title{First NMPC Exercise}
+
+\usepackage{graphicx}
+\graphicspath{{./}{../}}
+
+\usepackage{lmodern}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}{System}
+    
+    Consider the following system:
+    \begin{gather*}
+        \frac{d}{dt} \begin{pmatrix} x_0 \\ x_1 \end{pmatrix} = \begin{pmatrix} -x_0 & - & (1 + u_0)x_1 & & \\ (1+u_0)x_0 & + & x_1 & + & u_1 \end{pmatrix} \\[1em]
+        \begin{pmatrix} -1 \\ -1 \end{pmatrix} \le \begin{pmatrix} u_0 \\ u_1 \end{pmatrix} \le \begin{pmatrix} 1 \\ 1 \end{pmatrix}
+    \end{gather*}
+    
+    \begin{itemize}
+        \item For fixed $u_0$, system is linear.
+        \item Far from the origin, system is difficult to stabilize along the $x_1$-axis.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Exercise}
+    Design a nonlinear MPC controller to regulate the system to the origin.
+    \begin{itemize}
+        \item State is measured.
+        \item No disturbances.
+    \end{itemize}
+    
+    \medskip
+    
+    Compare results to linear MPC.
+    \begin{itemize}
+        \item Why might linear MPC be a bad idea for this system?
+        \item Can linear MPC stabilize the system? Where?
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Coding Hints}
+    
+    [to do]
+    
+\end{frame}
+
+\begin{frame}{Example Results}
+    \begin{columns}
+        \begin{column}{.475\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{weirdsystemtimeseries.pdf}
+        \end{column}
+        \begin{column}{.475\textwidth}
+            \begin{center}
+                \includegraphics[width=\textwidth]{weirdsystemphasespace.pdf}
+            \end{center}
+            Nonlinear MPC is clearly better for this case.
+        \end{column}
+    \end{columns}
+    
+\end{frame}
+
+\end{document}

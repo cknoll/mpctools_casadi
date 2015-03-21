@@ -353,6 +353,13 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
     index corresponding to individual states and the second index corresponding
     to time. Entry "status" is a string with solver status.
+    
+    Alternatively, if returnTimeInvariantSolver is set to True, the function will
+    return a TimeInvariantSolver object. This is just a lightweight wrapper for
+    a casadi solver object with some convenience methods. This is useful for
+    closed-loop simulations of time-invariant systems because all you have to
+    do is change the initial condition, cycle your guess by one period, and
+    re-solve.
     """
     starttime = time.clock()    
     
@@ -1472,6 +1479,31 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,title=Non
         fig.canvas.set_window_title(title)       
     
     return fig
+
+def zoomaxis(axes=None,xscale=None,yscale=None):
+    """
+    Zooms the axes by a specified amounts (positive multipliers).
+    
+    If axes is None, plt.gca() is used.
+    """
+    # Grab default axes if necessary.
+    if axes is None:
+        axes = plt.gca()
+    
+    # Make sure input is valid.
+    if (xscale is not None and xscale <= 0) or (yscale is not None and yscale <= 0):
+        raise ValueError("Scale values must be strictly positive.")
+    
+    # Adjust axes limits.
+    for (scale,getter,setter) in [(xscale,axes.get_xlim,axes.set_xlim), (yscale,axes.get_ylim,axes.set_ylim)]:
+        if scale is not None:
+            # Subtract one from each because of how we will calculate things.            
+            scale -= 1
+   
+            # Get limits and change them.
+            (minlim,maxlim) = getter()
+            offset = .5*scale*(maxlim - minlim)
+            setter(minlim - offset, maxlim + offset)
 
 # =================================
 # Helper Functions

@@ -14,7 +14,7 @@ def ode(x,u):
 x0 = np.array([2,2])
 
 # Create a simulator.
-vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
+model = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
 
 # Then get nonlinear casadi functions and a linearization.
 ode_casadi = mpc.getCasadiFunc(ode, Nx, Nu, name="f")
@@ -46,40 +46,79 @@ commonargs = dict(
     returnTimeInvariantSolver=True,
 )
 solvers = {}
-solvers["lmpc"] = mpc.nmpc(F=[F],**commonargs) # LMPC doesn't work because the linearization is uncontrollable.
-solvers["nmpc"] = mpc.nmpc(F=[ode_casadi],timemodel="rk4",M=2,Delta=Delta,**commonargs)
+solvers["LMPC"] = mpc.nmpc(F=[F],**commonargs)
+solvers["NMPC"] = mpc.nmpc(F=[ode_casadi],timemodel="rk4",M=2,Delta=Delta,**commonargs)
 
 # Now simulate.
 Nsim = 100
-times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+tplot = Delta*Nsim*np.linspace(0,1,Nsim+1)
 x = {}
 u = {}
+tplot = Nsim*Delta*np.linspace(0,1,Nsim+1)
 for method in solvers.keys():
     x[method] = np.zeros((Nsim+1,Nx))
     x[method][0,:] = x0
     u[method] = np.zeros((Nsim,Nu))
     for t in range(Nsim):
+        # Update initial condition and solve OCP.
         solvers[method].fixvar("x",0,x[method][t,:])
         sol = solvers[method].solve()
+        
+        # Print status and make sure solver didn't fail.        
         print "%5s %d: %s" % (method,t,sol["status"])
         if sol["status"] != "Solve_Succeeded":
             break
         else:
             solvers[method].saveguess(sol)
         u[method][t,:] = sol["u"][0,:]
-        x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
-    
-    # Plot in time.    
-    mpc.mpcplot(x[method].T,u[method].T,times,title="Time Series (%s)" % (method,))
+        x[method][t+1,:] = model.sim(x[method][t,:],u[method][t,:])
+        
+        # We can stop early if we are already close to the origin.
+        if np.sum(x[method][t+1,:]**2) < 1e-4:
+            print "%s at origin after %d iterations." % (method,t)
+            break
+
+# Prepare some plots.
+phasefig = plt.figure()
+phaseax = phasefig.add_subplot(1,1,1)
+phaseax.set_xlabel("$x_0$")
+phaseax.set_ylabel("$x_1$")
+phaseax.axvline(color="grey")
+phaseax.axhline(color="grey")
+phasefig.canvas.set_window_title("Phase Space")
+
+timefig = plt.figure(figsize=(6,10))
+timexax = []
+for i in range(Nx):
+    timexax.append(timefig.add_subplot(Nx + Nu,1,i+1))
+    timexax[-1].set_ylabel("$x_{%d}$" % (i,))
+timeuax = []
+for i in range(Nu):
+    timeuax.append(timefig.add_subplot(Nx + Nu,1,i+Nx+1))
+    timeuax[-1].set_ylabel("$u_{%d}$" % (i,))
+timeuax[-1].set_xlabel("Time")
+timefig.canvas.set_window_title("Time Series")
+
+colors = {"LMPC":"red", "NMPC":"green"}
+
+for method in solvers.keys():
+    # Plot in time.
+    uplot = np.vstack((u[method],u[method][-1,:]))
+    for i in range(Nu):
+        timeuax[i].step(tplot,uplot[:,i],color=colors.get(method,"k"))
+    for i in range(Nx):
+        timexax[i].plot(tplot,x[method][:,i],color=colors.get(method,"k"))
     
     # Plot in phase space.
-    fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
-    ax.plot(x[method][:,0],x[method][:,1],'-k')
-    ax.set_xlabel("$x_0$")
-    ax.set_ylabel("$x_1$")
-    ax.axvline(color="grey")
-    ax.axhline(color="grey")
-    fig.canvas.set_window_title("Phase Space (%s)" % (method,))
+    phaseax.plot(x[method][:,0],x[method][:,1],'-k',label=method,color=colors.get(method,"k"))
+
+# Some beautification.
+for ax in timexax + timeuax:
+    mpc.zoomaxis(ax,yscale=1.1)
+timefig.tight_layout(pad=.5)
+timefig.savefig("weirdsystemtimeseries.pdf")
+phasefig.tight_layout(pad=.5)
+phaseax.legend(loc="upper right")
+phasefig.savefig("weirdsystemphasespace.pdf")
         
         
