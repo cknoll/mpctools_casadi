@@ -1459,6 +1459,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,title=Non
         a.step(t,np.squeeze(u[uind,:]),ulspec)
         a.set_xlabel("Time")
         a.set_ylabel("Control %d" % (uind + 1))
+        zoomaxis(a,yscale=1.05)
     
     # x plots.    
     for i in range(len(xinds)):
@@ -1471,6 +1472,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,title=Non
             plt.legend(loc="best")
         a.set_xlabel("Time")
         a.set_ylabel("State %d" % (xind + 1))
+        zoomaxis(a,yscale=1.05)
     
     # Layout tightness.
     if not tightness is None:
