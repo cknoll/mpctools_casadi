@@ -1555,12 +1555,30 @@ def c2d_augmented(A,B,Bp,f,Delta):
     
     D = scipy.linalg.expm(Delta*np.vstack((np.hstack([A, B, Bp, f]),
                                      np.zeros((M,M+n)))))
-    Ad = np.matrix(D[0:n,0:n])
-    Bd = np.matrix(D[0:n,n:n+m])
-    Bpd = np.matrix(D[0:n,n+m:n+m+mp])
-    fd = np.matrix(D[0:n,n+m+mp:n+m+mp+1])    
+    Ad = D[0:n,0:n]
+    Bd = D[0:n,n:n+m]
+    Bpd = D[0:n,n+m:n+m+mp]
+    fd = D[0:n,n+m+mp:n+m+mp+1]   
     
     return [Ad,Bd,Bpd,fd]
+
+def dlqr(A,B,Q,R):
+    """
+    Get the discrete-time LQR for the given system.
+    """
+    Pi = scipy.linalg.solve_discrete_are(A,B,Q,R)
+    K = -scipy.linalg.solve(B.T.dot(Pi).dot(B) + R, B.T.dot(Pi).dot(A))
+    
+    return [K, Pi]
+    
+def dlqe(A,C,Q,R):
+    """
+    Get the discrete-time Kalman filter for the given system.
+    """
+    P = scipy.linalg.solve_discrete_are(A.T,C.T,Q,R)
+    L = scipy.linalg.solve(C.dot(P).dot(C.T) + R, C.dot(P)).T     
+    
+    return [L, P]
     
 def mtimes(*args):
     """
@@ -1629,4 +1647,5 @@ def listcatfirstdim(l):
         a.shape = (1,) + a.shape
         newl.append(a)
     
-    return np.concatenate(newl)    
+    return np.concatenate(newl)
+    
