@@ -819,7 +819,7 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
 # flexible with respect to function arguments, what variables are present,
 # etc., and so it permits a lot more functionality in less code.
 
-def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
+def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False):
     """
     Solves nonlinear MHE problem.
     
@@ -880,7 +880,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,gu
     else:
         Ng = None
     constraints = __generalDiscreteConstraints(varAndPar,N["t"],f=f,Nf=N["x"],
-        g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs)
+        g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs,substitutev=substitutev)
     
     con = []
     conlb = np.zeros((0,))
@@ -962,7 +962,7 @@ def __generalVariableShapes(sizeDict):
     return shapeDict
     
 
-def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[]):
+def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[],substitutev=False):
     """
     Creates general state evolution constraints for the following system:
     
@@ -1009,6 +1009,11 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
     None. Each entry in the return dictionary will be a list of lists, although
     for this class of constraint, each of those lists will have only one
     element. The list of stage costs is in "cost". This one is just a list.
+    
+    If substitutev is set to True, then the measurement constraints will be
+    directly inserted into the stage cost so that v is no longer a decision
+    variable. This reduces problem size but makes the objective function more
+    nonlinear.
     """
     
     # Figure out what variables are supplied.
@@ -1068,7 +1073,10 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
             if "y" in givenvars:
                 thiscon -= var["y"][t]
             if "v" in givenvars:
-                thiscon += var["v"][t]
+                if not substitutev:
+                    thiscon += var["v"][t]
+                else:
+                    thiscon *= -1 # Need to flip sign to get v correct.
             measurement.append([thiscon])
         lb = np.zeros((Nt,Nh))
         ub = lb.copy()
@@ -1076,11 +1084,29 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
     
     # Stage costs.
     if l is not None:
-        largs = getArgs("l",tintervals)
+        # Have to be careful about the arguments for this one because the
+        # function may depend on v, but there is no explicit variable v.
+        if substitutev:
+            largs = []
+            for t in tintervals:
+                largs.append([])
+                for v in args["l"]:
+                    if v == "v": # Grab expression that defines v.
+                        largs[-1] += measurement[t-t0]
+                    else:
+                        largs[-1].append(var[v][t])
+        else:        
+            largs = getArgs("l",tintervals)
+        
         cost = []
         for t in tintervals:
             cost.append(l[t % len(l)](largs[t])[0])
         returnDict["cost"] = cost
+    
+    # If we substituted out v, then we don't need to include the measurement
+    # constrants, so just get rid of them.
+    if substitutev:
+        returnDict.pop("measurement")
     
     return returnDict
     
@@ -1102,6 +1128,50 @@ def __casadiSymStruct(allVars,theseVars=None):
     # Build casadi sym_structMX    
     structArgs = tuple([ctools.entry(name,**args) for (name,args) in allVars.items()])
     return ctools.struct_symMX([structArgs])
+
+def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
+    """
+    Updates the prior distribution P- using the Extended Kalman filter.
+    
+    f and h should be casadi functions. f must be discrete-time. P, Q, and R
+    are the prior, state disturbance, and measurement noise covariances. Note
+    that f must be f(x,u,w) and h must be h(x).
+    
+    If specified, f_jac and h_jac should be initialized jacobians. This saves
+    some time if you're going to be calling this many times in a row.
+    """
+    
+    # Check jacobians.
+    if f_jacx is None:
+        f_jacx = f.jacobian(0)
+        f_jacx.init()
+    if f_jacw is None:
+        f_jacw = f.jacobian(2)
+        f_jacw.init()
+    if h_jacx is None:
+        h_jacx = h.jacobian(0)
+        h_jacx.init()
+        
+    # Get linearizations.
+    w = np.zeros(w.shape)
+    A = np.array(f_jacx([x,u,w])[0])
+    G = np.array(f_jacw([x,u,w])[0])
+    C = np.array(h_jacx([x])[0])
+    yhat = np.array(h([x])[0]).flatten()
+    
+    # Do recursive update formulas.
+    L = scipy.linalg.solve(C.dot(P_).dot(C.T) + R, C.dot(P_)).T
+    P = (np.eye(P_.shape[0]) - L.dot(C)).dot(P_)
+    
+    # Update prior for x0.
+    x0bar = x0bar + L.dot(y - yhat - C.dot(x0bar - x))
+    x0bar = np.array(f([x0bar,u,w])[0]).flatten()    
+    
+    # Update prior covariance.
+    P_ = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)
+    
+    #import pdb; pdb.set_trace()
+    return [P_, x0bar]
     
 # =================================
 # Solver Interfaces
