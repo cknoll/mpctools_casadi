@@ -11,18 +11,19 @@ import colloc
 """
 Functions for solving MPC problems using Casadi and Ipopt.
 
-The main function is lmpc, which is analogous to the mpc-tools function of the
-same name. However, this function is currently missing a lot of the "advanced"
-functionality of Octave lmpc, e.g. soft constraints, solver tolerances, and
-returning lagrange multipliers.
-
-There is now a function for nonlinear MPC. This works with nonlinear discrete-
+The main function is nmpc for nonlinear MPC. This works with nonlinear discrete-
 time models. There is also a function to discretize continuous-time models using
 a 4th-order Runge-Kutta method. Collocation is also available.
 
-Finally, there is a draft version of NMHE. These functions use different
-input arguments, but I think this way is better than how the MPC functions are
-done, and so the MPC function call syntax may change in the future.
+There is also a draft version of NMHE. This functions use different input
+arguments than nmpc, so be sure to look at the appropriate docstrings.
+
+For simulating nonlinear systems, we have a small wrapper of a Casadi integrator
+object. This gives xnext = model.sim(x,u), which saves some typing (e.g.
+integrator.setInput() and integrator.getOutput()).
+
+Finally, there are a bunch of convenience functions to emulate Matlab/Octave
+control functions (e.g. c2d, dlqr, dlqe, etc.).
 
 Most other functions are just convenience wrappers to replace calls like
 long.function.name((args,as,tuple)) with f(args,as,args), although these are
@@ -38,141 +39,6 @@ largely unnecessary.
 #
 # - We use the print function here, so any calls to print must have the
 #   arguments surrounded by parentheses.
-#
-#
-# - Since casadi is actively being developed, we should avoid duplicated code
-#   as much as possible. If you ever find yourself copy/pasting more than a few
-#   lines of code in this module, consider writing a separate function.
-#
-#   An exception to this rule is the lmpc function. In its current form, it is
-#   a lot like nmpc. Ideally casadi will eventually allow us to solve QPs
-#   explicitly instead of solving it as a general NLP, so we keep this a
-#   separate function now because at some point it will become fundamentally
-#   different from nmpc.
-
-# =================================
-# Linear
-# =================================
-
-
-def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbosity=5):
-    """
-    Solves the canonical linear MPC problem using a discrete-time model.
-    
-    Inputs are discrete-time state-space model, objective function weights, and
-    input constraints. Output is a tuple (x,u) with the optimal state and input
-    trajectories.    
-    
-    The actual optimization problem is as follows:
-    
-        min \sum_{k=0}^N        0.5*x[k]'*Q[k]*x[k] + q[k]'*x[k]      
-            + \sum_{k=0}^{N-1}  0.5*u[k]'*R[k]*u[k] + r[k]'*u[k]
-                                 + x[k]'*M[k]*u[k]
-    
-        s.t. x[k+1] = A[k]*x[k] + B[k]*u[k]               k = 0,...,N-1
-             ulb[k] <= u[k] <= uub[k]                     k = 0,...,N-1
-             xlb[k] <= x[k] <= xlb[k]                     k = 0,...,N
-             D[k]*u[k] - G[k]*x[k] <= d[k]                k = 0,...,N-1
-    
-    A, B, Q, R, M, D, and G should be lists of numPy matrices. x0 should be a
-    numPy vector. q, r, xlb, xub, ulb, uub, and d should be lists of numpy vectors.
-    
-    All of these lists are accessed modulo their respective length;hus,
-    time-invariant models can be lists with one element, while time-varying
-    periodic model with period T should have T elements.
-    
-    All arguments are optional except A, B,x0, N, Q, and R. If any of D, G, or d
-    are given, then all must be given.    
-    
-    Optional argument verbosity controls how much solver output there is. This
-    value must be an integer between 0 and 12 (inclusive). Higher numbers
-    indicate more verbose output.    
-    
-    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
-    index corresponding to individual states and the second index corresponding
-    to time. Entry "status" is a string with solver status.
-    """        
-    starttime = time.clock()    
-    
-    # Get shapes.    
-    n = A[0].shape[0]
-    m = B[0].shape[1]
-    
-    # Fill in default bounds.
-    bounds = fillBoundsDict(bounds,n,m)
-    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
-    
-    # Define NLP variables.
-    [VAR, LB, UB, GUESS] = getCasadiVars(n,m,N)
-    
-    # Preallocate.
-    qpF = casadi.MX(0) # Start with dummy objective.
-    qpG = [None]*N # Preallocate, although we could just append.
-    
-    # First handle objective/constraint terms that aren't optional.    
-    for k in range(N+1):
-        if k != N:
-            LB["u",k,:] = getBounds("ulb",k)
-            UB["u",k,:] = getBounds("uub",k)
-            
-            qpF += .5*mtimes(VAR["u",k].T,R[k % len(R)],VAR["u",k]) 
-            qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
-        
-        if k == 0:
-            LB["x",0,:] = x0
-            UB["x",0,:] = x0
-        else:
-            LB["x",k,:] = getBounds("xlb",k)
-            UB["x",k,:] = getBounds("xub",k)
-        
-        qpF += .5*mtimes(VAR["x",k].T,Q[k % len(Q)],VAR["x",k])
-    
-    conlb = np.zeros((n*N,))
-    conub = np.zeros((n*N,))
-
-    # Now check optional stuff.
-    if q is not None:
-        for k in range(N):
-            qpF += mtimes(q[k % len(q)].T,VAR["x",k])
-    if r is not None:
-        for k in range(N-1):
-            qpF += mtimes(r[k % len(r)].T,VAR["u",k])
-    if M is not None:
-        for k in range(N-1):
-            qpF += mtimes(VAR["x",k].T,M[k % len(M)],VAR["u",k])                
-    
-    if D is not None:
-        for k in range(N-1):
-            qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
-                        - mtimes(G[k % len(d)],VAR["x",k]) - d[k % len(d)])
-        s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
-        conlb = np.concatenate(conlb,-np.inf*np.ones(s))
-        conub = np.concatenate(conub,np.zeros(s))
-    
-    # Make qpG into a single large vector.     
-    qpG = casadi.vertcat(qpG) 
-    
-    # Create solver and stuff.
-    ipoptstart = time.clock()
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity=verbosity)
-    ipoptend = time.clock()
-    x = np.hstack(OPTVAR["x",:,:])
-    u = np.hstack(OPTVAR["u",:,:])
-    
-    # Add singleton dimension if n = 1 or p = 1.
-    x = atleastnd(x)
-    u = atleastnd(u)
-    
-    optVars = {"x" : x, "u" : u, "status" : status}
-    optVars["obj"] = obj
-    optVars["ipopttime"] = ipoptend - ipoptstart
-    
-    endtime = time.clock()
-    if verbosity > 1:
-        print("Took %g s." % (endtime - starttime))
-    optVars["time"] = endtime - starttime
-    
-    return optVars
 
 # =================================
 # Building CasADi Functions
@@ -899,12 +765,14 @@ def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,gu
         obj += lx([varStruct["x",0] - x0hat])[0]
         
     # Now call the solver.
-    solverReturn = callSolver(varStruct,varlbStruct,varubStruct,varguessStruct,
-        obj,con,conlb,conub,verbosity=verbosity)
+    [var, cost, status, solver] = callSolver(varStruct,varlbStruct,varubStruct,
+        varguessStruct,obj,con,conlb,conub,verbosity=verbosity)
     
-    # Should probably do a bit more post-processing to make these return
-    # values a bit more user-friendly.                         
-    return solverReturn
+    returnDict = casadiStruct2numpyDict(var)
+    returnDict["cost"] = cost
+    returnDict["status"] = status    
+                  
+    return returnDict
 
 def __generalVariableShapes(sizeDict):
     """
@@ -1172,6 +1040,132 @@ def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     
     #import pdb; pdb.set_trace()
     return [P_, x0bar]
+
+# =================================
+# Linear
+# =================================
+
+def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbosity=5):
+    """
+    Solves the canonical linear MPC problem using a discrete-time model.
+    
+    Inputs are discrete-time state-space model, objective function weights, and
+    input constraints. Output is a tuple (x,u) with the optimal state and input
+    trajectories.    
+    
+    The actual optimization problem is as follows:
+    
+        min \sum_{k=0}^N        0.5*x[k]'*Q[k]*x[k] + q[k]'*x[k]      
+            + \sum_{k=0}^{N-1}  0.5*u[k]'*R[k]*u[k] + r[k]'*u[k]
+                                 + x[k]'*M[k]*u[k]
+    
+        s.t. x[k+1] = A[k]*x[k] + B[k]*u[k]               k = 0,...,N-1
+             ulb[k] <= u[k] <= uub[k]                     k = 0,...,N-1
+             xlb[k] <= x[k] <= xlb[k]                     k = 0,...,N
+             D[k]*u[k] - G[k]*x[k] <= d[k]                k = 0,...,N-1
+    
+    A, B, Q, R, M, D, and G should be lists of numPy matrices. x0 should be a
+    numPy vector. q, r, xlb, xub, ulb, uub, and d should be lists of numpy vectors.
+    
+    All of these lists are accessed modulo their respective length;hus,
+    time-invariant models can be lists with one element, while time-varying
+    periodic model with period T should have T elements.
+    
+    All arguments are optional except A, B,x0, N, Q, and R. If any of D, G, or d
+    are given, then all must be given.    
+    
+    Optional argument verbosity controls how much solver output there is. This
+    value must be an integer between 0 and 12 (inclusive). Higher numbers
+    indicate more verbose output.    
+    
+    Return value is a dictionary. Entries "x" and "u" are 2D arrays with the first
+    index corresponding to individual states and the second index corresponding
+    to time. Entry "status" is a string with solver status.
+    
+    If your model is time-invariant, consider using nmpc to get a time-invariant
+    solver that will be much faster for repeated solves.
+    """        
+    starttime = time.clock()    
+    
+    # Get shapes.    
+    n = A[0].shape[0]
+    m = B[0].shape[1]
+    
+    # Fill in default bounds.
+    bounds = fillBoundsDict(bounds,n,m)
+    getBounds = lambda var,k : bounds[var][k % len(bounds[var])]    
+    
+    # Define NLP variables.
+    [VAR, LB, UB, GUESS] = getCasadiVars(n,m,N)
+    
+    # Preallocate.
+    qpF = casadi.MX(0) # Start with dummy objective.
+    qpG = [None]*N # Preallocate, although we could just append.
+    
+    # First handle objective/constraint terms that aren't optional.    
+    for k in range(N+1):
+        if k != N:
+            LB["u",k,:] = getBounds("ulb",k)
+            UB["u",k,:] = getBounds("uub",k)
+            
+            qpF += .5*mtimes(VAR["u",k].T,R[k % len(R)],VAR["u",k]) 
+            qpG[k] = mtimes(A[k % len(A)],VAR["x",k]) + mtimes(B[k % len(B)],VAR["u",k]) - VAR["x",k+1]
+        
+        if k == 0:
+            LB["x",0,:] = x0
+            UB["x",0,:] = x0
+        else:
+            LB["x",k,:] = getBounds("xlb",k)
+            UB["x",k,:] = getBounds("xub",k)
+        
+        qpF += .5*mtimes(VAR["x",k].T,Q[k % len(Q)],VAR["x",k])
+    
+    conlb = np.zeros((n*N,))
+    conub = np.zeros((n*N,))
+
+    # Now check optional stuff.
+    if q is not None:
+        for k in range(N):
+            qpF += mtimes(q[k % len(q)].T,VAR["x",k])
+    if r is not None:
+        for k in range(N-1):
+            qpF += mtimes(r[k % len(r)].T,VAR["u",k])
+    if M is not None:
+        for k in range(N-1):
+            qpF += mtimes(VAR["x",k].T,M[k % len(M)],VAR["u",k])                
+    
+    if D is not None:
+        for k in range(N-1):
+            qpG.append(mtimes(D[k % len(d)],VAR["u",k]) 
+                        - mtimes(G[k % len(d)],VAR["x",k]) - d[k % len(d)])
+        s = (D[0].shape[0]*N, 1) # Shape for inequality RHS vector.
+        conlb = np.concatenate(conlb,-np.inf*np.ones(s))
+        conub = np.concatenate(conub,np.zeros(s))
+    
+    # Make qpG into a single large vector.     
+    qpG = casadi.vertcat(qpG) 
+    
+    # Create solver and stuff.
+    ipoptstart = time.clock()
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity=verbosity)
+    ipoptend = time.clock()
+    x = np.hstack(OPTVAR["x",:,:])
+    u = np.hstack(OPTVAR["u",:,:])
+    
+    # Add singleton dimension if n = 1 or p = 1.
+    x = atleastnd(x)
+    u = atleastnd(u)
+    
+    optVars = {"x" : x, "u" : u, "status" : status}
+    optVars["obj"] = obj
+    optVars["ipopttime"] = ipoptend - ipoptstart
+    
+    endtime = time.clock()
+    if verbosity > 1:
+        print("Took %g s." % (endtime - starttime))
+    optVars["time"] = endtime - starttime
+    
+    return optVars
     
 # =================================
 # Solver Interfaces
