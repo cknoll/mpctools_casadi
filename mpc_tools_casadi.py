@@ -769,7 +769,7 @@ def getDiscreteTimeConstraints(F,var,d=None):
     
     return [nlpCon, conlb, conub]
 
-def getRungeKutta4(f,Delta,M=1,d=False,name=None):
+def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
     """
     Uses RK4 to discretize xdot = f(x,u) with M points and timestep Delta.
 
@@ -779,13 +779,17 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None):
     f must be a Casadi SX function with inputs in the proper order.
     """
     
-    # First find out how many arguments f takes.
-    fargs = getModelArgSizes(f,d=d)
-    [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
-
-    # Get symbolic variables.
-    [args, _, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
-    x0 = args["x"]
+    if argsizes is None:
+        # First find out how many arguments f takes.
+        fargs = getModelArgSizes(f,d=d)
+        [Nx, Nu, Nd] = [fargs[a] for a in ["x","u","d"]]
+    
+        # Get symbolic variables.
+        [args, _, zoh] = __getCasadiSymbols(Nx,Nu,Nd)
+        x0 = args["x"]
+    else:
+        x0 = casadi.MX.sym("x",argsizes[0])
+        zoh = [casadi.MX.sym("v_%d",i) for i in argsizes[1:]]
     
     h = Delta/float(M) # h in Runge-Kutta.
     
@@ -815,7 +819,7 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None):
 # flexible with respect to function arguments, what variables are present,
 # etc., and so it permits a lot more functionality in less code.
 
-def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
+def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"]):
     """
     Solves nonlinear MHE problem.
     
@@ -852,6 +856,11 @@ def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,bounds={},g=None,p=None,verbosity=5,gues
     varubStruct = varStruct(np.inf)
     varguessStruct = varStruct(0)
     
+    for (data,structure) in [(guess,varguessStruct), (lb,varlbStruct), (ub,varubStruct)]:
+        for v in data.keys():
+            for t in range(N["t"]):
+                structure[v,t] = data[v][t,...]
+
     # Now we fill up the parameters.
     for (name,val) in [("u",u),("p",p),("y",y)]:
         if name in parStruct.keys():
@@ -1369,23 +1378,32 @@ class OneStepSimulator(object):
     Simulates a continuous-time system.
     """
     
-    def __init__(self,ode,Delta,Nx,Nu,Nd=0):
+    def __init__(self,ode,Delta,Nx,Nu,Nd=0,Nw=0):
         """
         Initialize by specifying model and sizes of everything.
         """
         # Create variables.
         x = casadi.MX.sym("x",Nx)
-        p = casadi.MX.sym("p",Nu+Nd)
+        p = casadi.MX.sym("p",Nu+Nd+Nw)
         u = p[:Nu]
-        odeargs = {"x":x, "u":u}
+        odeargs = {"x":x}
+        if Nu > 0:
+            odeargs["u"] = u
         if Nd > 0:
-            d = p[Nu:]
+            d = p[Nu:Nu+Nd]
             odeargs["d"] = d
+        if Nw > 0:
+            w = p[Nu+Nd:]
+            odeargs["w"] = w
         
-        # Save sizes.
+        
+        # Save sizes. Really we should make these all properties because
+        # changing them doesn't do anything.
         self.Nx = Nx
         self.Nu = Nu
         self.Nd = Nd
+        self.Nw = Nw
+        self.Delta = Delta
         
         # Now define integrator for simulation.
         model = casadi.MXFunction(casadi.daeIn(x=x,p=p),
@@ -1396,12 +1414,12 @@ class OneStepSimulator(object):
         self.__Integrator.setOption("tf",Delta)
         self.__Integrator.init()
 
-    def sim(self,x0,u,d=[]):
+    def sim(self,x0,u=[],d=[],w=[]):
         """
         Simulate one timestep.
         """
         self.__Integrator.setInput(x0,"x0")
-        self.__Integrator.setInput(casadi.vertcat([u,d]),"p")
+        self.__Integrator.setInput(casadi.vertcat([u,d,w]),"p")
         self.__Integrator.evaluate()
         xf = self.__Integrator.getOutput("xf")
         self.__Integrator.reset()
