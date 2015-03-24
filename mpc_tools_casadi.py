@@ -171,7 +171,7 @@ def getLinearization(f,xs,us=None,ds=None,Delta=None):
 # Nonlinear functions adapted from scripts courtesy of Lars Petersen.
 
 def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discrete",
-         M=None,Delta=None,returnTimeInvariantSolver=False,lDependsOnd=False):
+         M=None,Delta=None,returnTimeInvariantSolver=False,lDependsOnd=False,timelimit=60):
     """
     Solves a nonlinear MPC problem using a discrete-time model.
     
@@ -317,11 +317,11 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     
     # Now decide what to do based on what the user has said.
     if returnTimeInvariantSolver:
-        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL)    
+        solver = TimeInvariantSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL,timelimit=timelimit)    
         return solver
     
     # Call solver and stuff.
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL)
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL,timelimit=timelimit)
     
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
@@ -693,7 +693,7 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
 # flexible with respect to function arguments, what variables are present,
 # etc., and so it permits a lot more functionality in less code.
 
-def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False):
+def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False,timelimit=60):
     """
     Solves nonlinear MHE problem.
     
@@ -774,7 +774,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,gu
         
     # Now call the solver.
     [var, cost, status, solver] = callSolver(varStruct,varlbStruct,varubStruct,
-        varguessStruct,obj,con,conlb,conub,verbosity=verbosity)
+        varguessStruct,obj,con,conlb,conub,verbosity=verbosity,timelimit=60)
     
     returnDict = casadiStruct2numpyDict(var)
     returnDict["cost"] = cost
@@ -1180,7 +1180,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
 # Solver Interfaces
 # =================================                    
     
-def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None):
+def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None,timelimit=60):
     """
     Calls ipopt to solve an NLP.
     
@@ -1200,7 +1200,9 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     nlp = casadi.MXFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(f=obj,g=con))
     solver = casadi.NlpSolver("ipopt",nlp)
     solver.setOption("print_level",verbosity)
-    solver.setOption("print_time",verbosity > 2)   
+    solver.setOption("print_time",verbosity > 2)  
+    solver.setOption("max_cpu_time",timelimit)
+    #solver.setOption("check_derivatives_for_naninf","yes")
     solver.init()
 
     solver.setInput(varguess,"x0")
@@ -1281,7 +1283,7 @@ class TimeInvariantSolver(object):
     def guesser(self):
         return self.__guesser    
     
-    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None):
+    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None,timelimit=60):
         """
         Store variables, constraints, etc., and generate the solver.
         """
@@ -1299,6 +1301,7 @@ class TimeInvariantSolver(object):
         self.__par = parval
         
         self.verbosity = verbosity
+        self.timelimit = timelimit
         self.initializeSolver()
         self.__guesser = None
             
@@ -1319,7 +1322,9 @@ class TimeInvariantSolver(object):
         
         solver = casadi.NlpSolver("ipopt",nlp)
         solver.setOption("print_level",self.verbosity)
-        solver.setOption("print_time",self.verbosity > 2)   
+        solver.setOption("print_time",self.verbosity > 2) 
+        solver.setOption("max_cpu_time",self.timelimit)
+        #solver.setOption("check_derivatives_for_naninf","yes")
         solver.init()
     
         solver.setInput(self.guess,"x0")
@@ -1504,7 +1509,7 @@ class TargetSelector(object):
     Finds u given a steady-state x for a discrete- or continuous-time system.
     """
     
-    def __init__(self,model,measurement,contvars,Nx,Ny,Nd=0,continuous=True,verbosity=0,Q=None,unique=False,bounds={}):
+    def __init__(self,model,measurement,contvars,Nx,Ny,Nd=0,continuous=True,verbosity=0,Q=None,unique=False,bounds={},timelimit=10):
         """
         Initialize by specifying sizes and model.
         
@@ -1571,6 +1576,8 @@ class TargetSelector(object):
         self.solver = casadi.NlpSolver("ipopt",nlp)
         self.solver.setOption("print_level",verbosity)
         self.solver.setOption("print_time",verbosity > 2)
+        self.solver.setOption("max_cpu_time",timelimit)
+        #self.solver.setOption("check_derivatives_for_naninf","yes")
         self.solver.init()
         if not unique or True:
             self.solver.setInput(np.zeros((Nz-Ny,)),"lbg")
