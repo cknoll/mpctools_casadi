@@ -685,7 +685,7 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
 # flexible with respect to function arguments, what variables are present,
 # etc., and so it permits a lot more functionality in less code.
 
-def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False):
+def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False):
     """
     Solves nonlinear MHE problem.
     
@@ -761,8 +761,8 @@ def nmhe(f,h,u,y,l,N,lx=None,x0hat=None,lb={},ub={},g=None,p=None,verbosity=5,gu
     obj = casadi.MX(0)
     for t in range(N["t"]):
         obj += constraints["cost"][t]
-    if lx is not None and x0hat is not None:
-        obj += lx([varStruct["x",0] - x0hat])[0]
+    if lx is not None and x0bar is not None:
+        obj += lx([varStruct["x",0] - x0bar])[0]
         
     # Now call the solver.
     [var, cost, status, solver] = callSolver(varStruct,varlbStruct,varubStruct,
@@ -779,7 +779,7 @@ def __generalVariableShapes(sizeDict):
     Generates variable shapes from the size dictionary N.
     
     The keys of N must be a subset of
-        ["x","z","u","w","p","y","v","c"]    
+        ["x","z","u","d","w","p","y","v","c"]    
     
     If present, "c" will specify collocation, at which point extra variables
     will be created.
@@ -807,6 +807,7 @@ def __generalVariableShapes(sizeDict):
         "x" : (1,("x",)),
         "z" : (1,("z",)),
         "u" : (0,("u",)),
+        "d" : (0,("d",)),
         "w" : (0,("w",)),
         "p" : (0,("p",)),
         "y" : (0,("y",)),
@@ -829,12 +830,11 @@ def __generalVariableShapes(sizeDict):
     
     return shapeDict
     
-
 def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[],substitutev=False):
     """
     Creates general state evolution constraints for the following system:
     
-       x^+ = f(x,z,u,w,p)                        \n
+       x^+ = f(x,z,u,d,w,p)                      \n
        g(x,z,p) = 0                              \n
        y = h(x,z,p) + v                          \n
        
@@ -843,7 +843,8 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
         x: differential states                  \n
         z: algebraic states                     \n
         u: control actions                      \n
-        w: state disturbances                   \n
+        d: modeled state disturbances           \n
+        w: unmodeled state disturbances         \n
         p: fixed system parameters              \n
         y: meadured outputs                     \n
         v: noise on outputs
@@ -885,13 +886,13 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
     """
     
     # Figure out what variables are supplied.
-    allvars = set(["x","z","u","w","p","y","v"])
+    allvars = set(["x","z","u","d","w","p","y","v"])
     givenvars = allvars.intersection(var.keys())
     
     # Now sort out arguments for each function.
     isGiven = lambda v: v in givenvars # Membership function.
     args = {
-        "f" : filter(isGiven,["x","z","u","w","p"]),
+        "f" : filter(isGiven,["x","z","u","d","w","p"]),
         "g" : filter(isGiven, ["x","z","p"]),
         "h" : filter(isGiven, ["x","z","p"]),
         "l" : filter(isGiven, largs)
@@ -1032,14 +1033,14 @@ def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     P = (np.eye(P_.shape[0]) - L.dot(C)).dot(P_)
     
     # Update prior for x0.
-    x0bar = x0bar + L.dot(y - yhat - C.dot(x0bar - x))
-    x0bar = np.array(f([x0bar,u,w])[0]).flatten()    
+    x0barprev = x0bar + L.dot(y - yhat - C.dot(x0bar - x))
+    x0bar = np.array(f([x0barprev,u,w])[0]).flatten()    
     
     # Update prior covariance.
     P_ = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)
     
     #import pdb; pdb.set_trace()
-    return [P_, x0bar]
+    return [P_, x0bar, x0barprev]
 
 # =================================
 # Linear
@@ -1066,7 +1067,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     
     A, B, Q, R, M, D, and G should be lists of numPy matrices. x0 should be a
     numPy vector. q, r, xlb, xub, ulb, uub, and d should be lists of numpy vectors.
-    
+    0
     All of these lists are accessed modulo their respective length;hus,
     time-invariant models can be lists with one element, while time-varying
     periodic model with period T should have T elements.
@@ -1490,6 +1491,112 @@ class OneStepSimulator(object):
         
         return np.array(xf).flatten()
         
+class TargetSelector(object):
+    """
+    Finds u given a steady-state x for a discrete- or continuous-time system.
+    """
+    
+    def __init__(self,model,measurement,contvars,Nx,Ny,Nd=0,continuous=True,verbosity=0,Q=None,unique=False):
+        """
+        Initialize by specifying sizes and model.
+        
+        Set unique to True if the problem will always have a unique solution.
+        Then it will be solved as an unconstrained minimization of the residual,
+        which should be better than with tight constraints.
+        """
+        
+        # Save sizes.
+        self.Nx = Nx
+        self.Ny = Ny
+        self.Nd = Nd        
+        self.Nu = len(contvars)
+        
+        # Define casadi variables.        
+        Np = Nx + Nd # Parameters are xsp and any other disturbance.
+        p = casadi.MX.sym("p",Np)
+        xsp = p[:Nx]
+        d = p[Nx:]
+        
+        Nz = Nx + self.Nu
+        z = casadi.MX.sym("z",Nz)
+        x = z[:Nx]
+        u = z[Nx:]
+        
+        # Define constraints symbolically.
+        xerr = x - xsp
+        if Q is None:
+            Q = np.eye(Nx)
+        objective = mtimes(xerr.T,Q,xerr)
+        
+        # Enforce steady-state.
+        conModel = casadi.vertcat(model(x=x,u=u,d=d)[:Nx-Ny])
+        if not continuous:
+            conModel -= x[:Nx-Ny]
+            
+        # Enforce measurement.
+        #measx = measurement(x)
+        #measxsp = measurement(xsp)
+        #conMeas = casadi.vertcat([measx[i] - measxsp[i] for i in contvars])
+        
+        # Select setpoint things.
+        H = np.zeros((self.Nu,Ny))
+        for i in range(self.Nu):
+            H[i,contvars[i]] = 1       
+        
+        conMeas = mtimes(H,casadi.vertcat(measurement(x)) - casadi.vertcat(measurement(xsp)))        
+        constraints = casadi.vertcat([conModel,conMeas])
+        
+        if unique:
+            objective = casadi.MX(0)            
+            #objective = casadi.sum_square(conModel) + casadi.sum_square(conMeas) 
+            ##import pdb; pdb.set_trace()
+            #nlpOut = casadi.nlpOut(f=objective)
+        #else:
+        nlpOut = casadi.nlpOut(f=objective,g=constraints)
+        self.unique = unique                
+                
+        # Make solver object.
+        nlp = casadi.MXFunction(casadi.nlpIn(x=z,p=p),nlpOut)
+        
+        self.solver = casadi.NlpSolver("ipopt",nlp)
+        self.solver.setOption("print_level",verbosity)
+        self.solver.setOption("print_time",verbosity > 2)
+        self.solver.init()
+        if not unique or True:
+            self.solver.setInput(np.zeros((Nz-Ny,)),"lbg")
+            self.solver.setInput(np.zeros((Nz-Ny,)),"ubg")
+        self.solver.setInput(np.zeros((Nz,)),"x0")
+       
+    def solve(self,xsp,uguess=None,d=[],fixedx=None):
+       """
+       Solve to find the steady-state value of u.
+       """
+       
+       # Store parameters and guess.
+       self.solver.setInput(np.concatenate((xsp,d)),"p")
+       if uguess is not None:
+           uguess = np.zeros((self.Nu,))
+       self.solver.setInput(np.concatenate((xsp,uguess)),"x0")
+       
+       # Worry about bounds.
+       ubx = np.inf*np.ones((self.Nx + self.Nu,))
+       lbx = -ubx
+       if fixedx is None:
+           fixedx = range(self.Nx - self.Ny,self.Nx)
+       for i in fixedx:
+           ubx[i] = xsp[i]
+           lbx[i] = xsp[i]
+       self.solver.setInput(ubx,"ubx")
+       self.solver.setInput(lbx,"lbx")
+       self.solver.evaluate()
+       
+       z = np.array(self.solver.getOutput("x")).flatten()
+       x = z[:self.Nx]
+       u = z[self.Nx:]
+       objval = float(self.solver.getOutput("f"))
+       status = self.solver.getStat("return_status")
+       
+       return dict(x=x,u=u,r=objval,status=status)
     
 # =================================
 # Plotting
