@@ -1496,7 +1496,7 @@ class TargetSelector(object):
     Finds u given a steady-state x for a discrete- or continuous-time system.
     """
     
-    def __init__(self,model,measurement,contvars,Nx,Ny,Nd=0,continuous=True,verbosity=0,Q=None,unique=False):
+    def __init__(self,model,measurement,contvars,Nx,Ny,Nd=0,continuous=True,verbosity=0,Q=None,unique=False,bounds={}):
         """
         Initialize by specifying sizes and model.
         
@@ -1510,6 +1510,7 @@ class TargetSelector(object):
         self.Ny = Ny
         self.Nd = Nd        
         self.Nu = len(contvars)
+        self.bounds = bounds
         
         # Define casadi variables.        
         Np = Nx + Nd # Parameters are xsp and any other disturbance.
@@ -1586,6 +1587,10 @@ class TargetSelector(object):
        for i in fixedx:
            ubx[i] = xsp[i]
            lbx[i] = xsp[i]
+       if "uub" in self.bounds.keys():
+           ubx[self.Nx:] = self.bounds["uub"]
+       if "ulb" in self.bounds.keys():
+           lbx[self.Nx:] = self.bounds["ulb"]
        self.solver.setInput(ubx,"ubx")
        self.solver.setInput(lbx,"lbx")
        self.solver.evaluate()
