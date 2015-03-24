@@ -693,7 +693,8 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
 # flexible with respect to function arguments, what variables are present,
 # etc., and so it permits a lot more functionality in less code.
 
-def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,guess={},largs=["w","v"],substitutev=False,timelimit=60):
+def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
+         guess={},largs=["w","v"],substitutev=False,timelimit=60,includeFinalState=True):
     """
     Solves nonlinear MHE problem.
     
@@ -730,6 +731,11 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,gu
     varubStruct = varStruct(np.inf)
     varguessStruct = varStruct(0)
     
+    # Get rid of final x variable if we don't care about it.
+    if not includeFinalState and "x" in varStruct.keys():
+        varlbStruct["x",-1] = varguessStruct["x",-1]
+        varubStruct["x",-1] = varguessStruct["x",-1]
+    
     for (data,structure) in [(guess,varguessStruct), (lb,varlbStruct), (ub,varubStruct)]:
         for v in data.keys():
             for t in range(N["t"]):
@@ -755,6 +761,12 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,gu
         Ng = None
     constraints = __generalDiscreteConstraints(varAndPar,N["t"],f=f,Nf=N["x"],
         g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs,substitutev=substitutev)
+    
+    # Remove final state evolution constraint if not needed.
+    if not includeFinalState and "state" in constraints.keys():
+        constraints["state"]["con"].pop(-1) # Get rid of last constraint.
+        constraints["state"]["lb"] = constraints["state"]["lb"][:-1,...]
+        constraints["state"]["ub"] = constraints["state"]["ub"][:-1,...]
     
     con = []
     conlb = np.zeros((0,))
