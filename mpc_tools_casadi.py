@@ -170,7 +170,8 @@ def getLinearization(f,xs,us=None,ds=None,Delta=None):
     
 # Nonlinear functions adapted from scripts courtesy of Lars Petersen.
 
-def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discrete",M=None,Delta=None,returnTimeInvariantSolver=False):
+def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discrete",
+         M=None,Delta=None,returnTimeInvariantSolver=False,lDependsOnd=False):
     """
     Solves a nonlinear MPC problem using a discrete-time model.
     
@@ -279,8 +280,11 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     # Steps 0 to N-1.
     nlpObj = casadi.MX(0) # Start with dummy objective.    
     for k in range(N):
-        # Model and objective.        
-        nlpObj += l[k % len(l)]([VAR["x",k],VAR["u",k]])[0]        
+        # Model and objective.
+        args = [VAR["x",k],VAR["u",k]]
+        if lDependsOnd:
+            args.append(PAR["d",k])
+        nlpObj += l[k % len(l)](args)[0]        
         
         # Variable bounds.
         LB["x",k,:] = getBounds("xlb",k)
@@ -291,10 +295,14 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
     # Adjust bounds for x0 and xN.
     LB["x",0,:] = x0
     UB["x",0,:] = x0
+    GUESS["x",0,:] = x0
     LB["x",N,:] = getBounds("xlb",N)
     UB["x",N,:] = getBounds("xub",N)
     if Pf is not None:
-        nlpObj += Pf([VAR["x",N]])[0]
+        args = [VAR["x",N]]
+        if lDependsOnd:
+            args.append(PAR["d",N-1]) # There is no Nth disturbance, so just use N-1.
+        nlpObj += Pf(args)[0]
     
     # Make constraints into a single large vector.     
     nlpCon = casadi.vertcat(nlpCon) 
@@ -1379,9 +1387,9 @@ class TimeInvariantSolver(object):
         """
         Fixes variable var at time t to val.
         """
-        self.lb[var,t] = val
-        self.ub[var,t] = val
-        self.guess[var,t] = val
+        self.lb[var,t,:] = val
+        self.ub[var,t,:] = val
+        self.guess[var,t,:] = val
         
         self.solver.setInput(self.lb,"lbx")
         self.solver.setInput(self.ub,"ubx")
@@ -1397,7 +1405,7 @@ class TimeInvariantSolver(object):
         """
         
         for t in range(len(self.par[name])):
-            self.par[name,t] = values[t % len(values)]
+            self.par[name,t,:] = values[t % len(values)]
         self.solver.setInput(self.par,"p")
     
     def storeguesser(self,guesser):
@@ -1544,7 +1552,8 @@ class TargetSelector(object):
         for i in range(self.Nu):
             H[i,contvars[i]] = 1       
         
-        conMeas = mtimes(H,casadi.vertcat(measurement(x)) - casadi.vertcat(measurement(xsp)))        
+        conMeas = mtimes(H,casadi.vertcat(measurement(x)) - casadi.vertcat(measurement(xsp)))
+        #import pdb; pdb.set_trace()        
         constraints = casadi.vertcat([conModel,conMeas])
         
         if unique:
