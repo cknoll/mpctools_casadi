@@ -711,7 +711,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
     
     lb and ub should be dictionaries of bounds for the various variables. Each
     entry should have time as the first index (i.e. lb["x"] should be a
-    N["t"] + 1 by N["x"] array).    
+    N["t"] + 1 by N["x"] array). guess should have the same structure.    
     
     The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
     array that gives xhat(k | N["t"]-1) for k = 0,1,...,N["t"]. Thus, to find
@@ -1036,9 +1036,9 @@ def __casadiSymStruct(allVars,theseVars=None):
     structArgs = tuple([ctools.entry(name,**args) for (name,args) in allVars.items()])
     return ctools.struct_symMX([structArgs])
 
-def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
+def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     """
-    Updates the prior distribution P- using the Extended Kalman filter.
+    Updates the prior distribution P^- using the Extended Kalman filter.
     
     f and h should be casadi functions. f must be discrete-time. P, Q, and R
     are the prior, state disturbance, and measurement noise covariances. Note
@@ -1046,6 +1046,16 @@ def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     
     If specified, f_jac and h_jac should be initialized jacobians. This saves
     some time if you're going to be calling this many times in a row.
+    
+    The value of x that should be fed is xhat(k | k-1), and the value of P
+    should be P(k | k-1). xhat will be updated to xhat(k | k) and then advanced
+    to xhat(k+1 | k), while P will be updated to P(k | k) and then advanced to
+    P(k+1 | k). The return values are a list as follows
+    
+        [P(k+1 | k), xhat(k+1 | k), P(k | k), xhat(k | k)]
+        
+    Depending on your specific application, you will only be interested in
+    some of these values.
     """
     
     # Check jacobians.
@@ -1059,26 +1069,27 @@ def ekf(f,h,x,u,w,y,P_,x0bar,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
         h_jacx = h.jacobian(0)
         h_jacx.init()
         
-    # Get linearizations.
-    w = np.zeros(w.shape)
-    A = np.array(f_jacx([x,u,w])[0])
-    G = np.array(f_jacw([x,u,w])[0])
+    # Get linearization of measurement.
     C = np.array(h_jacx([x])[0])
     yhat = np.array(h([x])[0]).flatten()
     
-    # Do recursive update formulas.
-    L = scipy.linalg.solve(C.dot(P_).dot(C.T) + R, C.dot(P_)).T
-    P = (np.eye(P_.shape[0]) - L.dot(C)).dot(P_)
+    # Advance from x(k | k-1) to x(k | k).
+    xhatm = x                                          # This is xhat(k | k-1)    
+    Pm = P                                             # This is P(k | k-1)    
+    L = scipy.linalg.solve(C.dot(Pm).dot(C.T) + R, C.dot(Pm)).T          
+    xhat = xhatm + L.dot(y - yhat)                     # This is xhat(k | k) 
+    P = (np.eye(Pm.shape[0]) - L.dot(C)).dot(Pm)       # This is P(k | k)
     
-    # Update prior for x0.
-    x0barprev = x0bar + L.dot(y - yhat - C.dot(x0bar - x))
-    x0bar = np.array(f([x0barprev,u,w])[0]).flatten()    
+    # Now linearize the model at xhat.
+    w = np.zeros(w.shape)
+    A = np.array(f_jacx([xhat,u,w])[0])
+    G = np.array(f_jacw([xhat,u,w])[0])
     
-    # Update prior covariance.
-    P_ = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)
+    # Advance.
+    Pmp1 = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)       # This is P(k+1 | k)
+    xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
     
-    #import pdb; pdb.set_trace()
-    return [P_, x0bar, x0barprev]
+    return [Pmp1, xhatmp1, P, xhat]
 
 # =================================
 # Linear
@@ -1747,7 +1758,6 @@ def zoomaxis(axes=None,xscale=None,yscale=None):
 
 # First, we grab a few things from the CasADi module.
 DMatrix = casadi.DMatrix
-
 
 def atleastnd(arr,n=2):
     """

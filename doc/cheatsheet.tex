@@ -1,7 +1,7 @@
-\documentclass[twocolumn]{article}
+\documentclass{article}
 
 \usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
-\usepackage{mathtools,bm,textcomp}
+\usepackage{mathtools,bm,textcomp,multicol,parcolumns,enumitem}
 \usepackage[dvipsnames]{xcolor}
 
 % Stuff for source codes.
@@ -19,7 +19,6 @@
     stepnumber=10,
     firstnumber=0,
     numberstyle=\scriptsize,
-    frame=L,
     escapechar=@,
     morekeywords={as},
 }
@@ -29,14 +28,26 @@
 \newcommand{\funcname}[1]{\vspace{.25em}\noindent\texttt{#1}\vspace{.25em}}
 \newcommand{\casadi}{CasADi}
 
-\title{\texttt{mpc-tools-casadi} Cheat Sheet}
+%\newcommand{\sepline}{\hrule}
+\providecommand{\sepline}{\vspace{-2em}}
+
+\title{mpc-tools-casadi Cheat Sheet}
 
 \begin{document}
 
-\pagestyle{empty}
-\maketitle
+%\pagestyle{empty}
+%\thispagestyle{empty}
 
-\thispagestyle{empty}
+\begin{center}
+    \LARGE \texttt{mpc-tools-casadi} Cheat Sheet
+\end{center}
+
+\section{Functions Reference}
+
+Here we present some of the main functions from \texttt{mpc-tools-casadi}.
+These descriptions are by no means complete, and you should consult the documentation within the Python module for more details.
+
+\begin{multicols}{2}
 
 \paragraph*{Obtaining \texttt{mpc-tools-casadi}}
 
@@ -47,12 +58,13 @@ The latest files can be found on \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-
 Functions are split between two modules: \texttt{mpc\_tools\_casadi.py} and \texttt{colloc.py}.
 Typically, you will only need to import the former, e.g.
 %
-\begin{lstlisting}[style=python]
+\begin{lstlisting}[frame=L]
 import mpc_tools_casadi as mpc
 \end{lstlisting}
 %
+Notice that the module name has underscores instead of hyphens.
 You will need to have \casadi{} installed as well.
-You shouldn't need to use any functions whose names begin with two underscores (e.g. \lstinline@__getCasadiSymbols@). 
+%You shouldn't need to use any functions whose names begin with two underscores (e.g. \lstinline@__getCasadiSymbols@). 
 
 Many functions will have optional arguments or default values that aren't listed below.
 Consult the \texttt{mpc\_tools\_casadi} module to see what options are available.
@@ -62,7 +74,7 @@ Consult the \texttt{mpc\_tools\_casadi} module to see what options are available
 To facilitate nonlinear simulations, we provide the \texttt{OneStepSimulator} class, which is essentially a wrapper of \casadi's \texttt{Integrator} object.
 To initialize, the syntax is
 %
-\begin{lstlisting}
+\begin{lstlisting}[frame=L]
 model = OneStepSimulator(ode,Delta,Nx,Nu)
 \end{lstlisting}
 %
@@ -70,7 +82,7 @@ Where \texttt{ode} is a Python function that takes two keyword arguments \texttt
 Optional arguments \texttt{Nd} or \texttt{Nw} can be set to positive integers to add additional arguments.
 
 Once the object has been build, one timestep can be simulated using
-\begin{lstlisting}
+\begin{lstlisting}[frame=L]
 xnext = model.sim(x,u)
 \end{lstlisting}
 
@@ -98,8 +110,577 @@ Note that for this function, \texttt{f} must already be an \texttt{MXFunction}, 
 
 \paragraph*{Solving MPC Problems}
 
+For regulation problems, the function \texttt{nmpc} should be used.
+
+\funcname{nmpc(F,l,x0,N)}
+
+\texttt{F} and \texttt{L} should be Python \emph{lists} of \casadi{} discrete-time functions to describe state evolution and stage costs.
+These lists are accessed modulo length with respect to time, so $T$-periodic systems should have $T$ entries, time-invariant systems should only have one entry, etc.
+\texttt{x0} is the starting state, and \texttt{N} is the number of stages to consider in the horizon. Additional optional arguments are given below.
+
+\begin{itemize}[noitemsep,nolistsep]
+    \item \texttt{Pf}: a single \casadi{} function of $x$ to use as a terminal cost.
+    \item \texttt{bounds}: A dictionary with entries \lstinline@"uub"@, \lstinline@"ulb"@, \lstinline@"xub"@, and/or \lstinline@"xlb"@ to define box constraints on $u$ or $x$.
+    Each entry should be a list of vectors that define the bounds throughout the time horizon.
+    These lists are accessed modulo length, so they need only have one element if all the bounds should be the same.
+    \item \texttt{verbosity}: an integer to control how detailed the solver output is.
+    Lower numbers give less output.
+\end{itemize}
+
+Returns a dictionary of optimal variables and other information.
+Entries include \lstinline@"x"@ and \lstinline@"u"@ with optimal trajectories for $x$ and $u$.
+These are both arrays with each column corresponding to values different time points.
+Also given are \lstinline@"obj"@ with the optimal objective function value and \lstinline@"status"@ as reported by the optimizer.
+
+For continuous-time problems, there are a few options.
+To use Runge-Kutta, you can either convert your function ahead of time with \texttt{getRungeKutta4}, or you can specify optional arguments \lstinline@timemodel="rk4"@ and \lstinline@Delta=dt@ to have the function converted automatically.
+Note that \texttt{dt} should be the sample time.
+To use collocation, you can use \lstinline@timemodel="colloc"@.
+This also requires specifying the sample time.
+Note that for both options, an argument \texttt{M} controls how many interpolation points are used on each time interval.
+
+\paragraph*{Time-Invariant Problems}
+
+If your system is time-invariant and you plan to be solving the problem repeatedly, speed can be improved by using the \texttt{TimeInvariantSolver} class.
+
+The easiest way to build one of these objects is by setting the optional argument \texttt{returnTimeInvariantSolver} to \texttt{True} in \texttt{nmpc}.
+Below we list the useful methods for this class.
+
+\funcname{fixvar(var,t,val)}
+
+Fixes the variable named \texttt{var} to take on the value \texttt{val} at time \texttt{t}.
+This is most useful for changing the initial conditions, e.g. with
+%
+\begin{lstlisting}[frame=L]
+solver.fixvar("x",0,x0)
+\end{lstlisting}
+%
+which allows for easy re-optimization.
+
+\funcname{solve()}
+
+Returns a dictionary similar to the output of \texttt{nmpc}.
+Note, however, that the entries \lstinline@"x"@ and \lstinline@"u"@ have time running along the \emph{rows} of the array and NOT the columns.
+
+\funcname{saveguess(guess,toffset=1)}
+
+Takes a solution dictionary and stores the values as a guess to the optimizer.
+By default, time values are offset by 1. This is done so that
+%
+\begin{lstlisting}[frame=L]
+sol = solver.solve()
+if sol["status"] == "Solve_Succeeded":
+    solver.saveguess(sol)
+    solver.fixvar("x",0,sol["x"][1,:]
+\end{lstlisting}
+%
+prepares the solver for re-optimization at the next time point by using the final $N-1$ values of the trajectory as a guess for the next time period.
+
+\paragraph*{State Estimation}
+
+For nonlinear state estimation, we provide a moving-horizon estimation function and an Extended Kalman Filter function.
+
+\funcname{nmhe(f,h,u,y,l,N)}
+
+Solves a nonlinear MHE problem.
+As with \texttt{nmpc}, \texttt{f}, \texttt{h}, and \texttt{l} should be Python \emph{lists} of \casadi{} functions.
+\texttt{f} must be $f(x,u,w)$, \texttt{h} must be $h(x)$, and \texttt{l} must be $\ell(w,v)$.
+\texttt{u} and \texttt{y} must be arrays of past control inputs and measurements.
+These arrays must have time running along rows so that \lstinline@y[t,:]@ gives the value of $y$ at time $t$.
+
+Different from \texttt{nmpc}, the input \texttt{N} must be a dictionary of sizes.
+This must have entries \lstinline@"t"@, \lstinline@"x"@, \lstinline@"u"@, and \lstinline@"y"@.
+It may also have a \lstinline@"w"@ entry, but this is set equal to \lstinline@N["x"]@ if not supplied.
+Note that for feasibility reasons, \lstinline@N["v"]@ is always set to \lstinline@N["y"]@ regardless of user input. Additional optional arguments are given below.
+
+\begin{itemize}[noitemsep,nolistsep]
+    \item \texttt{lx}, \texttt{x0bar}: arrival cost for initial state.
+    \texttt{lx} should be a \casadi{} function of only $x$.
+    It is included in the objective function as $\ell_x(x_0 - \overline{x}_0)$, i.e. penalizing the difference between the value of the variable $x_0$ and the prior mean $\overline{x}_0$.
+    \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries to hold bounds and a guess for the decision variables.
+    Each argument should only have entries for the variables with explicit bounds or for which you have a guess, and each entry should be a 2D array with time running along the rows.
+    \item \texttt{verbosity}: same as in \texttt{nmpc}.
+\end{itemize}
+
+Note that because these optimization problems inherently change data and horizon lengths, there is no equivalent to \texttt{TimeInvariantSolver} for the NMPC problems.
+This functionality may be added later, but for now all problems have to be build completely from scratch using this function.
+
+\funcname{ekf(f,h,x,u,w,y,P,Q,R)}
+
+Advances one step using the Extended Kalman Filter.
+\texttt{f} and \texttt{h} must be \casadi{} functions.
+\texttt{x}, \texttt{u}, \texttt{w}, and \texttt{y} should be the state estimate $\hat{x}(k|k-1)$, the controller move, the state noise (only its shape is important), and the current measurement.
+\texttt{P} should be the prior covariance $P(k|k-1)$.
+\texttt{Q} and \texttt{R} should be the covariances for the state noise and measurement noise.
+Returns a list of
+%
+\begin{equation*}
+    [P(k+1|k), \hat{x}(k+1|k), P(k|k), \hat{x}(k|k)].
+\end{equation*}
+
+\paragraph{Plotting}
+
+For quick plotting, we have the \texttt{mpcplot} function.
+Required arguments are \texttt{x} and \texttt{u}, both 2D arrays with each column giving the value of $x$ or $u$ at a given time point, and a vector \texttt{t} of time points.
+Note that \texttt{t} should have as many entries as \texttt{x} has columns, while \texttt{u} should have one fewer column.
+
+\paragraph*{Functions from Octave/\textsc{Matlab}}
+
+For convenience, we have included a few simple control-related functions from Octave/\textsc{Matlab}.
+
+\funcname{dlqr(A,B,Q,R)}, \funcname{dlqe(A,C,Q,R)}
+
+Discrete-time linear-quadratic regulator and estimator.
+Note that cross-penalties are not supported.
+
+\funcname{c2d(A,B,Delta)}
+
+Converts continuous-time model $(A,B)$ to discrete time with sample time \texttt{Delta}.
+
+\end{multicols}
+
+\section{Common Mistakes}
+
+Below we list some common issues that may cause headaches.
+
+\begin{itemize}
+    \item NumPy arrays versus matrices.
+    
+    As the \texttt{matrix} data type is very much a second fiddle in NumPy, all of the functions have been written expecting arrays and it is suggested that you do the same.
+    Any matrix multiplications within \texttt{mpc\_tools\_casadi.py} are written as \lstinline@A.dot(b)@ instead of \lstinline@A*b@ as would be common in Octave/\textsc{Matlab}.
+    
+    For quadratic stage costs, we provide \texttt{mtimes}, which multiplies an arbitrary number of arguments.
+    Unfortunately this isn't compatible with \texttt{array}s, and so you will want to cast to \casadi{}'s \texttt{DMatrix} type before multiplying.
+    
+    If you encounter errors such as ``cannot cast shape $(n,1)$ to shape $(n,)$ or something of that nature, you will need to be careful about whether your are working with 1D \texttt{arrays}, vectors stored as \texttt{matrix} objects, etc.
+    This may mean adding \texttt{np.newaxis} to your assignment statements or using constructs like \lstinline@np.array(x).flatten()@ to force your data to have the right shape.
+    
+    \item Dimensions for data arrays.
+    
+    During initial development, Octave/\textsc{Matlab}'s ``everything is a matrix of doubles'' philosophy was still embraced.
+    This meant that when storing time-series data for a variable $x$, it made sense to think of each time point as a column vector, and thus data is structured as \lstinline@x[i,t]@ with $i$ the components of $x$ and $t$ the time series.
+    This is how things are arranged in \textsc{nmpc} and \textsc{mpcplot}.
+    
+    However, as development proceeded, we realized that there is no reason why each $x$ has to be a vector.
+    For instance, you may want to arrange your states as a 3D array.
+    This meant that \lstinline@x[i_1,t,i_2,i_3]@ would get confusing, and so the logical choice would be to put time along the first dimension and let an arbitrary number of dimensions follow.
+    This is the convention used in \texttt{nmpc} and \texttt{TimeInvariantSolver}.
+    Eventually, we plan to rewrite everything to use this ``time first'' paradigm, but for now we are stuck with this fragmentation, and care is needed. 
+    
+    \item Not passing lists of functions to \texttt{nmpc}.
+    
+    These arguments are lists to support systems where the evolution equations may change drastically in time.
+    For time-invariant systems, there is only one such function, and so you may forget to enclose it in a list.
+    Any errors that say something ``cannot be indexed'' are likely due to this omission.
+    
+    \item Not using iterables in user-defined functions.
+    
+    Whenever you pass a Python function to \texttt{getCasadiFunction}, \casadi{}'s \texttt{vertcat} function is called on its output.
+    This means that
+    %
+    \begin{lstlisting}[frame=L]
+    def myfunc(x):
+        return [x[0]**2, 1/x[1]]
+    \end{lstlisting}
+    %
+    would give the expected results, i.e. a \casadi{} function that returns a vector of 2 elements.
+    However, if your functions are defined using matrix operations, e.g.
+    %
+    \begin{lstlisting}[frame=L]
+    def myfunc(x)
+        return mtimes(A,x)
+    \end{lstlisting}
+    %
+    then this will cause an error because you cannot call \texttt{vertcat} on a naked vector.
+    The simple resolution is to make the output be a one-element list, i.e.
+    %
+    \begin{lstlisting}[frame=L]
+    def myfunc(x)
+        return [mtimes(A,x)]
+    \end{lstlisting}
+    
+    \item Poor initial guesses to solvers.
+    
+    By default, all variables are given guesses of 0.
+    For models in deviation variables, this makes sense, but for general models, these values can cause problems, e.g. if there are divisions or logarithms any where.
+    Make sure you supply an initial guess if the optimal variables will be nowhere near 0, and it helps if the guess is consistent with lower and upper bounds.
+    For difficult problems, it may help to solve a series of small problems to get a feasible starting guess for the large overall problem.
+    
+    \item Tight state constraints.
+    
+    Although the solvers allow constraints on all decision variables, tight constraints on the state variables (e.g. that the system terminate at the origin) can be very troublesome for the solver.
+    Consider using a penalty function first to get a decent guess and then re-solving with hard constraints from there.
+    
+\end{itemize}
+
+\section{Example File}
+
+Below, we present an example file to show how much code is saved by using \texttt{mpc-tools-casadi}.
+On the left side, we show the the script written in pure \casadi{}, while on the right, we show the script rewritten to use \texttt{mpc-tools-casadi}.
+
+\hspace{1em}
+
+\sepline
+
+% Imports.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Control of the Van der Pol oscillator
+# using pure casadi.
+import casadi
+import casadi.tools as ctools
+import numpy as np
+import matplotlib.pyplot as plt
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Control of the Van der Pol oscillator
+# using mpc_tools_casadi.
+import mpc_tools_casadi as mpc
+import numpy as np
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Define ODE.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define model and get simulator.
+Delta = .5
+Nx = 2
+Nu = 1
+def ode(x,u):
+    return [(1 - x[1]*x[1])*x[0]
+        - x[1] + u, x[0]]
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Define model and get simulator.
+Delta = .5
+Nx = 2
+Nu = 1
+def ode(x,u):
+    return [(1 - x[1]*x[1])*x[0]
+        - x[1] + u, x[0]]
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Create integrator.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define symbolic variables.
+x = casadi.MX.sym("x",Nx)
+u = casadi.MX.sym("u",Nu)
+
+# Make integrator object.
+ode_integrator = casadi.MXFunction(
+    casadi.daeIn(x=x,p=u),
+    casadi.daeOut(ode=casadi.vertcat(ode(x,u)))
+)
+vdp = casadi.Integrator("cvodes",ode_integrator)
+vdp.setOption("abstol",1e-8)
+vdp.setOption("reltol",1e-8)
+vdp.setOption("tf",Delta)
+vdp.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Create a simulator.
+vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Runge-Kutta.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Then get nonlinear casadi functions
+# and rk4 discretization.
+ode_casadi = casadi.MXFunction(
+    [x,u],[casadi.vertcat(ode(x,u))])
+ode_casadi.init()
+
+[k1] = ode_casadi([x,u])
+[k2] = ode_casadi([x + Delta/2*k1,u])
+[k3] = ode_casadi([x + Delta/2*k2,u])
+[k4] = ode_casadi([x + Delta*k3,u])
+xrk4 = x + Delta/6*(k1 + 2*k2 + 2*k3 + k4)    
+ode_rk4_casadi = casadi.MXFunction([x,u],[xrk4])
+ode_rk4_casadi.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Then get nonlinear casadi functions
+# and rk4 discretization.
+ode_casadi = mpc.getCasadiFunc(ode,
+    Nx, Nu, name="f")
+ode_rk4_casadi = mpc.getRungeKutta4(
+    ode_casadi, Delta)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Stage costs, etc.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define stage cost and terminal weight.
+lfunc = casadi.mul([x.T,x]) + \
+    casadi.mul([u.T,u])
+l = casadi.MXFunction([x,u],[lfunc])
+l.init()
+
+Pffunc = casadi.mul([x.T,x])
+Pf = casadi.MXFunction([x],[Pffunc])
+Pf.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Define stage cost and terminal weight.
+lfunc = lambda x,u: [mpc.mtimes(x.T,x)
+    + mpc.mtimes(u.T,u)]
+l = mpc.getCasadiFunc(lfunc, Nx, Nu, name="l")
 
 
+Pffunc = lambda x: [10*mpc.mtimes(x.T,x)]
+Pf = mpc.getCasadiFunc(Pffunc, Nx, name="Pf")
+\end{lstlisting}
+}
+\end{parcolumns}
 
+\sepline
+
+% Bounds and solver.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Bounds on u.
+[uub, ulb] = [1, -.75]
+
+# Make optimizers.
+x0 = np.array([0,1])
+Nt = 20
+
+# Create variables struct.
+var = ctools.struct_symMX([(
+    ctools.entry("x",shape=(Nx,),repeat=Nt+1),
+    ctools.entry("u",shape=(Nu,),repeat=Nt),
+)])
+varlb = var(-np.inf)
+varub = var(np.inf)
+varguess = var(0)
+
+# Adjust the relevant constraints.
+for t in range(Nt):
+varlb["u",t,:] = ulb
+varub["u",t,:] = uub
+
+# Now build up constraints and objective.
+obj = casadi.MX(0)
+con = []
+for t in range(Nt):
+con.append(ode_rk4_casadi([var["x",t],var["u",t]])[0]
+     - var["x",t+1])
+obj += l([var["x",t],var["u",t]])[0]
+obj += Pf([var["x",Nt]])[0]
+
+# Build solver object.
+con = casadi.vertcat(con)
+conlb = np.zeros((Nx*Nt,))
+conub = np.zeros((Nx*Nt,))
+
+nlp = casadi.MXFunction(casadi.nlpIn(x=var),
+    casadi.nlpOut(f=obj,g=con))
+solver = casadi.NlpSolver("ipopt",nlp)
+solver.setOption("print_level",0)
+solver.setOption("print_time",False)  
+solver.setOption("max_cpu_time",60)
+solver.init()
+
+solver.setInput(conlb,"lbg")
+solver.setInput(conub,"ubg")
+
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Bounds on u.
+bounds = dict(uub=[1],ulb=[-.75])
+
+# Make optimizers.
+x0 = np.array([0,1])
+Nt = 20
+solver = mpc.nmpc(F=[ode_rk4_casadi],N=Nt,
+    verbosity=0,l=[l],x0=x0,Pf=Pf,
+    bounds=bounds,
+    returnTimeInvariantSolver=True)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Simulation.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Now simulate.
+Nsim = 20
+times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+x = np.zeros((Nsim+1,Nx))
+x[0,:] = x0
+u = np.zeros((Nsim,Nu))
+for t in range(Nsim):
+    # Fix initial state.    
+    varlb["x",0,:] = x[t,:]
+    varub["x",0,:] = x[t,:]
+    varguess["x",0,:] = x[t,:]
+    solver.setInput(varguess,"x0")
+    solver.setInput(varlb,"lbx")
+    solver.setInput(varub,"ubx")
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Now simulate.
+Nsim = 20
+times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+x = np.zeros((Nsim+1,Nx))
+x[0,:] = x0
+u = np.zeros((Nsim,Nu))
+for t in range(Nsim):
+    # Fix initial state.
+    solver.fixvar("x",0,x[t,:])
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Solve the NLP.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Solve nlp.    
+    solver.evaluate()
+    status = solver.getStat("return_status")
+    optvar = var(solver.getOutput("x"))
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Solve nlp.
+    sol = solver.solve()
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Solver stats.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Display stats.
+    print "%d: %s" % (t,status)
+    u[t,:] = optvar["u",0,:]
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Print stats.
+    print "%d: %s" % (t,sol["status"])
+    u[t,:] = sol["u"][0,:]
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Simulation
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Simulate.
+    vdp.setInput(x[t,:],"x0")
+    vdp.setInput(u[t,:],"p")
+    vdp.evaluate()
+    x[t+1,:] = np.array(
+        vdp.getOutput("xf")).flatten()
+    vdp.reset()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Simulate.
+    x[t+1,:] = vdp.sim(x[t,:],u[t,:])
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\sepline
+
+% Plotting.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Plots.
+fig = plt.figure()
+numrows = max(Nx,Nu)
+numcols = 2
+
+# u plots.
+u = np.concatenate((u,u[-1:,:]))
+for i in range(Nu):
+ax = fig.add_subplot(numrows,
+    numcols,numcols*(i+1))
+ax.step(times,u[:,i],"-k")
+ax.set_xlabel("Time")
+ax.set_ylabel("Control %d" % (i + 1))
+
+# x plots.    
+for i in range(Nx):
+ax = fig.add_subplot(numrows,
+    numcols,numcols*(i+1) - 1)
+ax.plot(times,x[:,i],"-k",label="System")
+ax.set_xlabel("Time")
+ax.set_ylabel("State %d" % (i + 1))
+
+fig.tight_layout(pad=.5)
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Plots.
+mpc.mpcplot(x.T,u.T,times)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+Even for this simple example, \texttt{mpc-tools-casadi} can save a significant amount of coding, and it makes script files much shorter and more readable.
+
+\section{Disclaimer}
+
+Note that since \casadi{} is in active development, \texttt{mpc-tools-casadi} will need to be updated to reflect changes in \casadi{}'s Python API.
+Additionally, function internals may change significantly as we identify better or more useful ways to wrap the relevant \casadi{} functions.
+This means function call syntax may change, although we will strive to maintain compatibility wherever possible.
 
 \end{document}
