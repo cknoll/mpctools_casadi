@@ -321,7 +321,9 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
         return solver
     
     # Call solver and stuff.
+    ipoptstarttime = time.clock()
     [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,nlpObj,nlpCon,conlb,conub,par=PAR,verbosity=verbosity,parval=PARVAL,timelimit=timelimit)
+    ipopttime = time.clock() - ipoptstarttime    
     
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
@@ -335,6 +337,7 @@ def nmpc(F,l,x0,N,Pf=None,bounds={},d=None,verbosity=5,guess={},timemodel="discr
         print("Took %g s." % (endtime - starttime))    
     
     optDict = {"x" : x, "u" : u, "status" : status, "time" : endtime - starttime, "obj" : obj}
+    optDict["ipopttime"] = ipopttime
 
     # Return collocation points if present.
     if Nc is not None:
@@ -705,6 +708,21 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
     
     u, y, and p must be 2D arrays with the time dimension first. Note that y
     should have N["t"] + 1 rows, and u and p should have N["t"] rows.
+    
+    lb and ub should be dictionaries of bounds for the various variables. Each
+    entry should have time as the first index (i.e. lb["x"] should be a
+    N["t"] + 1 by N["x"] array).    
+    
+    The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
+    array that gives xhat(k | N["t"]-1) for k = 0,1,...,N["t"]. Thus, to find
+    xhat(N["T"]-1 | N["t"]-1), you should get ["x"][-2,:], and to find the
+    predition xhat(N["T"] | N["t"]-1), you should grab ["x"][-1,:].
+    
+    By default, the optimization includes a terminal predictor step. This is
+    only relevant to the optimization if there are hard constraints on the
+    state. To ignore it, you can set includeFinalState to False. Note that the
+    solution will still contain an entry for this value, but it will be all
+    zeros.
     """
     # Check specified sizes.
     try:
@@ -1214,6 +1232,7 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     solver.setOption("print_level",verbosity)
     solver.setOption("print_time",verbosity > 2)  
     solver.setOption("max_cpu_time",timelimit)
+    ## This option seems to just crash Python whenever anything bad happens.
     #solver.setOption("check_derivatives_for_naninf","yes")
     solver.init()
 
@@ -1336,6 +1355,7 @@ class TimeInvariantSolver(object):
         solver.setOption("print_level",self.verbosity)
         solver.setOption("print_time",self.verbosity > 2) 
         solver.setOption("max_cpu_time",self.timelimit)
+        ## This option seems to just crash Python whenever anything bad happens.
         #solver.setOption("check_derivatives_for_naninf","yes")
         solver.init()
     
@@ -1558,11 +1578,6 @@ class TargetSelector(object):
         conModel = casadi.vertcat(model(x=x,u=u,d=d)[:Nx-Ny])
         if not continuous:
             conModel -= x[:Nx-Ny]
-            
-        # Enforce measurement.
-        #measx = measurement(x)
-        #measxsp = measurement(xsp)
-        #conMeas = casadi.vertcat([measx[i] - measxsp[i] for i in contvars])
         
         # Select setpoint things.
         H = np.zeros((self.Nu,Ny))
@@ -1575,10 +1590,6 @@ class TargetSelector(object):
         
         if unique:
             objective = casadi.MX(0)            
-            #objective = casadi.sum_square(conModel) + casadi.sum_square(conMeas) 
-            ##import pdb; pdb.set_trace()
-            #nlpOut = casadi.nlpOut(f=objective)
-        #else:
         nlpOut = casadi.nlpOut(f=objective,g=constraints)
         self.unique = unique                
                 
@@ -1589,6 +1600,7 @@ class TargetSelector(object):
         self.solver.setOption("print_level",verbosity)
         self.solver.setOption("print_time",verbosity > 2)
         self.solver.setOption("max_cpu_time",timelimit)
+        ## This option seems to just crash Python whenever anything bad happens.
         #self.solver.setOption("check_derivatives_for_naninf","yes")
         self.solver.init()
         if not unique or True:

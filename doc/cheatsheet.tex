@@ -1,0 +1,105 @@
+\documentclass[twocolumn]{article}
+
+\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
+\usepackage{mathtools,bm,textcomp}
+\usepackage[dvipsnames]{xcolor}
+
+% Stuff for source codes.
+\usepackage{listings}
+\providecommand{\lstinline}{}
+\lstdefinestyle{python}{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{Blue}\ttfamily,
+    stringstyle=\color{Voilet}\ttfamily,
+    commentstyle=\color{ForestGreen}\ttfamily,
+    upquote=true,
+    showstringspaces=false,
+%    numbers=left,
+    stepnumber=10,
+    firstnumber=0,
+    numberstyle=\scriptsize,
+    frame=L,
+    escapechar=@,
+    morekeywords={as},
+}
+\lstset{style=python}
+
+\newcommand{\smallurl}[1]{\texttt{\scriptsize$<$#1$>$}}
+\newcommand{\funcname}[1]{\vspace{.25em}\noindent\texttt{#1}\vspace{.25em}}
+\newcommand{\casadi}{CasADi}
+
+\title{\texttt{mpc-tools-casadi} Cheat Sheet}
+
+\begin{document}
+
+\pagestyle{empty}
+\maketitle
+
+\thispagestyle{empty}
+
+\paragraph*{Obtaining \texttt{mpc-tools-casadi}}
+
+The latest files can be found on \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}.
+
+\paragraph*{Getting Started}
+
+Functions are split between two modules: \texttt{mpc\_tools\_casadi.py} and \texttt{colloc.py}.
+Typically, you will only need to import the former, e.g.
+%
+\begin{lstlisting}[style=python]
+import mpc_tools_casadi as mpc
+\end{lstlisting}
+%
+You will need to have \casadi{} installed as well.
+You shouldn't need to use any functions whose names begin with two underscores (e.g. \lstinline@__getCasadiSymbols@). 
+
+Many functions will have optional arguments or default values that aren't listed below.
+Consult the \texttt{mpc\_tools\_casadi} module to see what options are available.
+
+\paragraph*{Simulating Nonlinear Systems}
+
+To facilitate nonlinear simulations, we provide the \texttt{OneStepSimulator} class, which is essentially a wrapper of \casadi's \texttt{Integrator} object.
+To initialize, the syntax is
+%
+\begin{lstlisting}
+model = OneStepSimulator(ode,Delta,Nx,Nu)
+\end{lstlisting}
+%
+Where \texttt{ode} is a Python function that takes two keyword arguments \texttt{x} and \texttt{u} of lengths \texttt{Nx} and \texttt{Nu}.
+Optional arguments \texttt{Nd} or \texttt{Nw} can be set to positive integers to add additional arguments.
+
+Once the object has been build, one timestep can be simulated using
+\begin{lstlisting}
+xnext = model.sim(x,u)
+\end{lstlisting}
+
+\paragraph*{Building \casadi{} Functions}
+
+To simplify building \casadi{} function objects, we have a few convenience wrappers.
+
+\funcname{getCasadiFunc(f,Nx,Nu,Nd)}
+
+Takes a Python function and sizes of $x$, $u$, and/or $d$ to build a \casadi{} \texttt{MXFunction} object.
+Note that the original function \texttt{f} should return a list of values (or at least something that can be passed as an argument to \casadi's \texttt{vertcat}).
+
+\funcname{getCasadiFuncGeneralArgs(f,varsizes)}
+
+For functions with arguments other than $x$, $u$, or $d$, use this version instead. \texttt{varsizes} is a list of integers giving the sizes of the inputs to \texttt{f} in order.
+
+\funcname{getCasadiIntegrator(f,Delta,Nx,Nu,Nd)}
+
+Returns an \texttt{Integrator} object to integrate the Python function \texttt{f} from time 0 to \texttt{Delta}.
+
+\funcname{getRungeKutta4(f,Delta,M=1)}
+
+Returns an explicit Runge-Kutta 4th order discretization with \texttt{M} steps of size \texttt{Delta}/\texttt{M}.
+Note that for this function, \texttt{f} must already be an \texttt{MXFunction}, i.e. you should use it AFTER calling \texttt{getCasadiFunc}.
+
+\paragraph*{Solving MPC Problems}
+
+
+
+
+
+\end{document}

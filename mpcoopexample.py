@@ -1,17 +1,10 @@
 # Closed-loop MPC for a multivariable system. This is basically identical to
 # mpcexampleclosedloop.py except that we use both the "functional" way as in
-# the original file, and an object-oriented interface that should be better.
-#
-# Unfortunately, since this problem is so easy, the benefits of the OOP way
-# (e.g. use of old values as guesses, not having to regenerate constraints,
-# etc.) introduce more overhead time than can be saved in the actual
-# optimization, and thus the entire process takes about 50% longer. Perhaps
-# with more difficult problems, the OOP approach will be better, but who knows.
+# the original file, and a small object-oriented interface that is better.
 
 # Imports.
 import numpy as np
 import mpc_tools_casadi as mpc
-import mpc_oop_casadi as mpcoop
 import time
 
 # Define continuous time model.
@@ -49,16 +42,9 @@ l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
 Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)]
 Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
 
-# Now make class.
+# Now make TimeInvariantSolver object.
 nsim = 100
 verbosity = 0
-
-controller = mpcoop.Mpc(Nx,Nu,Nt+nsim-1,dt)
-controller.setBounds(**bounds)
-controller.setDiscreteModel(F)
-controller.setObjective(l,Pf)
-
-# Finally, make TimeInvariantSolver object.
 solver = mpc.nmpc(F,l,[0,0],Nt,Pf,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
 
 # Solve.
@@ -67,7 +53,7 @@ xcl = {}
 ucl = {}
 solvetimes = {}
 tottimes = {}
-for method in ["functional","oop","solver"]:
+for method in ["nmpc","lmpc","solver"]:
     starttime = time.clock()
     x0 = np.array([10,0])
     xcl[method] = np.zeros((Nx,nsim+1))
@@ -76,12 +62,10 @@ for method in ["functional","oop","solver"]:
     solvetimes[method] = np.zeros((nsim,))    
     for k in range(nsim):
         # Solve linear MPC problem.
-        if method == "functional": # Old functional way.      
+        if method == "nmpc":
+            sol = mpc.nmpc(F,l,x0,Nt,Pf,bounds=bounds,verbosity=verbosity)
+        elif method == "lmpc":
             sol = mpc.lmpc(A,B,x0,Nt,Q,R,q=q,bounds=bounds,verbosity=verbosity)
-            #x0 = np.dot(A[0],x0) + np.dot(B[0],sol["u"][:,0])
-        elif method == "oop": # New oop way.
-            sol = controller.solve(Nt,t0=k,x0=x0,verbosity=verbosity)
-            controller.acceptSolve(sol)
         elif method == "solver":
             solver.fixvar("x",0,x0)
             sol = solver.solve()
@@ -97,6 +81,7 @@ for method in ["functional","oop","solver"]:
         ucl[method][:,k] = sol["u"][:,0]
         solvetimes[method][k] = sol["ipopttime"]
         x0 = sol["x"][:,1]
+    
     xcl[method][:,nsim] = x0 # Store final state.
     endtime = time.clock()
     tottimes[method] = endtime - starttime
