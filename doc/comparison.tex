@@ -30,7 +30,6 @@
 
 \usepackage{parcolumns}
 
-
 \title{\texttt{mpc-tools-casadi} Comparison}
 
 \begin{document}
@@ -43,283 +42,361 @@
 In this document, we present an example to show how much code is saved by using \texttt{mpc-tools-casadi}.
 On the left side, we show the functions as given in the \casadi{} example files, while on the right, we show the script rewritten to use \texttt{mpc-tools-casadi}.
 
-\begin{parcolumns}[rulebetween]{2}
+\hspace{1em}
 
+\hrule
+
+% Imports.
+\begin{parcolumns}{2}
 \colchunk{
 \begin{lstlisting}
-#
-#     This file is part of CasADi.
-#
-#     CasADi -- A symbolic framework for dynamic optimization.
-#     Copyright (C) 2010-2014 Joel Andersson, Joris Gillis, Moritz Diehl,
-#                             K.U. Leuven. All rights reserved.
-#     Copyright (C) 2011-2014 Greg Horn
-#
-#     CasADi is free software; you can redistribute it and/or
-#     modify it under the terms of the GNU Lesser General Public
-#     License as published by the Free Software Foundation; either
-#     version 3 of the License, or (at your option) any later version.
-#
-#     CasADi is distributed in the hope that it will be useful,
-#     but WITHOUT ANY WARRANTY; without even the implied warranty of
-#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-#     Lesser General Public License for more details.
-#
-#     You should have received a copy of the GNU Lesser General Public
-#     License along with CasADi; if not, write to the Free Software
-#     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#
-#
-# -*- coding: utf-8 -*-
-from casadi import *
-import numpy as NP
+# Control of the Van der Pol oscillator
+# using mpc_tools_casadi.
+import mpc_tools_casadi as mpc
+import numpy as np
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Control of the Van der Pol oscillator
+# using pure casadi.
+import casadi
+import casadi.tools as ctools
+import numpy as np
 import matplotlib.pyplot as plt
-
-nk = 20    # Control discretization
-tf = 10.0  # End time
-
-# Declare variables (use scalar graph)
-t  = SX.sym("t")    # time
-u  = SX.sym("u")    # control
-x  = SX.sym("x",3)  # state
-
-# ODE right hand side function
-rhs = vertcat([(1 - x[1]*x[1])*x[0] - x[1] + u, \
-x[0], \
-x[0]*x[0] + x[1]*x[1] + u*u])
-f = SXFunction([t,x,u],[rhs])
-
-# Objective function (meyer term)
-m = SXFunction([t,x,u],[x[2]])
-
-# Control bounds
-u_min = -0.75
-u_max = 1.0
-u_init = 0.0
-
-u_lb = NP.array([u_min])
-u_ub = NP.array([u_max])
-u_init = NP.array([u_init])
-
-# State bounds and initial guess
-x_min =  [-inf, -inf, -inf]
-x_max =  [ inf,  inf,  inf]
-xi_min = [ 0.0,  1.0,  0.0]
-xi_max = [ 0.0,  1.0,  0.0]
-xf_min = [ 0.0,  0.0, -inf]
-xf_max = [ 0.0,  0.0,  inf]
-x_init = [ 0.0,  0.0,  0.0]
-
-# Initialize functions
-f.init()
-m.init()
-
-# Dimensions
-nx = 3
-nu = 1
-
-# Choose collocation points
-tau_root = collocationPoints(3,"radau")
-
-# Degree of interpolating polynomial
-d = len(tau_root)-1
-
-# Size of the finite elements
-h = tf/nk
-
-# Coefficients of the collocation equation
-C = NP.zeros((d+1,d+1))
-
-# Coefficients of the continuity equation
-D = NP.zeros(d+1)
-
-# Dimensionless time inside one control interval
-tau = SX.sym("tau")
-
-# All collocation time points
-T = NP.zeros((nk,d+1))
-for k in range(nk):
-for j in range(d+1):
-T[k,j] = h*(k + tau_root[j])
-
-# For all collocation points
-for j in range(d+1):
-# Construct Lagrange polynomials to get the polynomial basis at the collocation point
-L = 1
-for r in range(d+1):
-if r != j:
-L *= (tau-tau_root[r])/(tau_root[j]-tau_root[r])
-lfcn = SXFunction([tau],[L])
-lfcn.init()
-
-# Evaluate the polynomial at the final time to get the coefficients of the continuity equation
-lfcn.setInput(1.0)
-lfcn.evaluate()
-D[j] = lfcn.getOutput()
-
-# Evaluate the time derivative of the polynomial at all collocation points to get the coefficients of the continuity equation
-tfcn = lfcn.tangent()
-tfcn.init()
-for r in range(d+1):
-tfcn.setInput(tau_root[r])
-tfcn.evaluate()
-C[j,r] = tfcn.getOutput()
-
-# Total number of variables
-NX = nk*(d+1)*nx      # Collocated states
-NU = nk*nu              # Parametrized controls
-NXF = nx                # Final state
-NV = NX+NU+NXF
-
-# NLP variable vector
-V = MX.sym("V",NV)
-
-# All variables with bounds and initial guess
-vars_lb = NP.zeros(NV)
-vars_ub = NP.zeros(NV)
-vars_init = NP.zeros(NV)
-offset = 0
-
-# Get collocated states and parametrized control
-X = NP.resize(NP.array([],dtype=MX),(nk+1,d+1))
-U = NP.resize(NP.array([],dtype=MX),nk)
-for k in range(nk):  
-# Collocated states
-for j in range(d+1):
-# Get the expression for the state vector
-X[k,j] = V[offset:offset+nx]
-
-# Add the initial condition
-vars_init[offset:offset+nx] = x_init
-
-# Add bounds
-if k==0 and j==0:
-vars_lb[offset:offset+nx] = xi_min
-vars_ub[offset:offset+nx] = xi_max
-else:
-vars_lb[offset:offset+nx] = x_min
-vars_ub[offset:offset+nx] = x_max
-offset += nx
-
-# Parametrized controls
-U[k] = V[offset:offset+nu]
-vars_lb[offset:offset+nu] = u_min
-vars_ub[offset:offset+nu] = u_max
-vars_init[offset:offset+nu] = u_init
-offset += nu
-
-# State at end time
-X[nk,0] = V[offset:offset+nx]
-vars_lb[offset:offset+nx] = xf_min
-vars_ub[offset:offset+nx] = xf_max
-vars_init[offset:offset+nx] = x_init
-offset += nx
-
-# Constraint function for the NLP
-g = []
-lbg = []
-ubg = []
-
-# For all finite elements
-for k in range(nk):
-
-# For all collocation points
-for j in range(1,d+1):
-
-# Get an expression for the state derivative at the collocation point
-xp_jk = 0
-for r in range (d+1):
-xp_jk += C[r,j]*X[k,r]
-
-# Add collocation equations to the NLP
-[fk] = f.call([T[k,j], X[k,j], U[k]])
-g.append(h*fk - xp_jk)
-lbg.append(NP.zeros(nx)) # equality constraints
-ubg.append(NP.zeros(nx)) # equality constraints
-
-# Get an expression for the state at the end of the finite element
-xf_k = 0
-for r in range(d+1):
-xf_k += D[r]*X[k,r]
-
-# Add continuity equation to NLP
-g.append(X[k+1,0] - xf_k)
-lbg.append(NP.zeros(nx))
-ubg.append(NP.zeros(nx))
-
-# Concatenate constraints
-g = vertcat(g)
-
-# Objective function
-[f] = m.call([T[nk-1,d],X[nk,0],U[nk-1]])
-
-# NLP
-nlp = MXFunction(nlpIn(x=V),nlpOut(f=f,g=g))
-
-## ----
-## SOLVE THE NLP
-## ----
-
-# Allocate an NLP solver
-solver = NlpSolver("ipopt", nlp)
-
-# Set options
-solver.setOption("expand",True)
-#solver.setOption("max_iter",4)
-
-# initialize the solver
-solver.init()
-
-# Initial condition
-solver.setInput(vars_init,"x0")
-
-# Bounds on x
-solver.setInput(vars_lb,"lbx")
-solver.setInput(vars_ub,"ubx")
-
-# Bounds on g
-solver.setInput(NP.concatenate(lbg),"lbg")
-solver.setInput(NP.concatenate(ubg),"ubg")
-
-# Solve the problem
-solver.evaluate()
-
-# Print the optimal cost
-print "optimal cost: ", float(solver.getOutput("f"))
-
-# Retrieve the solution
-v_opt = NP.array(solver.getOutput("x"))
-
-# Get values at the beginning of each finite element
-x0_opt = v_opt[0::(d+1)*nx+nu]
-x1_opt = v_opt[1::(d+1)*nx+nu]
-x2_opt = v_opt[2::(d+1)*nx+nu]
-u_opt = v_opt[(d+1)*nx::(d+1)*nx+nu]
-tgrid = NP.linspace(0,tf,nk+1)
-tgrid_u = NP.linspace(0,tf,nk)
-
-# Plot the results
-plt.figure(1)
-plt.clf()
-plt.plot(tgrid,x0_opt,'--')
-plt.plot(tgrid,x1_opt,'-.')
-plt.step(tgrid_u,u_opt,'-')
-plt.title("Van der Pol optimization")
-plt.xlabel('time')
-plt.legend(['x[0] trajectory','x[1] trajectory','u trajectory'])
-plt.grid()
-plt.show()
 \end{lstlisting}
 }
-\colchunk{
-\begin{lstlisting}
-#TBD
-\end{lstlisting}
-}
-
-    
 \end{parcolumns}
 
+\hrule
+
+% Define ODE.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define model and get simulator.
+Delta = .5
+Nx = 2
+Nu = 1
+def ode(x,u):
+    return [(1 - x[1]*x[1])*x[0]
+        - x[1] + u, x[0]]
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Define model and get simulator.
+Delta = .5
+Nx = 2
+Nu = 1
+def ode(x,u):
+    return [(1 - x[1]*x[1])*x[0]
+        - x[1] + u, x[0]]
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+% Create integrator.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define symbolic variables.
+x = casadi.MX.sym("x",Nx)
+u = casadi.MX.sym("u",Nu)
+
+# Make integrator object.
+ode_integrator = casadi.MXFunction(
+    casadi.daeIn(x=x,p=u),
+    casadi.daeOut(ode=casadi.vertcat(ode(x,u)))
+)
+vdp = casadi.Integrator("cvodes",ode_integrator)
+vdp.setOption("abstol",1e-8)
+vdp.setOption("reltol",1e-8)
+vdp.setOption("tf",Delta)
+vdp.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Create a simulator.
+vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Then get nonlinear casadi functions
+# and rk4 discretization.
+ode_casadi = casadi.MXFunction(
+    [x,u],[casadi.vertcat(ode(x,u))])
+ode_casadi.init()
+
+[k1] = ode_casadi([x,u])
+[k2] = ode_casadi([x + Delta/2*k1,u])
+[k3] = ode_casadi([x + Delta/2*k2,u])
+[k4] = ode_casadi([x + Delta*k3,u])
+xrk4 = x + Delta/6*(k1 + 2*k2 + 2*k3 + k4)    
+ode_rk4_casadi = casadi.MXFunction([x,u],[xrk4])
+ode_rk4_casadi.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Then get nonlinear casadi functions
+# and rk4 discretization.
+ode_casadi = mpc.getCasadiFunc(ode,
+    Nx, Nu, name="f")
+ode_rk4_casadi = mpc.getRungeKutta4(
+    ode_casadi, Delta)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Define stage cost and terminal weight.
+lfunc = casadi.mul([x.T,x]) + \
+    casadi.mul([u.T,u])
+l = casadi.MXFunction([x,u],[lfunc])
+l.init()
+
+Pffunc = casadi.mul([x.T,x])
+Pf = casadi.MXFunction([x],[Pffunc])
+Pf.init()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Define stage cost and terminal weight.
+lfunc = lambda x,u: [mpc.mtimes(x.T,x)
+    + mpc.mtimes(u.T,u)]
+l = mpc.getCasadiFunc(lfunc, Nx, Nu, name="l")
+
+Pffunc = lambda x: [10*mpc.mtimes(x.T,x)]
+Pf = mpc.getCasadiFunc(Pffunc, Nx, name="Pf")
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Bounds on u.
+uub = 1
+ulb = -.75
+
+# Make optimizers.
+x0 = np.array([0,1])
+Nt = 20
+
+# Create variables struct.
+var = ctools.struct_symMX([(
+    ctools.entry("x",shape=(Nx,),repeat=Nt+1),
+    ctools.entry("u",shape=(Nu,),repeat=Nt),
+)])
+varlb = var(-np.inf)
+varub = var(np.inf)
+varguess = var(0)
+
+# Adjust the relevant constraints.
+for t in range(Nt):
+varlb["u",t,:] = ulb
+varub["u",t,:] = uub
+
+# Now build up constraints and objective.
+obj = casadi.MX(0)
+con = []
+for t in range(Nt):
+con.append(ode_rk4_casadi([var["x",t],var["u",t]])[0]
+     - var["x",t+1])
+obj += l([var["x",t],var["u",t]])[0]
+obj += Pf([var["x",Nt]])[0]
+
+# Build solver object.
+con = casadi.vertcat(con)
+conlb = np.zeros((Nx*Nt,))
+conub = np.zeros((Nx*Nt,))
+
+nlp = casadi.MXFunction(casadi.nlpIn(x=var),
+    casadi.nlpOut(f=obj,g=con))
+solver = casadi.NlpSolver("ipopt",nlp)
+solver.setOption("print_level",0)
+solver.setOption("print_time",False)  
+solver.setOption("max_cpu_time",60)
+solver.init()
+
+solver.setInput(conlb,"lbg")
+solver.setInput(conub,"ubg")
+
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Bounds on u.
+bounds = dict(uub=[1],ulb=[-.75])
+
+# Make optimizers.
+x0 = np.array([0,1])
+Nt = 20
+solver = mpc.nmpc(F=[ode_rk4_casadi],N=Nt,
+    verbosity=0,l=[l],x0=x0,Pf=Pf,
+    bounds=bounds,
+    returnTimeInvariantSolver=True)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+% Simulation.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Now simulate.
+Nsim = 20
+times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+x = np.zeros((Nsim+1,Nx))
+x[0,:] = x0
+u = np.zeros((Nsim,Nu))
+for t in range(Nsim):
+    # Fix initial state.    
+    varlb["x",0,:] = x[t,:]
+    varub["x",0,:] = x[t,:]
+    varguess["x",0,:] = x[t,:]
+    solver.setInput(varguess,"x0")
+    solver.setInput(varlb,"lbx")
+    solver.setInput(varub,"ubx")
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Now simulate.
+Nsim = 20
+times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+x = np.zeros((Nsim+1,Nx))
+x[0,:] = x0
+u = np.zeros((Nsim,Nu))
+for t in range(Nsim):
+    # Fix initial state.
+    solver.fixvar("x",0,x[t,:])
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+% Solve the NLP.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Solve nlp.    
+    solver.evaluate()
+    status = solver.getStat("return_status")
+    optvar = var(solver.getOutput("x"))
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Solve nlp.
+    sol = solver.solve()
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Display stats.
+    print "%d: %s" % (t,status)
+    u[t,:] = optvar["u",0,:]
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Print stats.
+    print "%d: %s" % (t,sol["status"])
+    u[t,:] = sol["u"][0,:]
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+    # Simulate.
+    vdp.setInput(x[t,:],"x0")
+    vdp.setInput(u[t,:],"p")
+    vdp.evaluate()
+    x[t+1,:] = np.array(
+        vdp.getOutput("xf")).flatten()
+    vdp.reset()
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+    # Simulate.
+    x[t+1,:] = vdp.sim(x[t,:],u[t,:])
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
+
+% Plotting.
+\begin{parcolumns}{2}
+\colchunk{
+\begin{lstlisting}
+# Plots.
+fig = plt.figure()
+numrows = max(Nx,Nu)
+numcols = 2
+
+# u plots.
+u = np.concatenate((u,u[-1:,:]))
+for i in range(Nu):
+ax = fig.add_subplot(numrows,
+    numcols,numcols*(i+1))
+ax.step(times,u[:,i],"-k")
+ax.set_xlabel("Time")
+ax.set_ylabel("Control %d" % (i + 1))
+
+# x plots.    
+for i in range(Nx):
+ax = fig.add_subplot(numrows,
+    numcols,numcols*(i+1) - 1)
+ax.plot(times,x[:,i],"-k",label="System")
+ax.set_xlabel("Time")
+ax.set_ylabel("State %d" % (i + 1))
+
+fig.tight_layout(pad=.5)
+\end{lstlisting}
+}
+\colchunk{
+\begin{lstlisting}
+# Plots.
+mpc.mpcplot(x.T,u.T,times)
+\end{lstlisting}
+}
+\end{parcolumns}
+
+\hrule
 
 
 

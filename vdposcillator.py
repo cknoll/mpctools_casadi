@@ -44,7 +44,7 @@ commonargs = dict(
 )
 solvers = {}
 solvers["lmpc"] = mpc.nmpc(F=[F],**commonargs)
-solvers["nmpc"] = mpc.nmpc(F=[ode_casadi],timemodel="colloc",M=4,Delta=Delta,**commonargs)
+solvers["nmpc"] = mpc.nmpc(F=[ode_casadi],timemodel="rk4",M=1,Delta=Delta,**commonargs)
 
 # Now simulate.
 Nsim = 20
