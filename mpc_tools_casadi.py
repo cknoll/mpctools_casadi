@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import time
 import itertools
 import colloc
+import pdb
 
 """
 Functions for solving MPC problems using Casadi and Ipopt.
@@ -572,7 +573,7 @@ def getCollocationConstraints(f,var,Delta,d=None):
     [Nx, Nu, Nd, Nc, Nt] = [shapes[k] for k in ["x","u","d","c","t"]]
         
     # Get collocation weights.
-    [r,A,B,q] = colloc.colloc(Nc, True, True)
+    [r,A,B,q] = colloc.weights(Nc, True, True)
     
     # Preallocate. CON will be a list of lists.
     CON = []
@@ -651,7 +652,10 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
     Uses RK4 to discretize xdot = f(x,u) with M points and timestep Delta.
 
     A disturbance argument can be specified by setting d=True. If present, d
-    must come last in the list of arguments (i.e. f(x,u,d))
+    must come last in the list of arguments (i.e. f(x,u,d)). Alternatively,
+    you may specify a list argsizes for a function with an arbitrary number
+    of inputs. If the model has, e.g. 3 states, 2 control inputs, 1
+    disturbance, and 4 parameters, you would use argsizes=[3,2,1,4].
 
     f must be a Casadi SX function with inputs in the proper order.
     """
@@ -697,7 +701,7 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
 # etc., and so it permits a lot more functionality in less code.
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
-         guess={},largs=["w","v"],substitutev=False,timelimit=60,includeFinalState=True):
+         guess={},largs=["w","v"],substitutev=False,timelimit=60,includeFinalPredictor=True):
     """
     Solves nonlinear MHE problem.
     
@@ -716,13 +720,12 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
     The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
     array that gives xhat(k | N["t"]-1) for k = 0,1,...,N["t"]. Thus, to find
     xhat(N["T"]-1 | N["t"]-1), you should get ["x"][-2,:], and to find the
-    predition xhat(N["T"] | N["t"]-1), you should grab ["x"][-1,:].
+    predition xhat(N["T"] | N["T"]-1), you should grab ["x"][-1,:].
     
     By default, the optimization includes a terminal predictor step. This is
     only relevant to the optimization if there are hard constraints on the
-    state. To ignore it, you can set includeFinalState to False. Note that the
-    solution will still contain an entry for this value, but it will be all
-    zeros.
+    state. To ignore it, you can set includeFinalPredictor to False. This means
+    the final entry for "x" will be the the estimate xhat(N["T"]-1 | N["T"]-1).
     """
     # Check specified sizes.
     try:
@@ -741,16 +744,16 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
     parNames = set(["u","p","y"])
-    parStruct = __casadiSymStruct(allShapes.copy(),parNames)(0)
+    parStruct = __casadiSymStruct(allShapes,parNames)(0)
         
     varNames = set(["x","z","w","v","xc","zc"])
-    varStruct = __casadiSymStruct(allShapes.copy(),varNames)
+    varStruct = __casadiSymStruct(allShapes,varNames)
     varlbStruct = varStruct(-np.inf)
     varubStruct = varStruct(np.inf)
     varguessStruct = varStruct(0)
     
     # Get rid of final x variable if we don't care about it.
-    if not includeFinalState and "x" in varStruct.keys():
+    if not includeFinalPredictor and "x" in varStruct.keys():
         varlbStruct["x",-1] = varguessStruct["x",-1]
         varubStruct["x",-1] = varguessStruct["x",-1]
     
@@ -781,7 +784,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
         g=g,Ng=Ng,h=h,Nh=N["y"],l=l,largs=largs,substitutev=substitutev)
     
     # Remove final state evolution constraint if not needed.
-    if not includeFinalState and "state" in constraints.keys():
+    if not includeFinalPredictor and "state" in constraints.keys():
         constraints["state"]["con"].pop(-1) # Get rid of last constraint.
         constraints["state"]["lb"] = constraints["state"]["lb"][:-1,...]
         constraints["state"]["ub"] = constraints["state"]["ub"][:-1,...]
@@ -807,12 +810,14 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
         varguessStruct,obj,con,conlb,conub,verbosity=verbosity,timelimit=60)
     
     returnDict = casadiStruct2numpyDict(var)
+    if not includeFinalPredictor and "x" in returnDict.keys():
+        returnDict["x"] = returnDict["x"][:-1,...]
     returnDict["cost"] = cost
     returnDict["status"] = status    
                   
     return returnDict
 
-def __generalVariableShapes(sizeDict):
+def __generalVariableShapes(sizeDict,setpoint=[]):
     """
     Generates variable shapes from the size dictionary N.
     
@@ -822,10 +827,13 @@ def __generalVariableShapes(sizeDict):
     If present, "c" will specify collocation, at which point extra variables
     will be created.
     
-    Each entry in the returned dictionary will be a 3-element tuple. The first
-    is the number of copies for each variable, the second is the variable's
-    shape, and the third is a boolean flag that is True to indicate the
-    variable is pointwise and False otherwise. 
+    Each entry in the returned dictionary will be a dictionary of keyword
+    arguments repeat and shape to pass to __casadiSymStruct.
+    
+    Optional argument setpiont is a list of variables that have corresponding
+    setpoint parameters. Any variable names in this list will have a
+    corresponding entry suffixed with _sp. This is useful, e.g., for control
+    problems where you may change the system setpoint.
     """
 
     # Figure out what variables are supplied.
@@ -842,29 +850,31 @@ def __generalVariableShapes(sizeDict):
     # variables should be. The first entry 1 if there should be N+1 copies of
     # the variable and 0 if there should be N. The second is a tuple of sizes.
     allvars = {
-        "x" : (1,("x",)),
-        "z" : (1,("z",)),
-        "u" : (0,("u",)),
-        "d" : (0,("d",)),
-        "w" : (0,("w",)),
-        "p" : (0,("p",)),
-        "y" : (0,("y",)),
-        "v" : (0,("v",)),
-        "xc": (0,("x","c")),
-        "zc": (0,("z","c")),        
-    }    
+        "x" : (Nt+1,("x",)),
+        "z" : (Nt+1,("z",)),
+        "u" : (Nt,("u",)),
+        "d" : (Nt,("d",)),
+        "w" : (Nt,("w",)),
+        "p" : (Nt,("p",)),
+        "y" : (Nt,("y",)),
+        "v" : (Nt,("v",)),
+        "xc": (Nt,("x","c")),
+        "zc": (Nt,("z","c")),        
+    }
+    for v in set(setpoint).intersection(allvars):
+        allvars[v + "_sp"] = allvars[v]
     
     # Now loop through all the variables, and if we've been given all of the
     # necessary sizes, then add that variable
     shapeDict = {}
-    for (v, (t0, shapeinds)) in allvars.items():
+    for (v, (t, shapeinds)) in allvars.items():
         if givensizes.issuperset(shapeinds):
             shape = [sizeDict[i] for i in shapeinds]
             if len(shape) == 0:
                 shape = [1,1]
             elif len(shape) == 1:
                 shape += [1]
-            shapeDict[v] = {"repeat" : Nt + t0, "shape" : tuple(shape)}
+            shapeDict[v] = {"repeat" : t, "shape" : tuple(shape)}
     
     return shapeDict
     
@@ -1016,7 +1026,7 @@ def __generalDiscreteConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0
         returnDict.pop("measurement")
     
     return returnDict
-    
+
 def __casadiSymStruct(allVars,theseVars=None):
     """
     Returns a Casadi sym struct for the variables in allVars.
@@ -1027,6 +1037,7 @@ def __casadiSymStruct(allVars,theseVars=None):
     """
     
     # Figure out what names we need.
+    allVars = allVars.copy()
     varNames = set(allVars.keys())
     if theseVars is not None:
         for v in varNames.difference(theseVars):
@@ -1045,7 +1056,8 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     that f must be f(x,u,w) and h must be h(x).
     
     If specified, f_jac and h_jac should be initialized jacobians. This saves
-    some time if you're going to be calling this many times in a row.
+    some time if you're going to be calling this many times in a row, althouth
+    it's really not noticable unless the models are very large.
     
     The value of x that should be fed is xhat(k | k-1), and the value of P
     should be P(k | k-1). xhat will be updated to xhat(k | k) and then advanced
@@ -1090,6 +1102,441 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
     
     return [Pmp1, xhatmp1, P, xhat]
+
+# =================================
+# "New" versions of MPC and MHE
+# =================================
+
+# These functions are rewrites of the MPC and MHE versions to use a more common
+# framework. Time will tell whether or not they work better.
+
+def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
+    verbosity=5,timelimit=60,Delta=1,runOptimization=True):
+    """
+    Solves nonlinear MPC problem.
+    
+    WORK IN PROGRESS    
+    
+    N muste be a dictionary with at least entries "x", "u", and "t". If 
+    parameters are present, you must also specify a "p" entry, and if algebraic
+    states are present, you must provide a "z" entry.
+    
+    If provided, p must be a 2D array with the time dimension first. It should
+    have N["t"] rows and N["p"] columns.
+    
+    lb and ub should be dictionaries of bounds for the various variables. Each
+    entry should have time as the first index (i.e. lb["x"] should be a
+    N["t"] + 1 by N["x"] array). guess should have the same structure.    
+    
+    sp is a dictionary that holds setpoints for x and u. If supplied, the stage
+    cost is assumed to be a function l(x,u,x_sp,u_sp). If not supplied, l is
+    l(x,u). To explicitly specify a different order of arguments or something
+    else, e.g. a dependence on parameters, specify a list of input variables.
+    Similarly, Pf is assumed to be Pf(x,x_sp) if a setpoint for x is supplied,
+    and it is left as Pf(x) otherwise.    
+    
+    The return value is a dictionary with the values of the optimal decision
+    variables and also some time vectors.
+    """    
+      
+    # Copy dictionaries so we don't change the user inputs.
+    N = N.copy()
+    guess = guess.copy()     
+   
+    # Check specified sizes.
+    try:
+        for i in ["t","x"]:
+            if N[i] <= 0:
+                N[i] = 1
+    except KeyError:
+        raise KeyError("Invalid or missing entries in N dictionary!")
+        
+    # Now get the shapes of all the variables that are present.
+    allShapes = __generalVariableShapes(N,setpoint=sp.keys())
+    if "c" not in N:
+        N["c"] = 0    
+    
+    # Sort out bounds on x0.
+    for (d,v) in [(lb,-np.inf), (ub,np.inf), (guess,0)]:
+        if "x" not in d.keys():
+            d["x"] = v*np.ones((N["t"],N["x"]))
+    lb["x"][0,...] = x0
+    ub["x"][0,...] = x0
+    guess["x"][0,...] = x0
+    
+    # Build Casadi symbolic structures. These need to be separate because one
+    # is passed as a set of variables and one is a set of parameters. Note that
+    # if this ends up empty, we just set it to None.
+    parNames = set(["p"] + sp.keys())
+    parStruct = __casadiSymStruct(allShapes,parNames)
+    if len(parStruct.keys()) == 0:
+        parStruct = None
+        
+    varNames = set(["x","u","xc","zc"])
+    varStruct = __casadiSymStruct(allShapes,varNames)
+
+    # Add parameters and setpoints to the guess structure.
+    guess["p"] = p
+    for v in sp.keys():
+        guess[v + "_sp"] = sp[v]
+    
+    # Need to decide about algebraic constraints.
+    if "z" in allShapes.keys():
+        N["g"] = N["z"]
+    else:
+        N["g"] = None
+    N["f"] = N["x"]
+    
+    # Make initial objective term.    
+    if Pf is not None:
+        if "x" in sp.keys():
+            obj = Pf([varStruct["x",-1],parStruct["x_sp",-1]])
+        else:
+            obj = Pf([varStruct["x",-1]])[0]
+    else:
+        obj = casadi.MX(0)
+    
+    # Decide arguments of l.
+    if largs is None:
+        largs = ["x","u"]
+        if "x" in sp.keys():
+            largs.append("x_sp")
+        if "u" in sp.keys():
+            largs.append("u_sp")
+    
+    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
+         f=f,g=g,h=None,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
+         runOptimization=runOptimization)
+
+def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
+    verbosity=5,largs=["w","v"],timelimit=60,Delta=1,runOptimization=True):
+    """
+    Solves nonlinear MHE problem.
+    
+    N muste be a dictionary with at least entries "x", "y", and "t". "w" may be
+    specified, but it is assumed to be equal to "x" if not given. "v" is always
+    taken to be equal to "y". If parameters are present, you must also specify
+    a "p" entry.
+    
+    u, y, and p must be 2D arrays with the time dimension first. Note that y
+    should have N["t"] + 1 rows, and u and p should have N["t"] rows.
+    
+    lb and ub should be dictionaries of bounds for the various variables. Each
+    entry should have time as the first index (i.e. lb["x"] should be a
+    N["t"] + 1 by N["x"] array). guess should have the same structure.    
+    
+    The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
+    array that gives xhat(k | N["t"]-1) for k = 0,1,...,N["t"]. Thus, to find
+    xhat(N["T"]-1 | N["t"]-1), you should get ["x"][-2,:], and to find the
+    predition xhat(N["T"] | N["T"]-1), you should grab ["x"][-1,:].
+    """
+    
+    # Copy dictionaries so we don't change the user inputs.
+    N = N.copy()
+    guess = guess.copy()    
+    
+    # Check specified sizes.
+    try:
+        for i in ["t","x","y"]:
+            if N[i] <= 0:
+                N[i] = 1
+        if "w" not in N:
+            N["w"] = N["x"]
+        N["v"] = N["y"] 
+    except KeyError:
+        raise KeyError("Invalid or missing entries in N dictionary!")
+        
+    # Now get the shapes of all the variables that are present.
+    allShapes = __generalVariableShapes(N)
+    if "c" not in N:
+        N["c"] = 0    
+    
+    # Build Casadi symbolic structures. These need to be separate because one
+    # is passed as a set of variables and one is a set of parameters.
+    parNames = set(["u","p","y"])
+    parStruct = __casadiSymStruct(allShapes,parNames)
+        
+    varNames = set(["x","z","w","v","xc","zc"])
+    varStruct = __casadiSymStruct(allShapes,varNames)
+
+    # Now we fill up the parameters in the guess structure.
+    for (name,val) in [("u",u),("p",p),("y",y)]:
+        guess[name] = val
+    
+    # Need to decide about algebraic constraints.
+    if "z" in allShapes.keys():
+        N["g"] = N["z"]
+    else:
+        N["g"] = None
+    N["h"] = N["y"]
+    N["f"] = N["x"]
+    
+    # Make initial objective term.    
+    if lx is not None and x0bar is not None:
+        obj = lx([varStruct["x",0] - x0bar])[0]
+    else:
+        obj = casadi.MX(0)
+       
+    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
+         f=f,g=g,h=h,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
+         runOptimization=runOptimization)
+
+def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0),
+    f=None,g=None,h=None,l=None,largs=None,Delta=1,verbosity=5,runOptimization=True):
+    """
+    General wrapper for an optimal control problem (e.g. mpc or mhe).
+    
+    struct should be a dictionary of the appropriate parameter or variable
+    casadi sym_structs. It should have an entry for each variable/parameter
+    that is a list running through time.
+    
+    Note that only variable fields are taken from lb and ub, but parameter
+    values must be specified in guess
+    """
+
+    # Initialize things.
+    varlb = var(-np.inf)
+    varub = var(np.inf)
+    varguess = var(0)
+    dataAndStructure = [(guess,varguess), (lb,varlb), (ub,varub)]
+    if par is not None:
+        parval = par(0)
+        dataAndStructure.append((guess,parval))
+    else:
+        parval = None
+
+    # Sort out bounds and parameters.
+    for (data,structure) in dataAndStructure:
+        for v in set(data.keys()).intersection(structure.keys()):
+            for t in range(N["t"]):
+                structure[v,t] = data[v][t,...]
+    
+    # Smush together variables and parameters to get the constraints.
+    struct = {}
+    for k in var.keys():
+        struct[k] = var[k]
+    if par is not None:
+        for k in par.keys():
+            struct[k] = par[k]
+    
+    # Double-check some sizes and then get constraints.
+    for (func,name) in [(f,"f"), (g,"g"), (h,"h")]:
+        if func is None:
+            N[name] = 0    
+    constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
+        g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],Delta=Delta)
+     
+    con = []
+    conlb = np.zeros((0,))
+    conub = conlb.copy()
+    for f in ["state","measurement","algebra"]:
+        if f in constraints.keys():
+            con += flattenlist(constraints[f]["con"])
+            conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
+            conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
+    con = casadi.vertcat(con)
+    
+    for t in range(N["t"]):
+        obj += constraints["cost"][t]
+        
+    # If we want an optimization, then do some post-processing. Otherwise, just
+    # return the solver object.
+    if runOptimization:
+        # Call the solver.
+        [var, cost, status, solver] = callSolver_new(var,varlb,varub,varguess,
+            obj,con,conlb,conub,par,parval,verbosity=verbosity,timelimit=60)
+        returnDict = casadiStruct2numpyDict(var)
+        returnDict["cost"] = cost
+        returnDict["status"] = status    
+        
+        # Create an array of time points.
+        returnDict["t"] = N["t"]*Delta*np.linspace(0,1,N["t"] + 1)
+        if N["c"] > 0:
+            r = constraints["colloc.weights"]["r"][1:-1] # Throw out endpoints.        
+            r.shape = (1,r.size)
+            returnDict["tc"] = returnDict["t"].reshape((returnDict["t"].size,1))[:-1] + Delta*r
+    else:
+        # Build ControlSolver object and return that.
+        returnDict = ControlSolver(var,varlb,varub,varguess,
+            obj,con,conlb,conub,par,parval,verbosity=verbosity,timelimit=60)
+    
+    return returnDict
+
+def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[],Ncolloc=0,Delta=1):
+    """
+    Creates general state evolution constraints for the following system:
+    
+       x^+ = f(x,z,u,d,w,p)                      \n
+       g(x,z,p) = 0                              \n
+       y = h(x,z,p) + v                          \n
+       
+    The variables are intended as follows:
+    
+        x: differential states                  \n
+        z: algebraic states                     \n
+        u: control actions                      \n
+        d: modeled state disturbances           \n
+        w: unmodeled state disturbances         \n
+        p: fixed system parameters              \n
+        y: meadured outputs                     \n
+        v: noise on outputs
+    
+    Also builds up a list of stage costs l(...). Note that if l is given, its
+    arguments must be specified in largs as a tuple of variable names.
+    
+    In principle, you can use the variables for whatever you want, but they
+    must show up in the proper order. We do very little checking of this, so
+    if this function errors, make sure you are passing the proper variables.
+    
+    var should be a dictionary with entries "x", "u", "y", etc., that give
+    either casadi variables or data values. Data must be accessed as follows:
+
+        var["x"][t][k,...] gives the kth state of x at time t
+        
+    In particular, if struct is a casadi.tools.struct_symMX object, then
+    setting var["x"] = struct["x"] will suffice. If you want to use your own
+    data structure, so be it.
+
+    If Ncolloc is not None, var must also have entries "xc" and "zc". Each
+    entry must have Ncolloc as the size of the second dimension.
+    
+    Returns a dictionary with entries "state", "algebra", and "measurement".
+    Note that the relevant fields will be missing if f, g, or h are set to
+    None. Each entry in the return dictionary will be a list of lists, although
+    for this class of constraint, each of those lists will have only one
+    element. The list of stage costs is in "cost". This one is just a list.
+    """
+    
+    # Figure out what variables are supplied.
+    allvars = set(["x","z","u","d","w","p","y","v","xc","zc"])
+    givenvars = allvars.intersection(var.keys())
+    givenvarscolloc = givenvars.intersection(["x","z"])    
+    
+    # Now sort out arguments for each function.
+    isGiven = lambda v: v in givenvars # Membership function.
+    args = {
+        "f" : filter(isGiven, ["x","z","u","d","w","p"]),
+        "g" : filter(isGiven, ["x","z","p"]),
+        "h" : filter(isGiven, ["x","z","p"]),
+        "l" : filter(isGiven, largs)
+    }
+    # Also define inverse map to get positions of arguments.
+    argsInv = {}
+    for a in args.keys():
+        argsInv[a] = dict([(args[a][j], j) for j in range(len(args[a]))])
+    
+    # Define some helper variables.    
+    getArgs = lambda func, times, var: [[var[v][t] for v in args[func]] for t in times]
+    tintervals = range(t0,t0+Nt)
+    tpoints = range(t0,t0+Nt+1)
+    
+    # Preallocate return dictionary.
+    returnDict = {}    
+    
+    # Decide whether we got the correct stuff for collocation.
+    if Ncolloc < 0 or round(Ncolloc) != Ncolloc:
+        raise ValueError("Ncolloc must be a nonnegative integer if given.")
+    if Ncolloc > 0:
+        [r,A,B,q] = colloc.weights(Ncolloc, True, True) # Collocation weights.
+        returnDict["colloc.weights"] = {"r":r, "A":A, "B":B, "q":q}
+        collocvar = {}
+        for v in givenvarscolloc:
+            # Make sure we were given the corresponding "c" variables.            
+            if v + "c" not in givenvars:
+                raise KeyError("Entry %sc not found in vars!" % (v,))
+            collocvar[v] = []
+            for k in range(Nt):
+                collocvar[v].append([var[v][k]] + [var[v+"c"][k][:,j] for j in range(Ncolloc)] + [var[v][k+1]])
+    
+        def getCollocArgs(k,t,j):
+            """
+            Gets arguments for function k at time t and collocation point j.
+            """
+            thisargs = []
+            for a in args[k]:
+                if a in givenvarscolloc:
+                    thisargs.append(collocvar[a][t][j])
+                else:
+                    thisargs.append(var[a][t])        
+            return thisargs
+    
+    # State evolution f.   
+    if f is not None:
+        if Nf <= 0:
+            raise ValueError("Nf must be a positive integer!")
+        fargs = getArgs("f",tintervals,var)
+        state = []
+        for t in tintervals:
+            if Ncolloc == 0:
+                # Just use discrete-time equations.
+                thiscon = f(fargs[t])[0]
+                if "x" in givenvars:
+                    thiscon -= var["x"][t+1]
+                thesecons = [thiscon] # Only one constraint per timestep.
+            else:
+                # Need to do collocation stuff.
+                thesecons = []
+                for j in range(1,Ncolloc+2):
+                    thisargs = getCollocArgs("f",t,j)
+                    thiscon = Delta*f(thisargs)[0] # Start with function evaluation.
+                    
+                    # Add collocation weights.
+                    if "x" in givenvarscolloc:
+                        for jprime in range(len(collocvar["x"][t])):
+                            thiscon -= A[j,jprime]*collocvar["x"][t][jprime]
+                    thesecons.append(thiscon)
+            state.append(thesecons)
+        lb = np.zeros((Nt,Ncolloc+1,Nf))
+        ub = lb.copy()
+        returnDict["state"] = dict(con=state,lb=lb,ub=ub)
+            
+    # Algebraic constraints g.
+    if g is not None:
+        if Ng <= 0:
+            raise ValueError("Ng must be a positive integer!")
+        gargs = getArgs("g",tpoints,var)
+        algebra = []
+        for t in tpoints:
+            if Ncolloc == 0 or t == Nt:
+                thesecons = [g(gargs[t])[0]]
+            else:
+                thesecons = []
+                for j in range(Ncolloc+1):
+                    thisargs = getCollocArgs("g",t,j)
+                    thiscon = g(thisargs)[0]
+                    thesecons.append(thiscon)
+            algebra.append(thesecons)
+        lb = np.zeros((Nt+1,Ncolloc+1,Ng))
+        ub = lb.copy()
+        returnDict["algebra"] = dict(con=algebra,lb=lb,ub=ub)
+        
+    # Measurements h.
+    if h is not None:
+        if Nh <= 0:
+            raise ValueError("Nh must be a positive integer!")
+        hargs = getArgs("h",tintervals,var)
+        measurement = []
+        for t in tintervals:
+            thiscon = h(hargs[t])[0]
+            if "y" in givenvars:
+                thiscon -= var["y"][t]
+            if "v" in givenvars:
+                thiscon += var["v"][t]
+            measurement.append([thiscon])
+        lb = np.zeros((Nt,Nh))
+        ub = lb.copy()
+        returnDict["measurement"] = dict(con=measurement,lb=lb,ub=ub)
+    
+    # Stage costs.
+    if l is not None:
+        largs = getArgs("l",tintervals,var)
+        
+        cost = []
+        for t in tintervals:
+            cost.append(l(largs[t])[0])
+        returnDict["cost"] = cost
+    
+    return returnDict
 
 # =================================
 # Linear
@@ -1197,7 +1644,7 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
     
     # Create solver and stuff.
     ipoptstart = time.clock()
-    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity=verbosity)
+    [OPTVAR,obj,status,solver] = callSolver(VAR,LB,UB,GUESS,qpF,qpG,conlb,conub,verbosity=verbosity,isQp=True)
     ipoptend = time.clock()
     x = np.hstack(OPTVAR["x",:,:])
     u = np.hstack(OPTVAR["u",:,:])
@@ -1220,8 +1667,38 @@ def lmpc(A,B,x0,N,Q,R,q=None,r=None,M=None,bounds={},D=None,G=None,d=None,verbos
 # =================================
 # Solver Interfaces
 # =================================                    
+
+def callSolver_new(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
+    parval=None,verbosity=5,timelimit=60,isQp=False,runOptimization=True):
+    """
+    Calls ipopt to solve an NLP.
     
-def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5,parval=None,timelimit=60):
+    Arguments are mostly self-explainatory. var, varlb, varub, and varguess
+    should be casadi struct_symMX objects, e.g. the outputs of getCasadiVars.
+    obj should be a scalar casadi MX object, and con should be a vector casadi
+    MX object (possibly from calling casadi.vertcat on a list of constraints).
+    conlb and conub should be numpy vectors of the appropriate size.
+    
+    Returns the optimal variables, the objective function, status string, and
+    the ControlSolver object.
+    """
+    solver = ControlSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par,
+        parval,verbosity,timelimit,isQp)
+    
+    # Solve if requested and get variables.
+    if runOptimization:    
+        solver.solve()
+        status = solver.stats["status"]
+        obj = solver.obj
+    else:
+        status = "NO_OPTIMIZATION_REQUESTED"
+        obj = np.inf
+    optvar = solver.var
+     
+    return [optvar, obj, status, solver]
+    
+def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
+    parval=None,verbosity=5,timelimit=60,isQp=False,runOptimization=True):
     """
     Calls ipopt to solve an NLP.
     
@@ -1245,6 +1722,11 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     solver.setOption("max_cpu_time",timelimit)
     ## This option seems to just crash Python whenever anything bad happens.
     #solver.setOption("check_derivatives_for_naninf","yes")
+    solver.setOption("eval_errors_fatal",True)
+    if isQp:
+        solver.setOption("hessian_constant","yes")
+        solver.setOption("jac_c_constant","yes")
+        solver.setOption("jac_d_constant","yes")
     solver.init()
 
     solver.setInput(varguess,"x0")
@@ -1255,9 +1737,12 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     if parval is not None:
         solver.setInput(parval,"p")
     
-    # Solve.    
-    solver.evaluate()
-    status = solver.getStat("return_status")
+    # Solve.
+    if runOptimization:    
+        solver.evaluate()
+        status = solver.getStat("return_status")
+    else:
+        status = "NO_OPTIMIZATION_REQUESTED"
     if verbosity > 0:
         print("Solver Status:", status)
      
@@ -1265,6 +1750,206 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,verbosity=5
     obj = float(solver.getOutput("f"))   
      
     return [optvar, obj, status, solver]
+
+class ControlSolver(object):
+    """
+    A simple class for holding a casadi solver object.
+    
+    Users have access parameter and guess fields to adjust parameters on the
+    fly and reuse past trajectories in subsequent optimizations, etc.
+    
+    WORK IN PROGRESS
+    """
+    
+    # We use the attributes __varguess and __parval to store the values for
+    # guesses and parameters, and the attributes __var and __par for the
+    # casadi symbolic structures. Users should never need to access __var and
+    # __par, so these aren't properties. We do expose __varguess and __parval.
+    # After an optimization, __varval holds the optimal values of variables,
+    # and this is exposed through the property var.
+    
+    # Right now, this looks a lot like TimeInvariantSolver below, but 
+    # eventually I'm going to add much better "guesser" support to allow
+    # initializing the guess by solving small subproblems. However, I don't
+    # want to break existing examples that use TimeInvariantSolver, so that's
+    # being left alone.
+    
+    # Already, we do handle the guess saving a bit differently than in
+    # TimeInvariantSolver, so there is that.
+    
+    @property
+    def lb(self):
+        return self.__lb
+        
+    @property
+    def ub(self):
+        return self.__ub
+    
+    @property
+    def guess(self):
+        return self.__guess    
+    
+    @property
+    def conlb(self):
+        return self.__conlb
+        
+    @property
+    def conub(self):
+        return self.__conub
+    
+    @property
+    def par(self):
+        return self.__parval
+    
+    @property
+    def var(self):
+        return self.__varval
+        
+    @property
+    def obj(self):
+        return self.__objval
+    
+    @property
+    def stats(self):
+        return self.__stats
+    
+    @property
+    def verbosity(self):
+        return self.__verbosity
+        
+    @verbosity.setter
+    def verbosity(self,v):
+        self.__verbosity = min(max(v,0),12)
+        
+    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
+        parval=None,verbosity=5,timelimit=60,isQp=False):
+        """
+        Initialize the solver object.
+        
+        These arguments should be almost identical to callSolver, which is
+        simply a functional wrapper for this class.
+        """
+
+        #raise NotImplementedError("Work in progress.")        
+        
+        # First store everybody to the object.
+        self.__var = var
+        self.__lb = varlb
+        self.__ub = varub
+        self.__guess = varguess
+        
+        self.__obj = obj
+        self.__con = con
+        self.__conlb = conlb
+        self.__conub = conub
+        
+        self.__par = par
+        self.__parval = parval
+        
+        self.__stats = {}
+        
+        self.verbosity = verbosity
+        self.timelimit = timelimit
+        
+        # Now initialize the solver object.
+        self.initializeSolver(isQp=isQp)        
+        
+    def initializeSolver(self,isQp=False):
+        """
+        Recreates the solver object completely.
+        
+        You shouldn't really ever need to do this manually because it is called
+        automatically when the object is first created.
+        """
+        nlpInputs = {"x" : self.__var}
+        if self.__par is not None:
+            nlpInputs["p"] = self.__par
+        nlpOutputs = {"f" : self.__obj, "g" : self.__con}
+        
+        nlp = casadi.MXFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(**nlpOutputs))
+        solver = casadi.NlpSolver("ipopt",nlp)
+        solver.setOption("print_level",self.verbosity)
+        solver.setOption("print_time",self.verbosity > 2)  
+        solver.setOption("max_cpu_time",self.timelimit)
+        # Note that there is an option "check_derivatives_for_naninf" that in
+        # theory would error out if NaNs or Infs are encountered, but it seems
+        # to just crash Python whenever anything bad happens.
+        solver.setOption("eval_errors_fatal",True)
+        if isQp:
+            solver.setOption("hessian_constant","yes")
+            solver.setOption("jac_c_constant","yes")
+            solver.setOption("jac_d_constant","yes")
+        solver.init()
+        
+        solver.setInput(self.guess,"x0")
+        solver.setInput(self.lb,"lbx")
+        solver.setInput(self.ub,"ubx")
+        solver.setInput(self.conlb,"lbg")
+        solver.setInput(self.conub,"ubg")
+        if self.par is not None:
+            solver.setInput(self.par,"p")
+        
+        # Finally, save the solver.
+        self.__solver = solver
+        
+    def solve(self):
+        """
+        Solve the current solver object.
+        """
+        # Solve the problem and get optimal variables.
+        starttime = time.clock()
+        solver = self.__solver        
+        solver.evaluate()
+        self.__varval = self.__var(solver.getOutput("x"))
+        self.__objval = float(solver.getOutput("f"))
+        endtime = time.clock()
+        
+        # Grab some stats.
+        status = solver.getStat("return_status")
+        if self.verbosity > 0:
+            print("Solver Status:", status)
+        self.stats["status"] = status
+        self.stats["time"] = endtime - starttime
+         
+    def saveguess(self,toffset=1):
+        """
+        Stores the vales from the from the last optimization as a guess.
+        
+        This is useful to store the results of the previous step as a guess for
+        the next step. toffset defaults to 1, which means the time indices are
+        shifted by 1, but you can set this to whatever you want.
+        """
+        for k in self.var.keys():
+            # These values and the guess structure can potentially have a
+            # different number of time points. So, we need to figure out
+            # what range of times will be valid for both things. The offset
+            # makes things a bit weird.
+            tmaxVal = len(self.var[k])
+            tmaxGuess = len(self.guess[k]) + toffset
+            tmax = min(tmaxVal,tmaxGuess)
+            
+            tmin = max(toffset,0)
+            
+            # Now actually store the stuff.           
+            for t in range(tmin,tmax):
+                self.guess[k,t-toffset] = self.var[k,t]
+    
+    def fixvar(self,var,t,val):
+        """
+        Fixes variable var at time t to val.
+        """
+        self.lb[var,t] = val
+        self.ub[var,t] = val
+        self.guess[var,t] = val
+        
+        self.__solver.setInput(self.lb,"lbx")
+        self.__solver.setInput(self.ub,"ubx")
+        self.__solver.setInput(self.guess,"x0")       
+
+
+
+# This is the old version that we're keeping temporarily for compatibility.
+
 
 class TimeInvariantSolver(object):
     """
@@ -1368,6 +2053,7 @@ class TimeInvariantSolver(object):
         solver.setOption("max_cpu_time",self.timelimit)
         ## This option seems to just crash Python whenever anything bad happens.
         #solver.setOption("check_derivatives_for_naninf","yes")
+        solver.setOption("eval_errors_fatal",True)
         solver.init()
     
         solver.setInput(self.guess,"x0")
@@ -1462,7 +2148,7 @@ class TimeInvariantSolver(object):
         """
         # Should probably do some checking to make sure this a valid entry,
         # i.e. is a TimeInvariantSolver object.
-        self.__guesser = guesser
+        self.guesser = guesser
     
     def calcguess(self,t,saveguess=True):
         """
@@ -1516,7 +2202,6 @@ class OneStepSimulator(object):
         if Nw > 0:
             w = p[Nu+Nd:]
             odeargs["w"] = w
-        
         
         # Save sizes. Really we should make these all properties because
         # changing them doesn't do anything.
@@ -1595,8 +2280,7 @@ class TargetSelector(object):
         for i in range(self.Nu):
             H[i,contvars[i]] = 1       
         
-        conMeas = mtimes(H,casadi.vertcat(measurement(x)) - casadi.vertcat(measurement(xsp)))
-        #import pdb; pdb.set_trace()        
+        conMeas = mtimes(H,casadi.vertcat(measurement(x)) - casadi.vertcat(measurement(xsp)))       
         constraints = casadi.vertcat([conModel,conMeas])
         
         if unique:
@@ -1613,6 +2297,7 @@ class TargetSelector(object):
         self.solver.setOption("max_cpu_time",timelimit)
         ## This option seems to just crash Python whenever anything bad happens.
         #self.solver.setOption("check_derivatives_for_naninf","yes")
+        self.solver.setOption("eval_errors_fatal",True)
         self.solver.init()
         if not unique or True:
             self.solver.setInput(np.zeros((Nz-Ny,)),"lbg")
@@ -1759,6 +2444,9 @@ def zoomaxis(axes=None,xscale=None,yscale=None):
 # First, we grab a few things from the CasADi module.
 DMatrix = casadi.DMatrix
 
+# Grab pdb function to emulate Octave/Matlab's keyboard().
+keyboard = pdb.set_trace
+
 def atleastnd(arr,n=2):
     """
     Adds an initial singleton dimension to arrays with fewer than n dimensions.
@@ -1892,4 +2580,44 @@ def listcatfirstdim(l):
         newl.append(a)
     
     return np.concatenate(newl)
+
+def smushColloc(t,x,tc,xc):
+    """
+    Combines point x variables and interior collocation xc variables.
+    
+    The sizes of each input must be as follows:
+     -  t: (Nt+1,)
+     -  x: (Nt+1,Nx)
+     - tc: (Nt,Nc)
+     - xc: (Nt,Nx,Nc)
+    with Nt the number of time periods, Nx the number of states in x, and Nc
+    the number of collocation points on the interior of each time period.
+    
+    Returns arrays T with size (Nt*(Nc+1) + 1,) and X with size 
+    (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
+    Also return Tc and Xc which only contain the collocation points.         
+    """
+    # Add some dimensions to make sizes compatible.
+    t.shape = (t.size,1)
+    x.shape += (1,)
+    
+    # Begin the smushing.
+    T = np.concatenate((t[:-1],tc),axis=1)    
+    X = np.concatenate((x[:-1,...],xc),axis=2)
+    
+    # Have to do some permuting for X. Order is now (t,c,x).
+    X = X.transpose((0,2,1))
+    Xc = xc.transpose((0,2,1))
+    
+    # Now flatten.
+    T.shape = (T.size,)
+    Tc = tc.flatten()
+    X = X.reshape((X.shape[0]*X.shape[1],X.shape[2]))
+    Xc = Xc.reshape((Xc.shape[0]*Xc.shape[1],Xc.shape[2]))
+    
+    # Then add final elements.
+    T = np.concatenate((T,t[-1:,0]))
+    X = np.concatenate((X,x[-1:,:,0]))
+    
+    return [T,X,Tc,Xc]
     

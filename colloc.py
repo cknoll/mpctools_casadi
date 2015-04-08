@@ -18,7 +18,7 @@ numerically unstable for high-order polynomials.
   March 2015
 """
 
-def colloc(n,include0=False,include1=False):
+def weights(n,include0=False,include1=False):
     """
     Returns collocation weights for order n.
     

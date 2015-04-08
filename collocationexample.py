@@ -21,7 +21,7 @@ Delta = .5
 Nt = 10
 Nc = 5
 
-[r,A,B,q] = colloc.colloc(Nc, True, True)
+[r,A,B,q] = colloc.weights(Nc, True, True)
 
 verbosity = 3
 [VAR, LB, UB, GUESS] = mpc.getCasadiVars(Nx,Nu,Nt,Nc)    
