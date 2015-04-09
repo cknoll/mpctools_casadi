@@ -834,6 +834,9 @@ def __generalVariableShapes(sizeDict,setpoint=[]):
     setpoint parameters. Any variable names in this list will have a
     corresponding entry suffixed with _sp. This is useful, e.g., for control
     problems where you may change the system setpoint.
+    
+    If N["t"] is 0, then each variable will only have one entry. This is useful
+    for steady-state target problems where you only want one x and z variable.
     """
 
     # Figure out what variables are supplied.
@@ -846,12 +849,20 @@ def __generalVariableShapes(sizeDict,setpoint=[]):
     except KeyError:
         raise KeyError("Entry 't' must be provided!")
     
+    # Need to define binary variable final to say whether we need to add final
+    # variables for some of the entries.
+    if Nt == 0:
+        Nt = 1
+        final = 0
+    else:
+        final = 1
+    
     # Now we're going to build a data structure that says how big each of the
     # variables should be. The first entry 1 if there should be N+1 copies of
     # the variable and 0 if there should be N. The second is a tuple of sizes.
     allvars = {
-        "x" : (Nt+1,("x",)),
-        "z" : (Nt+1,("z",)),
+        "x" : (Nt+final,("x",)),
+        "z" : (Nt+final,("z",)),
         "u" : (Nt,("u",)),
         "d" : (Nt,("d",)),
         "w" : (Nt,("w",)),
@@ -861,7 +872,7 @@ def __generalVariableShapes(sizeDict,setpoint=[]):
         "xc": (Nt,("x","c")),
         "zc": (Nt,("z","c")),        
     }
-    for v in set(setpoint).intersection(allvars):
+    for v in set(setpoint).intersection(allvars.keys()):
         allvars[v + "_sp"] = allvars[v]
     
     # Now loop through all the variables, and if we've been given all of the
@@ -1150,7 +1161,11 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
                 N[i] = 1
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
-        
+    
+    # Make sure these elements aren't present.
+    for i in ["y","v"]:
+        N.pop(i,None)
+    
     # Now get the shapes of all the variables that are present.
     allShapes = __generalVariableShapes(N,setpoint=sp.keys())
     if "c" not in N:
@@ -1159,7 +1174,7 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     # Sort out bounds on x0.
     for (d,v) in [(lb,-np.inf), (ub,np.inf), (guess,0)]:
         if "x" not in d.keys():
-            d["x"] = v*np.ones((N["t"],N["x"]))
+            d["x"] = v*np.ones((N["t"]+1,N["x"]))
     lb["x"][0,...] = x0
     ub["x"][0,...] = x0
     guess["x"][0,...] = x0
@@ -1167,7 +1182,7 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters. Note that
     # if this ends up empty, we just set it to None.
-    parNames = set(["p"] + sp.keys())
+    parNames = set(["p"] + [k + "_sp" for k in sp.keys()])
     parStruct = __casadiSymStruct(allShapes,parNames)
     if len(parStruct.keys()) == 0:
         parStruct = None
@@ -1190,7 +1205,7 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     # Make initial objective term.    
     if Pf is not None:
         if "x" in sp.keys():
-            obj = Pf([varStruct["x",-1],parStruct["x_sp",-1]])
+            obj = Pf([varStruct["x",-1],parStruct["x_sp",-1]])[0]
         else:
             obj = Pf([varStruct["x",-1]])[0]
     else:
@@ -1281,8 +1296,77 @@ def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
          f=f,g=g,h=h,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
          runOptimization=runOptimization)
 
+def sstarg_new(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
+    discretef=True,verbosity=5,timelimit=60,runOptimization=True):
+    """
+    Solves nonlinear steady-state target problem.
+    
+    N muste be a dictionary with at least entries "x" and "y". If parameters
+    are present, you must also specify a "p" entry.
+    
+    lb and ub should be dictionaries of bounds for the various variables.
+    guess should have the same structure.    
+    """
+    
+    # Copy dictionaries so we don't change the user inputs.
+    N = N.copy()
+    guess = guess.copy()    
+    
+    # Check specified sizes.
+    try:
+        for i in ["x","y"]:
+            if N[i] <= 0:
+                N[i] = 1
+    except KeyError:
+        raise KeyError("Invalid or missing entries in N dictionary!")
+    
+    # Now get the shapes of all the variables that are present.
+    N["t"] = 0
+    allShapes = __generalVariableShapes(N)
+    if "c" not in N:
+        N["c"] = 0
+    N["t"] = 1
+    
+    # Build Casadi symbolic structures. These need to be separate because one
+    # is passed as a set of variables and one is a set of parameters.
+    parNames = set(["p"])
+    parStruct = __casadiSymStruct(allShapes,parNames)
+        
+    varNames = set(["x","z","u","y"])
+    varStruct = __casadiSymStruct(allShapes,varNames)
+
+    # Now we fill up the parameters in the guess structure.
+    guess["p"] = p
+    
+    # Need to decide about algebraic constraints.
+    if "z" in allShapes.keys():
+        N["g"] = N["z"]
+    else:
+        N["g"] = None
+    N["h"] = N["y"]
+    N["f"] = N["x"]
+    
+    # Make objective term.    
+    if phi is not None and phiargs is not None:
+        args = []
+        for v in phiargs:
+            if v in varStruct.keys():
+                args.append(varStruct[v,0])
+            elif v in parStruct.keys():
+                args.append(parStruct[v,0])
+            else:
+                raise ValueError("Argumet %s is invalid! Must be 'x', 'u', 'y', or 'p'!" % (v,))
+        obj = phi(args)[0]
+    else:
+        obj = casadi.MX(0)
+       
+    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
+         f=f,g=g,h=h,verbosity=verbosity,discretef=discretef,
+         runOptimization=runOptimization)
+
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0),
-    f=None,g=None,h=None,l=None,largs=None,Delta=1,verbosity=5,runOptimization=True):
+    f=None,g=None,h=None,l=None,largs=[],Delta=1,discretef=True,
+    verbosity=5,runOptimization=True):
     """
     General wrapper for an optimal control problem (e.g. mpc or mhe).
     
@@ -1308,7 +1392,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
     # Sort out bounds and parameters.
     for (data,structure) in dataAndStructure:
         for v in set(data.keys()).intersection(structure.keys()):
-            for t in range(N["t"]):
+            for t in range(len(structure[v])):
                 structure[v,t] = data[v][t,...]
     
     # Smush together variables and parameters to get the constraints.
@@ -1324,7 +1408,8 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
         if func is None:
             N[name] = 0    
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
-        g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],Delta=Delta)
+        g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],
+        Delta=Delta,discretef=discretef)
      
     con = []
     conlb = np.zeros((0,))
@@ -1336,8 +1421,9 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
             conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
     con = casadi.vertcat(con)
     
-    for t in range(N["t"]):
-        obj += constraints["cost"][t]
+    if "cost" in constraints.keys():
+        for t in range(N["t"]):
+            obj += constraints["cost"][t]
         
     # If we want an optimization, then do some post-processing. Otherwise, just
     # return the solver object.
@@ -1359,23 +1445,23 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
         # Build ControlSolver object and return that.
         returnDict = ControlSolver(var,varlb,varub,varguess,
             obj,con,conlb,conub,par,parval,verbosity=verbosity,timelimit=60)
-    
+
     return returnDict
 
-def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,largs=[],Ncolloc=0,Delta=1):
+def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
+    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True):
     """
     Creates general state evolution constraints for the following system:
     
-       x^+ = f(x,z,u,d,w,p)                      \n
-       g(x,z,p) = 0                              \n
-       y = h(x,z,p) + v                          \n
+       x^+ = f(x,z,u,w,p)                      \n
+       g(x,z,w,p) = 0                          \n
+       y = h(x,z,p) + v                        \n
        
     The variables are intended as follows:
     
         x: differential states                  \n
         z: algebraic states                     \n
         u: control actions                      \n
-        d: modeled state disturbances           \n
         w: unmodeled state disturbances         \n
         p: fixed system parameters              \n
         y: meadured outputs                     \n
@@ -1408,15 +1494,15 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,
     """
     
     # Figure out what variables are supplied.
-    allvars = set(["x","z","u","d","w","p","y","v","xc","zc"])
+    allvars = set(["x","z","u","w","p","y","v","xc","zc","x_sp","u_sp"])
     givenvars = allvars.intersection(var.keys())
     givenvarscolloc = givenvars.intersection(["x","z"])    
     
     # Now sort out arguments for each function.
     isGiven = lambda v: v in givenvars # Membership function.
     args = {
-        "f" : filter(isGiven, ["x","z","u","d","w","p"]),
-        "g" : filter(isGiven, ["x","z","p"]),
+        "f" : filter(isGiven, ["x","z","u","w","p"]),
+        "g" : filter(isGiven, ["x","z","w","p"]),
         "h" : filter(isGiven, ["x","z","p"]),
         "l" : filter(isGiven, largs)
     }
@@ -1446,7 +1532,9 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,
                 raise KeyError("Entry %sc not found in vars!" % (v,))
             collocvar[v] = []
             for k in range(Nt):
-                collocvar[v].append([var[v][k]] + [var[v+"c"][k][:,j] for j in range(Ncolloc)] + [var[v][k+1]])
+                collocvar[v].append([var[v][k]]
+                    + [var[v+"c"][k][:,j] for j in range(Ncolloc)]
+                    + [var[v][k+1 % len(var[v])]])
     
         def getCollocArgs(k,t,j):
             """
@@ -1470,8 +1558,8 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,l=None,
             if Ncolloc == 0:
                 # Just use discrete-time equations.
                 thiscon = f(fargs[t])[0]
-                if "x" in givenvars:
-                    thiscon -= var["x"][t+1]
+                if "x" in givenvars and discretef:
+                    thiscon -= var["x"][t+1 % len(var["x"])]
                 thesecons = [thiscon] # Only one constraint per timestep.
             else:
                 # Need to do collocation stuff.
@@ -1881,14 +1969,6 @@ class ControlSolver(object):
             solver.setOption("jac_d_constant","yes")
         solver.init()
         
-        solver.setInput(self.guess,"x0")
-        solver.setInput(self.lb,"lbx")
-        solver.setInput(self.ub,"ubx")
-        solver.setInput(self.conlb,"lbg")
-        solver.setInput(self.conub,"ubg")
-        if self.par is not None:
-            solver.setInput(self.par,"p")
-        
         # Finally, save the solver.
         self.__solver = solver
         
@@ -1898,7 +1978,16 @@ class ControlSolver(object):
         """
         # Solve the problem and get optimal variables.
         starttime = time.clock()
-        solver = self.__solver        
+        solver = self.__solver
+
+        solver.setInput(self.guess,"x0")
+        solver.setInput(self.lb,"lbx")
+        solver.setInput(self.ub,"ubx")
+        solver.setInput(self.conlb,"lbg")
+        solver.setInput(self.conub,"ubg")
+        if self.par is not None:
+            solver.setInput(self.par,"p")
+        
         solver.evaluate()
         self.__varval = self.__var(solver.getOutput("x"))
         self.__objval = float(solver.getOutput("f"))
@@ -1908,6 +1997,8 @@ class ControlSolver(object):
         status = solver.getStat("return_status")
         if self.verbosity > 0:
             print("Solver Status:", status)
+            if status == "NonIpopt_Exception_Thrown":
+                print("***Warning: NaN or Inf encountered during function evaluation.")
         self.stats["status"] = status
         self.stats["time"] = endtime - starttime
          
@@ -1934,19 +2025,25 @@ class ControlSolver(object):
             for t in range(tmin,tmax):
                 self.guess[k,t-toffset] = self.var[k,t]
     
-    def fixvar(self,var,t,val):
+    def fixvar(self,var,t,val,indices=None):
         """
         Fixes variable var at time t to val.
+        
+        Indices can be specified as a list to fix only a subset of values.
         """
-        self.lb[var,t] = val
-        self.ub[var,t] = val
-        self.guess[var,t] = val
+        
+        if indices is None:
+            self.lb[var,t] = val
+            self.ub[var,t] = val
+            self.guess[var,t] = val
+        else:
+            self.lb[var,t,indices] = val
+            self.ub[var,t,indices] = val
+            self.guess[var,t,indices] = val
         
         self.__solver.setInput(self.lb,"lbx")
         self.__solver.setInput(self.ub,"ubx")
         self.__solver.setInput(self.guess,"x0")       
-
-
 
 # This is the old version that we're keeping temporarily for compatibility.
 
@@ -2299,7 +2396,7 @@ class TargetSelector(object):
         #self.solver.setOption("check_derivatives_for_naninf","yes")
         self.solver.setOption("eval_errors_fatal",True)
         self.solver.init()
-        if not unique or True:
+        if not unique:
             self.solver.setInput(np.zeros((Nz-Ny,)),"lbg")
             self.solver.setInput(np.zeros((Nz-Ny,)),"ubg")
         self.solver.setInput(np.zeros((Nz,)),"x0")
@@ -2443,6 +2540,8 @@ def zoomaxis(axes=None,xscale=None,yscale=None):
 
 # First, we grab a few things from the CasADi module.
 DMatrix = casadi.DMatrix
+MX = casadi.MX
+vertcat = casadi.vertcat
 
 # Grab pdb function to emulate Octave/Matlab's keyboard().
 keyboard = pdb.set_trace
