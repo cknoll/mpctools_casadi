@@ -45,27 +45,34 @@ largely unnecessary.
 # Building CasADi Functions
 # =================================
 
-def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None):
+def getCasadiFunc(f,Nx,Nu=0,Nd=0,name=None,vector=False):
     """
     Takes a function handle and turns it into a Casadi function.
     
     f should be defined to take three keyword arguments x, u, and d. It should
     be written so that x, u, and d are python LISTs of length Nx, Nu, and Nd
     respectively. It must return a LIST of length Nx.
+    
+    Alternatively, if f is written to accept numpy vectors and return a single
+    numpy vector, then set vector=True.
     """
     
     # Create symbolic variables.
     [args, invar, _] = __getCasadiSymbols(Nx,Nu,Nd)    
     
-    # Create symbolic function.
-    outvar = [casadi.vertcat(f(**args))]
+    # Create symbolic function. If not vectorized, then need to call vertcat.
+    if vector:
+        outvar = [casadi.vertcat([f(**args)])]
+    else:
+        outvar = [casadi.vertcat(f(**args))]
+    
     fcasadi = casadi.MXFunction(invar,outvar)
     fcasadi.setOption("name",name if name is not None else "f")
     fcasadi.init()
     
     return fcasadi
 
-def getCasadiFuncGeneralArgs(f,varsizes,varnames=None,funcname="f"):
+def getCasadiFuncGeneralArgs(f,varsizes,varnames=None,funcname="f",scalar=False):
     """
     Takes a function handle and turns it into a Casadi function.
     
@@ -77,17 +84,27 @@ def getCasadiFuncGeneralArgs(f,varsizes,varnames=None,funcname="f"):
     This version is more general because it lets you specify arbitrary
     arguments, but you have to make sure you do everything properly.
     """
+    # Decide whether to use SX or MX.    
+    if scalar:
+        XSym = casadi.SX.sym
+        XFunction = casadi.SXFunction
+    else:
+        XSym = casadi.MX.sym
+        XFunction = casadi.MXFunction
     
     # Create symbolic variables.
     if varnames is None:
         varnames = ["x%d" % (i,) for i in range(len(varsizes))]
     elif len(varsizes) != len(varnames):
         raise ValueError("varnames must be the same length as varsizes!")    
-    args = [casadi.MX.sym(name,size) for (name,size) in zip(varnames,varsizes)]
+    args = [XSym(name,size) for (name,size) in zip(varnames,varsizes)]
     
     # Now evaluate function and make a Casadi object.    
-    fval = [casadi.vertcat(f(*args))]
-    fcasadi = casadi.MXFunction(args,fval)
+    if scalar:
+        fval = [f(*args)]
+    else:
+        fval = [casadi.vertcat(f(*args))]
+    fcasadi = XFunction(args,fval)
     fcasadi.setOption("name",funcname)
     fcasadi.init()
     
@@ -690,6 +707,27 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
     
     return F
 
+def rk4(f,x0,par,Delta=1,M=1):
+    """
+    Does M RK4 timesteps of function f with variables x0 and parameters par.
+    
+    The first argument of f must be var, followed by any number of parameters
+    given in a list in order.
+    
+    Note that var and the output of f must add like numpy arrays.
+    """
+    h = Delta/M
+    x = x0
+    j = 0
+    while j < M: # For some reason, a for loop creates problems here.       
+        k1 = f(x,*par)
+        k2 = f(x + k1*h/2,*par)
+        k3 = f(x + k2*h/2,*par)
+        k4 = f(x + k3*h,*par)
+        x += (k1 + 2*k2 + 2*k3 + k4)*h/6
+        j += 1
+    return x
+
 # =================================
 # MHE and Functions
 # =================================
@@ -817,7 +855,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
                   
     return returnDict
 
-def __generalVariableShapes(sizeDict,setpoint=[]):
+def __generalVariableShapes(sizeDict,setpoint=[],delta=[]):
     """
     Generates variable shapes from the size dictionary N.
     
@@ -834,6 +872,10 @@ def __generalVariableShapes(sizeDict,setpoint=[]):
     setpoint parameters. Any variable names in this list will have a
     corresponding entry suffixed with _sp. This is useful, e.g., for control
     problems where you may change the system setpoint.
+    
+    Optional argument delta is similar, but it defines decision variables to
+    calculate the difference between successive time points. This is useful for
+    rate-of-change penalties or constraints for control problems.
     
     If N["t"] is 0, then each variable will only have one entry. This is useful
     for steady-state target problems where you only want one x and z variable.
@@ -872,9 +914,19 @@ def __generalVariableShapes(sizeDict,setpoint=[]):
         "xc": (Nt,("x","c")),
         "zc": (Nt,("z","c")),        
     }
-    for v in set(setpoint).intersection(allvars.keys()):
-        allvars[v + "_sp"] = allvars[v]
-    
+    # Here we define any "extra" variables like setpoints. The syntax is a
+    # tuple with the prefix string, the list of variables, the suffix string,
+    # and the number of entries (None to use the default value).
+    extraEntries = [
+        ("", setpoint, "_sp", None), # These are parameters for sepoints.
+        ("D", delta, "", None), # These are variables to calculate deltas.
+        ("", delta, "_prev", 1), # This is a parameter for the previous value.    
+    ]
+    for (prefix, var, suffix, num) in extraEntries:
+        for v in set(var).intersection(allvars.keys()):
+            thisnum = num if num is not None else allvars[v][0]
+            allvars[prefix + v + suffix] = (thisnum, allvars[v][1])
+        
     # Now loop through all the variables, and if we've been given all of the
     # necessary sizes, then add that variable
     shapeDict = {}
@@ -1122,7 +1174,7 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
 # framework. Time will tell whether or not they work better.
 
 def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
-    verbosity=5,timelimit=60,Delta=1,runOptimization=True):
+    uprev=None,verbosity=5,timelimit=60,Delta=1,runOptimization=True):
     """
     Solves nonlinear MPC problem.
     
@@ -1146,6 +1198,10 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     Similarly, Pf is assumed to be Pf(x,x_sp) if a setpoint for x is supplied,
     and it is left as Pf(x) otherwise.    
     
+    To include rate of change penalties or constraints, set uprev so a vector
+    with the previous u entry. Bound constraints can then be entered with the
+    key "Du" in the lb and ub structs. "Du" can also be specified as in largs.    
+    
     The return value is a dictionary with the values of the optimal decision
     variables and also some time vectors.
     """    
@@ -1167,7 +1223,8 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
         N.pop(i,None)
     
     # Now get the shapes of all the variables that are present.
-    allShapes = __generalVariableShapes(N,setpoint=sp.keys())
+    deltaVars = ["u"] if uprev is not None else []
+    allShapes = __generalVariableShapes(N,setpoint=sp.keys(),delta=deltaVars)
     if "c" not in N:
         N["c"] = 0    
     
@@ -1182,18 +1239,23 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters. Note that
     # if this ends up empty, we just set it to None.
-    parNames = set(["p"] + [k + "_sp" for k in sp.keys()])
+    parNames = set(["p"] + [k + "_sp" for k in sp.keys()] + [k + "_prev" for k in deltaVars])
     parStruct = __casadiSymStruct(allShapes,parNames)
     if len(parStruct.keys()) == 0:
         parStruct = None
         
-    varNames = set(["x","u","xc","zc"])
+    varNames = set(["x","u","xc","zc"] + ["D" + k for k in deltaVars])
     varStruct = __casadiSymStruct(allShapes,varNames)
 
     # Add parameters and setpoints to the guess structure.
     guess["p"] = p
     for v in sp.keys():
         guess[v + "_sp"] = sp[v]
+    if uprev is not None:
+        # Need uprev to have shape (1, N["u"]).
+        uprev = np.array(uprev).flatten()
+        uprev.shape = (1,uprev.size)
+        guess["u_prev"] = uprev
     
     # Need to decide about algebraic constraints.
     if "z" in allShapes.keys():
@@ -1221,7 +1283,7 @@ def nmpc_new(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=Non
     
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
          f=f,g=g,h=None,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
-         runOptimization=runOptimization)
+         runOptimization=runOptimization,deltaVars=deltaVars)
 
 def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     verbosity=5,largs=["w","v"],timelimit=60,Delta=1,runOptimization=True):
@@ -1365,7 +1427,7 @@ def sstarg_new(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
          runOptimization=runOptimization)
 
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0),
-    f=None,g=None,h=None,l=None,largs=[],Delta=1,discretef=True,
+    f=None,g=None,h=None,l=None,largs=[],Delta=1,discretef=True,deltaVars=[],
     verbosity=5,runOptimization=True):
     """
     General wrapper for an optimal control problem (e.g. mpc or mhe).
@@ -1409,12 +1471,12 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
             N[name] = 0    
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],
-        Delta=Delta,discretef=discretef)
+        Delta=Delta,discretef=discretef,deltaVars=deltaVars)
      
     con = []
     conlb = np.zeros((0,))
     conub = conlb.copy()
-    for f in ["state","measurement","algebra"]:
+    for f in ["state","measurement","algebra","delta"]:
         if f in constraints.keys():
             con += flattenlist(constraints[f]["con"])
             conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
@@ -1449,7 +1511,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
     return returnDict
 
 def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
-    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True):
+    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True,deltaVars=[]):
     """
     Creates general state evolution constraints for the following system:
     
@@ -1486,6 +1548,11 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
     If Ncolloc is not None, var must also have entries "xc" and "zc". Each
     entry must have Ncolloc as the size of the second dimension.
     
+    deltaVars should be a list of variables to make constraints for time
+    differences. For each entry in this list, var must have the appropriate
+    keys, e.g. if deltaVars = ["u"], then var must have "u", "Du", and "u_prev"
+    entries or else this will error.    
+    
     Returns a dictionary with entries "state", "algebra", and "measurement".
     Note that the relevant fields will be missing if f, g, or h are set to
     None. Each entry in the return dictionary will be a list of lists, although
@@ -1494,8 +1561,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
     """
     
     # Figure out what variables are supplied.
-    allvars = set(["x","z","u","w","p","y","v","xc","zc","x_sp","u_sp"])
-    givenvars = allvars.intersection(var.keys())
+    givenvars = set(var.keys())    
     givenvarscolloc = givenvars.intersection(["x","z"])    
     
     # Now sort out arguments for each function.
@@ -1615,6 +1681,22 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
         ub = lb.copy()
         returnDict["measurement"] = dict(con=measurement,lb=lb,ub=ub)
     
+    # Delta variable constraints.
+    if len(deltaVars) > 0:
+        deltaconstraints = []
+        numentries = 0
+        for v in deltaVars:
+            if not set([v,"D"+v, v+"_prev"]).issubset(var.keys()):
+                raise KeyError("Variable '%s' must also have entries 'D%s' and '%s_prev'!" % (v,v,v))
+            thisdelta = [var["D" + v][0] - var[v][0] + var[v + "_prev"][0]]
+            for t in range(1,len(var[v])):
+                thisdelta.append(var["D" + v][t] - var[v][t] + var[v][t-1])
+            deltaconstraints.append(thisdelta)
+            numentries += len(var[v])*np.product(var[v][0].shape)
+        lb = np.zeros((numentries,))
+        ub = lb.copy()
+        returnDict["delta"] = dict(con=deltaconstraints,lb=lb,ub=ub)
+          
     # Stage costs.
     if l is not None:
         largs = getArgs("l",tintervals,var)
@@ -1845,8 +1927,6 @@ class ControlSolver(object):
     
     Users have access parameter and guess fields to adjust parameters on the
     fly and reuse past trajectories in subsequent optimizations, etc.
-    
-    WORK IN PROGRESS
     """
     
     # We use the attributes __varguess and __parval to store the values for
@@ -2282,13 +2362,13 @@ class OneStepSimulator(object):
     Simulates a continuous-time system.
     """
     
-    def __init__(self,ode,Delta,Nx,Nu,Nd=0,Nw=0):
+    def __init__(self,ode,Delta,Nx,Nu,Nd=0,Nw=0,vector=False):
         """
         Initialize by specifying model and sizes of everything.
         """
         # Create variables.
-        x = casadi.MX.sym("x",Nx)
-        p = casadi.MX.sym("p",Nu+Nd+Nw)
+        x = casadi.SX.sym("x",Nx)
+        p = casadi.SX.sym("p",Nu+Nd+Nw)
         u = p[:Nu]
         odeargs = {"x":x}
         if Nu > 0:
@@ -2308,9 +2388,14 @@ class OneStepSimulator(object):
         self.Nw = Nw
         self.Delta = Delta
         
+        # Decide how to call ode.
+        if vector:
+            f = ode(**odeargs)
+        else:
+            f = casadi.vertcat(ode(**odeargs))    
+        
         # Now define integrator for simulation.
-        model = casadi.MXFunction(casadi.daeIn(x=x,p=p),
-                                  casadi.daeOut(ode=casadi.vertcat(ode(**odeargs))))
+        model = casadi.SXFunction(casadi.daeIn(x=x,p=p),casadi.daeOut(ode=f))
         model.init()
         
         self.__Integrator = casadi.Integrator("cvodes",model)

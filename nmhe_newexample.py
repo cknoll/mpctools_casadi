@@ -49,24 +49,25 @@ def ode(x,u,w=[0,0,0]): # We define the model with u, but there isn't one.
     [cA, cB, cC] = x[:Nx]    
     rate1 = k1*cA - k_1*cB*cC    
     rate2 = k2*cB**2 - k_2*cC
-    return [-rate1 + w[0], rate1 - 2*rate2 + w[1], rate1 + rate2 + w[2]]    
+    return np.array([-rate1 + w[0], rate1 - 2*rate2 + w[1], rate1 + rate2 + w[2]])    
 
 def measurement(x):
-    return [RT*(x[0] + x[1] + x[2])]
-
+    return RT*(x[0] + x[1] + x[2])
+        
 # Need to use getCasadiFuncGeneralArgs because arguments are different.
-ode_casadi = mpc.getCasadiFuncGeneralArgs(ode,[Nx,Nu,Nw],["x","u","w"],"F")
+ode_casadi = mpc.getCasadiFuncGeneralArgs(ode,[Nx,Nu,Nw],["x","u","w"],"F",scalar=True)
 model = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd=0, Nw=Nw)    
 
 # Convert continuous-time f to explicit discrete-time F with RK4.
 F = mpc.getRungeKutta4(ode_casadi,Delta,M=2,argsizes=[Nx,Nu,Nw])
-H = mpc.getCasadiFuncGeneralArgs(measurement,[Nx],["x"],"H")
+H = mpc.getCasadiFuncGeneralArgs(measurement,[Nx],["x"],"H",scalar=True)
 
 # Define stage costs.
-l = lambda w,v: [sigma_w**-2*casadi.sum_square(w) + sigma_v**-2*casadi.sum_square(v)] 
-l = mpc.getCasadiFuncGeneralArgs(l,[Nw,Nv],["w","v"],"l")
-lx = lambda x: [mpc.mtimes(x.T,linalg.inv(P),x)]
-lx = mpc.getCasadiFuncGeneralArgs(lx,[Nx],["x"],"lx")
+l = lambda w,v: sigma_w**-2*casadi.sum_square(w) + sigma_v**-2*casadi.sum_square(v)
+lx = lambda x: mpc.mtimes(x.T,linalg.inv(P),x)
+
+l = mpc.getCasadiFuncGeneralArgs(l,[Nw,Nv],["w","v"],"l",scalar=True)
+lx = mpc.getCasadiFuncGeneralArgs(lx,[Nx],["x"],"lx",scalar=True)
 
 # First simulate everything.
 w = sigma_w*random.randn(Nsim,Nw)

@@ -32,20 +32,26 @@ Q = [np.diag([1,0])]
 q = [np.zeros((Nx,1))]
 R = [np.eye(Nu)]
 
-# Convert everything to function form.
-Fdiscrete = lambda x,u : list(mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
-F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
+# First define alternate SX versions that may be faster.
+F_func = lambda x,u : mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u)
+F_SX = [mpc.getCasadiFuncGeneralArgs(F_func,[Nx,Nu],["x","u"],"F",scalar=True)]
 
-l = lambda x,u : [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x) + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)]
-l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
+l_func = lambda x,u : mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x) + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)
+l_SX = [mpc.getCasadiFuncGeneralArgs(l_func,[Nx,Nu],["x","u"],"l",scalar=True)]
 
-Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)]
-Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
+Pf_func = lambda x: mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)
+Pf_SX = mpc.getCasadiFuncGeneralArgs(Pf_func,[Nx],["x"],"Pf",scalar=True)
+
+# Convert everything to MX function form.
+F = [mpc.getCasadiFunc(lambda x,u : list(F_func(x,u)),Nx,Nu,Nd,"F")]
+l = [mpc.getCasadiFunc(lambda x,u : [l_func(x,u)],Nx,Nu,Nd,"l")]
+Pf = mpc.getCasadiFunc(lambda x : [Pf_func(x)],Nx,0,0,"Pf")
 
 # Now make TimeInvariantSolver object.
 nsim = 100
 verbosity = 0
 solver = mpc.nmpc(F,l,[0,0],Nt,Pf,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
+solver_SX = mpc.nmpc(F_SX,l_SX,[0,0],Nt,Pf_SX,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
 
 # Solve.
 t = np.arange(nsim+1)*dt
@@ -53,7 +59,7 @@ xcl = {}
 ucl = {}
 solvetimes = {}
 tottimes = {}
-for method in ["nmpc","lmpc","solver"]:
+for method in ["nmpc","lmpc","solver","solver_SX"]:
     starttime = time.clock()
     x0 = np.array([10,0])
     xcl[method] = np.zeros((Nx,nsim+1))
@@ -66,9 +72,13 @@ for method in ["nmpc","lmpc","solver"]:
             sol = mpc.nmpc(F,l,x0,Nt,Pf,bounds=bounds,verbosity=verbosity)
         elif method == "lmpc":
             sol = mpc.lmpc(A,B,x0,Nt,Q,R,q=q,bounds=bounds,verbosity=verbosity)
-        elif method == "solver":
-            solver.fixvar("x",0,x0)
-            sol = solver.solve()
+        elif method == "solver" or method == "solver_SX":
+            if method == "solver":            
+                solver.fixvar("x",0,x0)
+                sol = solver.solve()
+            else:
+                solver_SX.fixvar("x",0,x0)
+                sol = solver.solve()
             
             # Need to flip these because time comes first for these guys.
             sol["x"] = sol["x"].T

@@ -31,19 +31,22 @@ def ode(x,u,d):
     # Now create the ODE.
     rate = k0*c*np.exp(-E/T)
         
-    dxdt = [
+    dxdt = np.array([
         F0*(c0 - c)/(np.pi*r**2*h) - rate,
         F0*(T0 - T)/(np.pi*r**2*h)
             - dH/(rho*Cp)*rate
             + 2*U/(r*rho*Cp)*(Tc - T),    
         (F0 - F)/(np.pi*r**2)
-    ]
-    
+    ])
     return dxdt
 
+def ode_rk4(x,u,d):
+    return mpc.rk4(ode,x,[u,d],Delta,1)
+
 # Turn into casadi function and simulator.
-ode_casadi = mpc.getCasadiFunc(ode,Nx,Nu,Nd,name="ode")
-cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd)
+ode_casadi = mpc.getCasadiFuncGeneralArgs(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode",scalar=True)
+ode_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_rk4,[Nx,Nu,Nd],["x","u","d"],funcname="ode_rk4",scalar=True)
+cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd, vector=True)
 
 # Steady-state values.
 cs = .878
@@ -77,7 +80,7 @@ model_integrator = mpc.getCasadiIntegrator(ode,Delta,Nx,Nu,Nd,name="cstr")
 [K, Pi] = mpc.dlqr(A,B,Q,R)
 
 # Define casadi functions.
-Fnonlinear = mpc.getRungeKutta4(ode_casadi, Delta, d=True)
+Fnonlinear = ode_rk4_casadi
 
 def measurement(x,d):
     return [x]
@@ -130,9 +133,10 @@ guessnonlin = sp.copy()
 
 # Control bounds.
 umax = np.array([.1*Tcs,.35*Fs])
+dumax = .2*umax # Maximum for rate-of-change.
 bounds = dict(uub=[us + umax],ulb=[us - umax])
-ub = {"u" : np.tile(us + umax, (Nt,1))}
-lb = {"u" : np.tile(us - umax, (Nt,1))}
+ub = {"u" : np.tile(us + umax, (Nt,1)), "Du" : np.tile(dumax, (Nt,1))}
+lb = {"u" : np.tile(us - umax, (Nt,1)), "Du" : np.tile(-dumax, (Nt,1))}
 
 N = {"x":Nx, "u":Nu, "p":Nd, "t":Nt, "y":Ny}
 p = np.tile(ds, (Nt,1)) # Parameters for system.
@@ -147,6 +151,7 @@ nmpc_commonargs = {
     "l" : l,
     "sp" : sp,
     "runOptimization" : False,
+    "uprev" : us,
 }
 solvers = {}
 solvers["lmpc"] = mpc.nmpc_new(f=Flinear,guess=guesslin,**nmpc_commonargs)
@@ -219,6 +224,9 @@ for method in solvers.keys():
         ucl[method][t,:] = thisu
         thisx = cstr.sim(thisx,thisu,ds)
         xcl[method][t+1,:] = thisx
+        
+        # Update previous u.
+        solvers[method].par["u_prev",0] = ucl[method][t,:]
 
 # Define plotting function.
 def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},keys=None,bounds=None,ilegend=0):
