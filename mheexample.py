@@ -6,7 +6,6 @@ from numpy import random
 from scipy import linalg
 import mpc_tools_casadi as mpc
 import matplotlib.pyplot as plt
-import casadi
 
 random.seed(927) # Seed random number generator.
 
