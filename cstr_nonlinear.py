@@ -84,7 +84,10 @@ def ode_augmented(x,u,d=ds):
     return dxdt
 cstraug = mpc.OneStepSimulator(ode_augmented, Delta, Nx + Nid, Nu, Nd, vector=True)
 
-def ode_augmented_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
+def ode_augmented_rk4(x,u,d=ds):
+    return mpc.rk4(ode_augmented,x,[u,d],Delta,2)
+
+def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
     return mpc.rk4(ode_augmented,x,[u,d],Delta,2) + w
 
 def measurement(x,d=ds):
@@ -95,7 +98,8 @@ ys = measurement(xaugs)
 
 # Turn into casadi functions.
 ode_augmented_casadi = mpc.getCasadiFuncGeneralArgs(ode_augmented,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented",True)
-ode_augmented_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_augmented_rk4,[Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4",True)
+ode_augmented_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_augmented_rk4,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",True)
+ode_estimator_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_estimator_rk4,[Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4",True)
 measurement_casadi = mpc.getCasadiFuncGeneralArgs(measurement,[Nx+Nid,Nd],["xaug","d"],"measurement",True)
 
 # Now get a linearization at this steady state.
@@ -116,32 +120,33 @@ Nt = 5
 
 def stagecost(x,u,xsp,usp):
     # Return deviation variables.
-    dx = x - xsp
+    dx = x[:Nx] - xsp[:Nx]
     du = u - usp
     
     # Calculate stage cost.
     return [mpc.mtimes(dx.T,mpc.DMatrix(Q),dx) + mpc.mtimes(du.T,mpc.DMatrix(R),du)]
-l = mpc.getCasadiFuncGeneralArgs(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],funcname="l")
+l = mpc.getCasadiFuncGeneralArgs(stagecost,[Nx+Nid,Nu,Nx+Nid,Nu],["x","u","x_sp","u_sp"],funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
-    dx = x - xsp
+    dx = x[:Nx] - xsp[:Nx]
     
     # Calculate cost to go.
     return [mpc.mtimes(dx.T,mpc.DMatrix(Pi),dx)]
-Pf = mpc.getCasadiFuncGeneralArgs(costtogo,[Nx,Nx],["x","s_xp"],funcname="Pf")
+Pf = mpc.getCasadiFuncGeneralArgs(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
 
 ubounds = np.array([.05*Tcs, .5*Fs])
 bounds = dict(uub=[us + ubounds],ulb=[us - ubounds])
 lb = {"u" : np.tile(us - ubounds, (Nt,1))}
 ub = {"u" : np.tile(us + ubounds, (Nt,1))}
 
-N = {"x":Nx, "u":Nu, "p":Nd, "t":Nt}
+N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nt}
 p = np.tile(ds, (Nt,1)) # Parameters for system.
-sp = {"x" : np.tile(xs, (Nt+1,1)), "u" : np.tile(us, (Nt,1))}
+sp = {"x" : np.tile(xaugs, (Nt+1,1)), "u" : np.tile(us, (Nt,1))}
 guess = sp.copy()
 x0 = xs
-nmpc = mpc.nmpc_new(ode_rk4_casadi,l,N,x0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
+xaug0 = xaugs
+nmpc = mpc.nmpc_new(ode_augmented_rk4_casadi,l,N,xaug0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
     verbosity=0,timelimit=60,runOptimization=False)
 
 # Define augmented system with disturbance model.
@@ -174,10 +179,10 @@ Rvinv = linalg.inv(Rv)
 lest = lambda w,v: mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
 lest = mpc.getCasadiFuncGeneralArgs(lest,[Nw,Nv],["w","v"],"l",True)
 
-lxest = lambda x: mpc.mtimes(x.T,Qwinv,x)
+#lxest = lambda x: mpc.mtimes(x.T,Qwinv,x)
 #lxest = mpc.getCasadiFuncGeneralArgs(lxest,[Nx + Nid],["x"],"lx",True)
 #x0bar = xaugs
-lxext = None # We shouldn't need a prior.
+lxest = None # We shouldn't need a prior.
 x0bar = None
 
 # Define plotting function.
@@ -213,13 +218,13 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
 useMeasuredState = False
 Nsim = 50
 t = np.arange(Nsim+1)*Delta
-for linear in [False]:
+for linear in [True,False]:
     x = np.zeros((Nsim+1,Nx))
     x[0,:] = xs # Start at steady state.    
     
     u = np.zeros((Nsim,Nu))
     usp = np.zeros((Nsim,Nu))
-    xsp = np.zeros((Nsim,Nx))
+    xaugsp = np.zeros((Nsim,Nx+Nid))
     y = np.zeros((Nsim+1,Ny))
     err = y.copy()
     v = y.copy()
@@ -230,7 +235,7 @@ for linear in [False]:
     
     # Pick disturbance, setpoint, and initial condition.
     d = np.zeros((Nsim,Nd))
-    d[:,0] = (t[:-1] >= 10)*.1*F0s
+    d[:,0] = (t[:-1] >= 10)*(t[:-1] <= 30)*.1*F0s
     d += ds
     
     ysp = np.tile(xs, (Nsim,1))
@@ -253,9 +258,9 @@ for linear in [False]:
             lb=sstarglb,ub=sstargub,guess=sstargguess,p=sstargp,
             verbosity=0,discretef=False,runOptimization=False)
         estimatorguess = {}
-        estimatorguess["x"] = np.tile(xaugs, (2,1))
+        estimatorguess["x"] = np.tile(xaugs, (1,1))
         estimatorguess["v"] = np.zeros((1,Nv))
-        estimatorguess["w"] = np.zeros((1,Nw))
+        estimatorguess["w"] = np.zeros((0,Nw))
     
     for n in range(Nsim):
         # Take plant measurement.
@@ -272,11 +277,11 @@ for linear in [False]:
             dhat = xhat[n,Nx:]
             rhs = np.concatenate((Bd.dot(dhat), H.dot(ysp[n,:] - ys - Cd.dot(dhat))))
             qsp = linalg.solve(G,rhs) # Similar to "G\rhs" in Matlab.
-            xsp[n,:] = qsp[:Nx] + xs
+            xaugsp[n,:Nx] = qsp[:Nx] + xs
             usp[n,:] = qsp[Nx:] + us
             
             # Regulator.
-            u[n,:] = K.dot(xhat[n,:Nx] - xsp[n,:]) + usp[n,:]     
+            u[n,:] = K.dot(xhat[n,:Nx] - xaugsp[n,:Nx]) + usp[n,:]     
         else:
             print "(%3d) " % (n,), 
             
@@ -290,24 +295,30 @@ for linear in [False]:
             else:
                 # Do full-information estimation.
                 N = {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":n}
-                estsol = mpc.nmhe_new(f=ode_augmented_rk4_casadi,h=measurement_casadi,u=u[:n+1,:],y=y[:n+1,:],l=lest,N=N,
+                estsol = mpc.nmhe_new(f=ode_estimator_rk4_casadi,h=measurement_casadi,u=u[:n,:],y=y[:n+1,:],l=lest,N=N,
                     lx=lxest,x0bar=x0bar,p=np.tile(ds,(n+1,1)),verbosity=0,guess=estimatorguess,timelimit=5)
                 
-                print "Estimator: %s, " % (estsol["status"],),             
-                xhat[n,:] = estsol["x"][-2,:] # Update our guess.
+                print "Estimator: %s, " % (estsol["status"],),
+                #mpc.keyboard()             
+                xhat[n,:] = estsol["x"][-1,:] # Update our guess.
                 
                 # Update estimator guess.
                 estimatorguess = {}
                 for k in ["x","w","v"]:
-                    estimatorguess[k] = np.concatenate((estsol[k][:,...],estsol[k][-1:,...]))                            
+                    if k in estsol.keys():
+                        estimatorguess[k] = np.concatenate((estsol[k][:,...],estsol[k][-1:,...]))
+                    elif n == 0 and k == "w":
+                        estimatorguess[k] = np.zeros((1,Nw))
+                    else:
+                        raise KeyError("Entry '%s' missing from estimator solution. Something went wrong." % (k,))
                 
                 dguess = ds
                 sstarg.par["p",0] = ds                
                 
             # Use nonlinear steady-state target selector.
             xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:])) # Setpoint for augmented state.
-            x0hat = xhat[n,:Nx]
-        
+            x0hat = xhat[n,:]
+            
             if n == 0:
                 uguess = us
             else:
@@ -319,7 +330,7 @@ for linear in [False]:
             sstarg.guess["u",0] = uguess
             sstarg.solve()
             
-            xsp[n,:] = np.squeeze(sstarg.var["x",0,:Nx])
+            xaugsp[n,:] = np.squeeze(sstarg.var["x",0,:])
             usp[n,:] = np.squeeze(sstarg.var["u",0,:])
 
             print "Target: %s, " % (sstarg.stats["status"],), 
@@ -327,7 +338,8 @@ for linear in [False]:
                 import pdb; pdb.set_trace()
                 break
 
-            nmpc.par["x_sp"] = [xsp[n,:]]*(Nt + 1)
+            # Now use nonlinear MPC controller.
+            nmpc.par["x_sp"] = [xaugsp[n,:]]*(Nt + 1)
             nmpc.par["u_sp"] = [usp[n,:]]*Nt
             nmpc.fixvar("x",0,x0hat)            
             nmpc.solve()
@@ -349,6 +361,9 @@ for linear in [False]:
             print ""
         else:
             xhatm[n+1,:] = Aaug.dot(xhat[n,:] - xaugs) + Baug.dot(u[n,:] - us) + xaugs
+    
+    # Take final measurement.
+    y[Nsim,:] = measurement(np.concatenate((x[Nsim,:],np.zeros((Nid,))))) + v[Nsim,:]
        
-    fig = cstrplot(x,u,ysp=None,contVars=[],title=None)
+    fig = cstrplot(x,u,ysp=None,contVars=[],title="Linear" if linear else "Nonlinear")
 fig.savefig("cstr_nonlinear.pdf")

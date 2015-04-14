@@ -95,41 +95,43 @@ ax.set_ylabel("Concentration")
 xhat_ = np.zeros((Nsim+1,Nx))
 xhat = np.zeros((Nsim,Nx))
 vhat = np.zeros((Nsim,Nv))
-what = np.zeros((Nsim,Nw))
+what = np.zeros((Nsim-1,Nw))
 x0bar = x_0
 xhat[0,:] = x0bar
 guess = {}
 initialtime = time.clock()
 for t in range(Nsim):
     # Define sizes of everything.    
-    N = {"x":Nx, "y":Ny, "t":min(t+1,Nt), "u":Nu}
+    N = {"x":Nx, "y":Ny, "u":Nu}
     if fullInformation:
-        N["t"] = t+1
+        N["t"] = t
         tmin = 0
     else:
-        tmin = max(0,t+1-Nt)
+        N["t"] = min(t,Nt)
+        tmin = max(0,t - Nt)
     tmax = t+1        
-    lb = {"x":np.zeros((tmax - tmin + 1,Nx))}  
+    lb = {"x":np.zeros((N["t"] + 1,Nx))}  
 
     # Call solver.
     starttime = time.clock()
-    sol = mpc.nmhe_new(f=F,h=H,u=usim[tmin:tmax,:],y=ysim[tmin:tmax,:],l=l,N=N,
+    sol = mpc.nmhe_new(f=F,h=H,u=usim[tmin:tmax-1,:],y=ysim[tmin:tmax,:],l=l,N=N,
                     lx=lx,x0bar=x0bar,verbosity=0,guess=guess,lb=lb)
     print "%3d (%10.5g s): %s" % (t,time.clock() - starttime,sol["status"])
     if sol["status"] != "Solve_Succeeded":
         break
-    xhat[t,:] = sol["x"][-2,...]     # This is xhat( t  | t )
-    xhat_[t+1,:] = sol["x"][-1,...]  # This is xhat(t+1 | t )
-    what[t,:] = sol["w"][-1,...]
+    xhat[t,:] = sol["x"][-1,...] # This is xhat( t  | t )
     vhat[t,:] = sol["v"][-1,...]
-        
+    if t > 0:
+        what[t-1,:] = sol["w"][-1,...]
+    xhat_[t+1,:] = np.squeeze(F([xhat[t,:],usim[t,:],np.zeros((Nw,))])[0]) # This is xhat(t+1 | t )
+    
     # Save stuff to use as a guess. Cycle the guess.
     guess = {}
-    for k in ["x","w","v"]:
+    for k in set(["x","w","v"]).intersection(sol.keys()):
         guess[k] = sol[k].copy()
     
     # Do some different things if not using full information estimation.    
-    if not fullInformation and t + 1 >= Nt:
+    if not fullInformation and t + 1 > Nt:
         for k in guess.keys():
             guess[k] = guess[k][1:,...] # Get rid of oldest measurement.
             

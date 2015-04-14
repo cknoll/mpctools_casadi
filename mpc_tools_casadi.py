@@ -8,6 +8,7 @@ import time
 import itertools
 import colloc
 import pdb
+import warnings
 
 """
 Functions for solving MPC problems using Casadi and Ipopt.
@@ -855,7 +856,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},g=None,p=None,verbosity=5,
                   
     return returnDict
 
-def __generalVariableShapes(sizeDict,setpoint=[],delta=[]):
+def __generalVariableShapes(sizeDict,setpoint=[],delta=[],finalx=True,finaly=False):
     """
     Generates variable shapes from the size dictionary N.
     
@@ -891,26 +892,21 @@ def __generalVariableShapes(sizeDict,setpoint=[],delta=[]):
     except KeyError:
         raise KeyError("Entry 't' must be provided!")
     
-    # Need to define binary variable final to say whether we need to add final
-    # variables for some of the entries.
-    if Nt == 0:
-        Nt = 1
-        final = 0
-    else:
-        final = 1
+    # Need to decide whether to include final point of various entries.
+    finalx = bool(finalx)
+    finaly = bool(finaly)
     
     # Now we're going to build a data structure that says how big each of the
     # variables should be. The first entry 1 if there should be N+1 copies of
     # the variable and 0 if there should be N. The second is a tuple of sizes.
     allvars = {
-        "x" : (Nt+final,("x",)),
-        "z" : (Nt+final,("z",)),
+        "x" : (Nt+finalx,("x",)),
+        "z" : (Nt+finalx,("z",)),
         "u" : (Nt,("u",)),
-        "d" : (Nt,("d",)),
         "w" : (Nt,("w",)),
-        "p" : (Nt,("p",)),
-        "y" : (Nt,("y",)),
-        "v" : (Nt,("v",)),
+        "p" : (Nt+finaly,("p",)),
+        "y" : (Nt+finaly,("y",)),
+        "v" : (Nt+finaly,("v",)),
         "xc": (Nt,("x","c")),
         "zc": (Nt,("z","c")),        
     }
@@ -1296,16 +1292,15 @@ def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     a "p" entry.
     
     u, y, and p must be 2D arrays with the time dimension first. Note that y
-    should have N["t"] + 1 rows, and u and p should have N["t"] rows.
+    and p should have N["t"] + 1 rows, while u should have N["t"] rows.
     
     lb and ub should be dictionaries of bounds for the various variables. Each
     entry should have time as the first index (i.e. lb["x"] should be a
     N["t"] + 1 by N["x"] array). guess should have the same structure.    
     
     The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
-    array that gives xhat(k | N["t"]-1) for k = 0,1,...,N["t"]. Thus, to find
-    xhat(N["T"]-1 | N["t"]-1), you should get ["x"][-2,:], and to find the
-    predition xhat(N["T"] | N["T"]-1), you should grab ["x"][-1,:].
+    array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
+    predictor step.
     """
     
     # Copy dictionaries so we don't change the user inputs.
@@ -1314,9 +1309,11 @@ def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     
     # Check specified sizes.
     try:
-        for i in ["t","x","y"]:
+        for i in ["x","y"]:
             if N[i] <= 0:
                 N[i] = 1
+            if N["t"] < 0:
+                N["t"] = 0
         if "w" not in N:
             N["w"] = N["x"]
         N["v"] = N["y"] 
@@ -1324,7 +1321,7 @@ def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
         raise KeyError("Invalid or missing entries in N dictionary!")
         
     # Now get the shapes of all the variables that are present.
-    allShapes = __generalVariableShapes(N)
+    allShapes = __generalVariableShapes(N,finalx=True,finaly=True)
     if "c" not in N:
         N["c"] = 0    
     
@@ -1348,12 +1345,21 @@ def nmhe_new(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     N["h"] = N["y"]
     N["f"] = N["x"]
     
-    # Make initial objective term.    
+    # Make initial objective term.
+    finallargs = []    
+    for k in largs:
+        if k == "w":
+            finallargs.append(np.zeros(N["w"]))
+        elif k in parStruct.keys():
+            finallargs.append(parStruct[k,-1])
+        elif k in varStruct.keys():
+            finallargs.append(varStruct[k,-1])
+        else:
+            raise KeyError("l argument %s is invalid!" % (k,))
+    obj = l(finallargs)[0]    
     if lx is not None and x0bar is not None:
-        obj = lx([varStruct["x",0] - x0bar])[0]
-    else:
-        obj = casadi.MX(0)
-       
+        obj += lx([varStruct["x",0] - x0bar])[0]
+    
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
          f=f,g=g,h=h,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
          runOptimization=runOptimization)
@@ -1383,11 +1389,10 @@ def sstarg_new(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
         raise KeyError("Invalid or missing entries in N dictionary!")
     
     # Now get the shapes of all the variables that are present.
-    N["t"] = 0
-    allShapes = __generalVariableShapes(N)
+    N["t"] = 1
+    allShapes = __generalVariableShapes(N,finalx=False,finaly=False)
     if "c" not in N:
         N["c"] = 0
-    N["t"] = 1
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
@@ -1423,12 +1428,12 @@ def sstarg_new(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
         obj = casadi.MX(0)
        
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=h,verbosity=verbosity,discretef=discretef,
+         f=f,g=g,h=h,verbosity=verbosity,discretef=discretef,finalpoint=False,
          runOptimization=runOptimization)
 
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0),
     f=None,g=None,h=None,l=None,largs=[],Delta=1,discretef=True,deltaVars=[],
-    verbosity=5,runOptimization=True):
+    finalpoint=True,verbosity=5,runOptimization=True):
     """
     General wrapper for an optimal control problem (e.g. mpc or mhe).
     
@@ -1444,16 +1449,23 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
     varlb = var(-np.inf)
     varub = var(np.inf)
     varguess = var(0)
-    dataAndStructure = [(guess,varguess), (lb,varlb), (ub,varub)]
+    dataAndStructure = [(guess,varguess,"guess"), (lb,varlb,"lb"), (ub,varub,"ub")]
     if par is not None:
         parval = par(0)
-        dataAndStructure.append((guess,parval))
+        dataAndStructure.append((guess,parval,"par"))
     else:
         parval = None
 
     # Sort out bounds and parameters.
-    for (data,structure) in dataAndStructure:
+    for (data,structure,name) in dataAndStructure:
         for v in set(data.keys()).intersection(structure.keys()):
+            # Check sizes.            
+            if len(structure[v]) < data[v].shape[0]:
+                warnings.warn("Extra time points in %s['%s']. Ignoring." % (name,v))
+            elif len(structure[v]) > data[v].shape[0]:
+                raise IndexError("Too few time points in %s['%s']!" % (name,v))
+            
+            # Grab data.            
             for t in range(len(structure[v])):
                 structure[v,t] = data[v][t,...]
     
@@ -1471,7 +1483,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
             N[name] = 0    
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],
-        Delta=Delta,discretef=discretef,deltaVars=deltaVars)
+        Delta=Delta,discretef=discretef,deltaVars=deltaVars,finalpoint=finalpoint)
      
     con = []
     conlb = np.zeros((0,))
@@ -1510,8 +1522,8 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},obj=casadi.MX(0)
 
     return returnDict
 
-def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
-    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True,deltaVars=[]):
+def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
+    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True,deltaVars=[],finalpoint=True):
     """
     Creates general state evolution constraints for the following system:
     
@@ -1579,8 +1591,8 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
     
     # Define some helper variables.    
     getArgs = lambda func, times, var: [[var[v][t] for v in args[func]] for t in times]
-    tintervals = range(t0,t0+Nt)
-    tpoints = range(t0,t0+Nt+1)
+    tintervals = range(0,Nt)
+    tpoints = range(0,Nt + bool(finalpoint))
     
     # Preallocate return dictionary.
     returnDict = {}    
@@ -1640,7 +1652,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
                             thiscon -= A[j,jprime]*collocvar["x"][t][jprime]
                     thesecons.append(thiscon)
             state.append(thesecons)
-        lb = np.zeros((Nt,Ncolloc+1,Nf))
+        lb = np.zeros((len(tintervals),Ncolloc+1,Nf))
         ub = lb.copy()
         returnDict["state"] = dict(con=state,lb=lb,ub=ub)
             
@@ -1660,7 +1672,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
                     thiscon = g(thisargs)[0]
                     thesecons.append(thiscon)
             algebra.append(thesecons)
-        lb = np.zeros((Nt+1,Ncolloc+1,Ng))
+        lb = np.zeros((len(tpoints),Ncolloc+1,Ng))
         ub = lb.copy()
         returnDict["algebra"] = dict(con=algebra,lb=lb,ub=ub)
         
@@ -1668,16 +1680,16 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,t0=0,
     if h is not None:
         if Nh <= 0:
             raise ValueError("Nh must be a positive integer!")
-        hargs = getArgs("h",tintervals,var)
+        hargs = getArgs("h",tpoints,var)
         measurement = []
-        for t in tintervals:
+        for t in tpoints:
             thiscon = h(hargs[t])[0]
             if "y" in givenvars:
                 thiscon -= var["y"][t]
             if "v" in givenvars:
                 thiscon += var["v"][t]
             measurement.append([thiscon])
-        lb = np.zeros((Nt,Nh))
+        lb = np.zeros((len(tpoints),Nh))
         ub = lb.copy()
         returnDict["measurement"] = dict(con=measurement,lb=lb,ub=ub)
     
@@ -2741,12 +2753,16 @@ def casadiStruct2numpyDict(struct):
     
     Access patterns are now as follows:
 
-        struct["var",t,...] = dict["var"][t,...]    
+        struct["var",t,...] = dict["var"][t,...]
+        
+    Note that if the struct entry is empty, then there will not be a
+    corresponding key in the returned dictonary.
     """ 
 
     npdict = {}
     for k in struct.keys():
-        npdict[k] = listcatfirstdim(struct[k])
+        if len(struct[k]) > 0:
+            npdict[k] = listcatfirstdim(struct[k])
         
     return npdict
 
