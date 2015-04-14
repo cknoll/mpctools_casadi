@@ -131,7 +131,7 @@ guesslin = {"x" : xguesslin, "u" : np.tile(us,(Nt,1))}
 guessnonlin = sp.copy()
 
 # Control bounds.
-umax = np.array([.1*Tcs,.35*Fs])
+umax = np.array([.05*Tcs,.15*Fs])
 dumax = .2*umax # Maximum for rate-of-change.
 bounds = dict(uub=[us + umax],ulb=[us - umax])
 ub = {"u" : np.tile(us + umax, (Nt,1)), "Du" : np.tile(dumax, (Nt,1))}
@@ -196,12 +196,7 @@ for method in solvers.keys():
             print "%10s %3d: %s" % ("sstarg",t,sstargs[method].stats["status"])
             if sstargs[method].stats["status"] != "Solve_Succeeded":
                 print "***Target finder failed!"
-                mpc.keyboard()
-                
-                import casadi
-                con = casadi.MXFunction([sstargs[method]._ControlSolver__var,sstargs[method]._ControlSolver__par],[sstargs[method]._ControlSolver__con])
-                con.init()                
-                print con([sstargs[method].guess,sstargs[method].par])
+                break
             
             xsp[t,:] = np.squeeze(sstargs[method].var["x",0])
             usp[t,:] = np.squeeze(sstargs[method].var["u",0])
@@ -237,20 +232,22 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},
     ylabelsu = ["$T_c$ (K)", "$F$ (kL/min)"]
     
     gs = gridspec.GridSpec(Nx*Nu,2)    
-    
     fig = plt.figure(figsize=(10,6))
+    leglines = []
+    leglabels = []
     for i in range(Nx):
         ax = fig.add_subplot(gs[i*Nu:(i+1)*Nu,0])
         for k in keys:
             t = np.arange(0,x[k].shape[0])*Delta
             args = {"color":colors.get(k,"black"), "label":labels.get(k,k), "marker":markers.get(k,"")}
-            ax.plot(t,x[k][:,i],markeredgecolor="none",**args)
+            [line] = ax.plot(t,x[k][:,i],markeredgecolor="none",**args)
+            if i == ilegend:
+                leglines.append(line)
+                leglabels.append(args["label"])
         if i in contVars and xsp is not None:
             ax.step(t,xsp[:,i],linestyle="--",color="black",where="post")
         ax.set_ylabel(ylabelsx[i])
-        mpc.zoomaxis(ax,yscale=1.1)
-        if i == ilegend:
-            ax.legend(loc="right")
+        mpc.plots.zoomaxis(ax,yscale=1.1)
     ax.set_xlabel("Time (min)")
     for i in range(Nu):
         ax = fig.add_subplot(gs[i*Nx:(i+1)*Nx,1])
@@ -262,9 +259,10 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},
             for b in set(["uub", "ulb"]).intersection(bounds.keys()):
                 ax.plot(np.array([t[0],t[-1]]),np.ones((2,))*bounds[b][i],'--k')
         ax.set_ylabel(ylabelsu[i])
-        mpc.zoomaxis(ax,yscale=1.25)
+        mpc.plots.zoomaxis(ax,yscale=1.25)
     ax.set_xlabel("Time (min)")
-    fig.tight_layout(pad=.5)
+    fig.legend(leglines,leglabels,loc="lower center",ncol=len(keys))
+    fig.tight_layout(pad=.5,rect=(0,.075,1,1))
     if title is not None:
         fig.canvas.set_window_title(title)
     return fig
