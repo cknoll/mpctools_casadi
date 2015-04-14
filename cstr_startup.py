@@ -1,5 +1,5 @@
 # Linear and nonlinear control of startup of a CSTR.
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
@@ -41,11 +41,11 @@ def ode(x,u,d):
     return dxdt
 
 def ode_rk4(x,u,d):
-    return mpc.rk4(ode,x,[u,d],Delta,1)
+    return mpc.util.rk4(ode,x,[u,d],Delta,1)
 
 # Turn into casadi function and simulator.
-ode_casadi = mpc.getCasadiFuncGeneralArgs(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode",scalar=True)
-ode_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_rk4,[Nx,Nu,Nd],["x","u","d"],funcname="ode_rk4",scalar=True)
+ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],funcname="ode_rk4")
 cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd, vector=True)
 
 # Steady-state values.
@@ -64,7 +64,7 @@ us = np.array([Tcs,Fs])
 ds = np.array([F0s])
 
 # Now get a linearization at this steady state.
-ss = mpc.getLinearization(ode_casadi, xs, us, ds, Delta)
+ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
@@ -74,24 +74,23 @@ C = np.eye(Nx)
 Q = .5*np.diag(xs**-2)
 R = 2*np.diag(us**-2)
 
-model_casadi = mpc.getCasadiFunc(ode,Nx,Nu,Nd,name="cstr")
-model_integrator = mpc.getCasadiIntegrator(ode,Delta,Nx,Nu,Nd,name="cstr")
+model_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="cstr")
 
-[K, Pi] = mpc.dlqr(A,B,Q,R)
+[K, Pi] = mpc.util.dlqr(A,B,Q,R)
 
 # Define casadi functions.
 Fnonlinear = ode_rk4_casadi
 
 def measurement(x,d):
-    return [x]
-h = mpc.getCasadiFunc(measurement,Nx,0,Nd,name="h")
+    return x
+h = mpc.getCasadiFunc(measurement,[Nx,Nd],["x","d"],funcname="h")
 
 def linmodel(x,u,d):
-    Ax = mpc.mtimes(mpc.DMatrix(A),x-xs) + xs
-    Bu = mpc.mtimes(mpc.DMatrix(B),u-us)
-    Bpd = mpc.mtimes(mpc.DMatrix(Bp),d-ds)
-    return [Ax + Bu + Bpd]
-Flinear = mpc.getCasadiFunc(linmodel,Nx,Nu,Nd,name="F")
+    Ax = mpc.mtimes(A,x-xs) + xs
+    Bu = mpc.mtimes(B,u-us)
+    Bpd = mpc.mtimes(Bp,d-ds)
+    return Ax + Bu + Bpd
+Flinear = mpc.getCasadiFunc(linmodel,[Nx,Nu,Nd],["x","u","d"],funcname="F")
 
 def stagecost(x,u,xsp,usp):
     # Return deviation variables.
@@ -99,16 +98,16 @@ def stagecost(x,u,xsp,usp):
     du = u - usp
     
     # Calculate stage cost.
-    return [mpc.mtimes(dx.T,mpc.DMatrix(Q),dx) + mpc.mtimes(du.T,mpc.DMatrix(R),du)]
-l = mpc.getCasadiFuncGeneralArgs(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],funcname="l")
+    return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
+l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
     dx = x - xsp
     
     # Calculate cost to go.
-    return [mpc.mtimes(dx.T,mpc.DMatrix(Pi),dx)]
-Pf = mpc.getCasadiFuncGeneralArgs(costtogo,[Nx,Nx],["x","s_xp"],funcname="Pf")
+    return mpc.mtimes(dx.T,Pi,dx)
+Pf = mpc.getCasadiFunc(costtogo,[Nx,Nx],["x","s_xp"],funcname="Pf")
 
 # First see what happens if we try to start up the reactor under no control.
 Nsim = 100
@@ -154,8 +153,8 @@ nmpc_commonargs = {
     "uprev" : us,
 }
 solvers = {}
-solvers["lmpc"] = mpc.nmpc_new(f=Flinear,guess=guesslin,**nmpc_commonargs)
-solvers["nmpc"] = mpc.nmpc_new(f=Fnonlinear,guess=guessnonlin,**nmpc_commonargs)
+solvers["lmpc"] = mpc.nmpc(f=Flinear,guess=guesslin,**nmpc_commonargs)
+solvers["nmpc"] = mpc.nmpc(f=Fnonlinear,guess=guessnonlin,**nmpc_commonargs)
 
 # Also build steady-state target finders.
 contVars = [0,2]
@@ -169,8 +168,8 @@ sstarg_commonargs = {
     "p" : np.array([ds]),
 }
 sstargs = {}
-sstargs["lmpc"] = mpc.sstarg_new(f=Flinear,**sstarg_commonargs)
-sstargs["nmpc"] = mpc.sstarg_new(f=Fnonlinear,**sstarg_commonargs)
+sstargs["lmpc"] = mpc.sstarg(f=Flinear,**sstarg_commonargs)
+sstargs["nmpc"] = mpc.sstarg(f=Fnonlinear,**sstarg_commonargs)
 
 # Now simulate the process under control.
 for method in solvers.keys():

@@ -1,9 +1,15 @@
 # Example 1.11 from Rawlings and Mayne with linear and nonlinear control.
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import numpy as np
 from scipy import linalg
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+import time
+
+# Decide whether to use casadi SX objects or MX. I would expect SX to be faster
+# (i.e. set useCasadiSX to True), but it seems MX does much better for this
+# problem (i.e. set useCasadiMX to False). Not sure why.
+useCasadiSX = False
 
 # Define some parameters and then the CSTR model.
 Nx = 3
@@ -55,11 +61,11 @@ def ode(x,u,d):
     return cstrmodel(c,T,h,Tc,F,F0)
 
 def ode_rk4(x,u,d):
-    return mpc.rk4(ode,x,[u,d],Delta,2)
+    return mpc.util.rk4(ode,x,[u,d],Delta,2)
 
 # Turn into casadi function and simulator.
-ode_casadi = mpc.getCasadiFuncGeneralArgs(ode,[Nx,Nu,Nd],["x","u","d"],"ode",True)
-ode_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_rk4,[Nx,Nu,Nd],["x","u","d"],"ode_rk4",True) #mpc.getRungeKutta4(ode_casadi, Delta, M=2, d=True)
+ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode",True)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],"ode_rk4",True)
 
 cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd, vector=True)
 
@@ -80,15 +86,15 @@ def ode_augmented(x,u,d=ds):
     [Tc, F] = u[0:Nu]
     [F0] = d[0:Nd]
     
-    dxdt = mpc.vertcat([cstrmodel(c,T,h,Tc,F+dhat[2],F0)] + [0]*Ny)
+    dxdt = mpc.util.vertcat([cstrmodel(c,T,h,Tc,F+dhat[2],F0)] + [0]*Ny)
     return dxdt
 cstraug = mpc.OneStepSimulator(ode_augmented, Delta, Nx + Nid, Nu, Nd, vector=True)
 
 def ode_augmented_rk4(x,u,d=ds):
-    return mpc.rk4(ode_augmented,x,[u,d],Delta,2)
+    return mpc.util.rk4(ode_augmented,x,[u,d],Delta,2)
 
 def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-    return mpc.rk4(ode_augmented,x,[u,d],Delta,2) + w
+    return mpc.util.rk4(ode_augmented,x,[u,d],Delta,2) + w
 
 def measurement(x,d=ds):
     [c, T, h] = x[0:Nx]
@@ -97,13 +103,13 @@ def measurement(x,d=ds):
 ys = measurement(xaugs)
 
 # Turn into casadi functions.
-ode_augmented_casadi = mpc.getCasadiFuncGeneralArgs(ode_augmented,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented",True)
-ode_augmented_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_augmented_rk4,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",True)
-ode_estimator_rk4_casadi = mpc.getCasadiFuncGeneralArgs(ode_estimator_rk4,[Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4",True)
-measurement_casadi = mpc.getCasadiFuncGeneralArgs(measurement,[Nx+Nid,Nd],["xaug","d"],"measurement",True)
+ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
+ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented_rk4,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4")
+ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,[Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4")
+measurement_casadi = mpc.getCasadiFunc(measurement,[Nx+Nid,Nd],["xaug","d"],"measurement")
 
 # Now get a linearization at this steady state.
-ss = mpc.getLinearization(ode_casadi, xs, us, ds, Delta)
+ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
@@ -113,7 +119,7 @@ C = np.eye(Nx)
 Q = .5*np.diag(xs**-2)
 R = 2*np.diag(us**-2)
 
-[K, Pi] = mpc.dlqr(A,B,Q,R)
+[K, Pi] = mpc.util.dlqr(A,B,Q,R)
 
 # Get nonlinear controller object.
 Nt = 5
@@ -124,16 +130,16 @@ def stagecost(x,u,xsp,usp):
     du = u - usp
     
     # Calculate stage cost.
-    return [mpc.mtimes(dx.T,mpc.DMatrix(Q),dx) + mpc.mtimes(du.T,mpc.DMatrix(R),du)]
-l = mpc.getCasadiFuncGeneralArgs(stagecost,[Nx+Nid,Nu,Nx+Nid,Nu],["x","u","x_sp","u_sp"],funcname="l")
+    return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
+l = mpc.getCasadiFunc(stagecost,[Nx+Nid,Nu,Nx+Nid,Nu],["x","u","x_sp","u_sp"],funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
     dx = x[:Nx] - xsp[:Nx]
     
     # Calculate cost to go.
-    return [mpc.mtimes(dx.T,mpc.DMatrix(Pi),dx)]
-Pf = mpc.getCasadiFuncGeneralArgs(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
+    return mpc.mtimes(dx.T,Pi,dx)
+Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
 
 ubounds = np.array([.05*Tcs, .5*Fs])
 bounds = dict(uub=[us + ubounds],ulb=[us - ubounds])
@@ -146,14 +152,14 @@ sp = {"x" : np.tile(xaugs, (Nt+1,1)), "u" : np.tile(us, (Nt,1))}
 guess = sp.copy()
 x0 = xs
 xaug0 = xaugs
-nmpc = mpc.nmpc_new(ode_augmented_rk4_casadi,l,N,xaug0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
-    verbosity=0,timelimit=60,runOptimization=False)
+nmpc = mpc.nmpc(ode_augmented_rk4_casadi,l,N,xaug0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
+    verbosity=0,timelimit=60,runOptimization=False,scalar=useCasadiSX)
 
 # Define augmented system with disturbance model.
-ss_augmented = mpc.getLinearization(ode_augmented_casadi, xaugs, us, ds, Delta)
+ss_augmented = mpc.util.getLinearization(ode_augmented_casadi, xaugs, us, ds, Delta)
 Aaug = ss_augmented["A"]
 Baug = ss_augmented["B"]
-Caug = mpc.getLinearization(measurement_casadi, xaugs)["A"]
+Caug = mpc.util.getLinearization(measurement_casadi, xaugs)["A"]
 
 # Extract the various submatrices.
 Bd = Aaug[:Nx,Nx:]
@@ -173,11 +179,11 @@ Qwinv = linalg.inv(Qw)
 Rvinv = linalg.inv(Rv)
 
 # Get Kalman filter.
-[L, P] = mpc.dlqe(Aaug, Caug, Qw, Rv)
+[L, P] = mpc.util.dlqe(Aaug, Caug, Qw, Rv)
 
 # Define stage costs for estimator.
-lest = lambda w,v: mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
-lest = mpc.getCasadiFuncGeneralArgs(lest,[Nw,Nv],["w","v"],"l",True)
+def lest(w,v): return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
+lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
 #lxest = lambda x: mpc.mtimes(x.T,Qwinv,x)
 #lxest = mpc.getCasadiFuncGeneralArgs(lxest,[Nx + Nid],["x"],"lx",True)
@@ -201,13 +207,13 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
         if i in contVars:
             ax.step(t,ysp[:,i],'-r',where="post")
         ax.set_ylabel(ylabelsx[i])
-        mpc.zoomaxis(ax,yscale=1.1)
+        mpc.plots.zoomaxis(ax,yscale=1.1)
     ax.set_xlabel("Time (min)")
     for i in range(Nu):
         ax = fig.add_subplot(gs[i*Nx:(i+1)*Nx,1])
         ax.step(t,u[:,i],'-k',where="post")
         ax.set_ylabel(ylabelsu[i])
-        mpc.zoomaxis(ax,yscale=1.25)
+        mpc.plots.zoomaxis(ax,yscale=1.25)
     ax.set_xlabel("Time (min)")
     fig.tight_layout(pad=.5)
     if title is not None:
@@ -219,6 +225,7 @@ useMeasuredState = False
 Nsim = 50
 t = np.arange(Nsim+1)*Delta
 for linear in [True,False]:
+    starttime = time.clock()
     x = np.zeros((Nsim+1,Nx))
     x[0,:] = xs # Start at steady state.    
     
@@ -254,9 +261,10 @@ for linear in [True,False]:
         sstargguess = {"u" : np.tile(us, (1,1)), "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)), "y" : np.tile(xs, (1,1))}        
         sstargp = np.tile(ds, (1,1)) # Parameters for system.
         sstargN = {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd}
-        sstarg = mpc.sstarg_new(ode_augmented_casadi,measurement_casadi,sstargN,
+        sstarg = mpc.sstarg(ode_augmented_casadi,measurement_casadi,sstargN,
             lb=sstarglb,ub=sstargub,guess=sstargguess,p=sstargp,
-            verbosity=0,discretef=False,runOptimization=False)
+            verbosity=0,discretef=False,runOptimization=False,
+            scalar=useCasadiSX)
         estimatorguess = {}
         estimatorguess["x"] = np.tile(xaugs, (1,1))
         estimatorguess["v"] = np.zeros((1,Nv))
@@ -295,8 +303,8 @@ for linear in [True,False]:
             else:
                 # Do full-information estimation.
                 N = {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":n}
-                estsol = mpc.nmhe_new(f=ode_estimator_rk4_casadi,h=measurement_casadi,u=u[:n,:],y=y[:n+1,:],l=lest,N=N,
-                    lx=lxest,x0bar=x0bar,p=np.tile(ds,(n+1,1)),verbosity=0,guess=estimatorguess,timelimit=5)
+                estsol = mpc.nmhe(f=ode_estimator_rk4_casadi,h=measurement_casadi,u=u[:n,:],y=y[:n+1,:],l=lest,N=N,
+                    lx=lxest,x0bar=x0bar,p=np.tile(ds,(n+1,1)),verbosity=0,guess=estimatorguess,timelimit=5,scalar=useCasadiSX)
                 
                 print "Estimator: %s, " % (estsol["status"],),
                 #mpc.keyboard()             
@@ -364,6 +372,8 @@ for linear in [True,False]:
     
     # Take final measurement.
     y[Nsim,:] = measurement(np.concatenate((x[Nsim,:],np.zeros((Nid,))))) + v[Nsim,:]
+    endtime = time.clock()
+    print "%s Took %.5g s." % ("Linear" if linear else "Nonlinear", endtime - starttime,)
        
     fig = cstrplot(x,u,ysp=None,contVars=[],title="Linear" if linear else "Nonlinear")
 fig.savefig("cstr_nonlinear.pdf")

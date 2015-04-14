@@ -4,7 +4,7 @@
 
 # Imports.
 import numpy as np
-import mpc_tools_casadi as mpc
+import mpctools.legacy as mpc
 import time
 
 # Define continuous time model.
@@ -17,7 +17,7 @@ Nd = None # No disturbances.
 # Discretize.
 dt = .025
 Nt = 20
-(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)
+(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 A = [Adisc]
 B = [Bdisc]
 
@@ -33,25 +33,30 @@ q = [np.zeros((Nx,1))]
 R = [np.eye(Nu)]
 
 # First define alternate SX versions that may be faster.
-F_func = lambda x,u : mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u)
-F_SX = [mpc.getCasadiFuncGeneralArgs(F_func,[Nx,Nu],["x","u"],"F",scalar=True)]
+def F_func(x,u): return mpc.util.mtimes(Adisc,x) + mpc.util.mtimes(Bdisc,u)
+F_SX = [mpc.tools.getCasadiFuncGeneralArgs(F_func,[Nx,Nu],["x","u"],"F",
+                                           scalar=True)]
 
-l_func = lambda x,u : mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x) + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)
-l_SX = [mpc.getCasadiFuncGeneralArgs(l_func,[Nx,Nu],["x","u"],"l",scalar=True)]
+def l_func(x,u):
+    return mpc.util.mtimes(x.T,Q[0],x) + mpc.util.mtimes(u.T,R[0],u)
+l_SX = [mpc.tools.getCasadiFuncGeneralArgs(l_func,[Nx,Nu],["x","u"],"l",
+                                           scalar=True)]
 
-Pf_func = lambda x: mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)
-Pf_SX = mpc.getCasadiFuncGeneralArgs(Pf_func,[Nx],["x"],"Pf",scalar=True)
+def Pf_func(x): return mpc.util.mtimes(x.T,Q[0],x)
+Pf_SX = mpc.tools.getCasadiFuncGeneralArgs(Pf_func,[Nx],["x"],"Pf",scalar=True)
 
 # Convert everything to MX function form.
-F = [mpc.getCasadiFunc(lambda x,u : list(F_func(x,u)),Nx,Nu,Nd,"F")]
-l = [mpc.getCasadiFunc(lambda x,u : [l_func(x,u)],Nx,Nu,Nd,"l")]
-Pf = mpc.getCasadiFunc(lambda x : [Pf_func(x)],Nx,0,0,"Pf")
+F = [mpc.tools.getCasadiFunc(lambda x,u : list(F_func(x,u)),Nx,Nu,Nd,"F")]
+l = [mpc.tools.getCasadiFunc(lambda x,u : [l_func(x,u)],Nx,Nu,Nd,"l")]
+Pf = mpc.tools.getCasadiFunc(lambda x : [Pf_func(x)],Nx,0,0,"Pf")
 
 # Now make TimeInvariantSolver object.
 nsim = 100
 verbosity = 0
-solver = mpc.nmpc(F,l,[0,0],Nt,Pf,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
-solver_SX = mpc.nmpc(F_SX,l_SX,[0,0],Nt,Pf_SX,bounds,verbosity=verbosity,returnTimeInvariantSolver=True)
+solver = mpc.tools.nmpc(F,l,[0,0],Nt,Pf,bounds,verbosity=verbosity,
+                  returnTimeInvariantSolver=True)
+solver_SX = mpc.tools.nmpc(F_SX,l_SX,[0,0],Nt,Pf_SX,bounds,verbosity=verbosity,
+                     returnTimeInvariantSolver=True)
 
 # Solve.
 t = np.arange(nsim+1)*dt
@@ -69,16 +74,18 @@ for method in ["nmpc","lmpc","solver","solver_SX"]:
     for k in range(nsim):
         # Solve linear MPC problem.
         if method == "nmpc":
-            sol = mpc.nmpc(F,l,x0,Nt,Pf,bounds=bounds,verbosity=verbosity)
+            sol = mpc.tools.nmpc(F,l,x0,Nt,Pf,bounds=bounds,
+                                 verbosity=verbosity)
         elif method == "lmpc":
-            sol = mpc.lmpc(A,B,x0,Nt,Q,R,q=q,bounds=bounds,verbosity=verbosity)
+            sol = mpc.linear.lmpc(A,B,x0,Nt,Q,R,q=q,bounds=bounds,
+                                  verbosity=verbosity)
         elif method == "solver" or method == "solver_SX":
             if method == "solver":            
                 solver.fixvar("x",0,x0)
                 sol = solver.solve()
             else:
                 solver_SX.fixvar("x",0,x0)
-                sol = solver.solve()
+                sol = solver_SX.solve()
             
             # Need to flip these because time comes first for these guys.
             sol["x"] = sol["x"].T
@@ -97,9 +104,11 @@ for method in ["nmpc","lmpc","solver","solver_SX"]:
     tottimes[method] = endtime - starttime
 
     # Plot things.
-    fig = mpc.mpcplot(xcl[method],ucl[method],t,np.zeros(xcl[method].shape),xinds=[0])
+    fig = mpc.plots.mpcplot(xcl[method],ucl[method],t,np.zeros(
+        xcl[method].shape),xinds=[0])
     fig.canvas.set_window_title(method)    
     fig.show()
 
 for m in tottimes.keys():
-    print "%15s: %10.5g s total time, %10.5g s avg. sol. time" % (m,tottimes[m],np.mean(solvetimes[m]))
+    print "%15s: %10.5g s total time, %10.5g s avg. sol. time" % (m,
+        tottimes[m],np.mean(solvetimes[m]))

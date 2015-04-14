@@ -1,7 +1,9 @@
-import mpc_tools_casadi as mpc
+import mpctools.legacy.tools as mpc
+import mpctools.legacy.solvers as solvers
+import mpctools.util as mpcutil
 import numpy as np
 import casadi
-import colloc
+from mpctools import colloc
 import matplotlib.pyplot as plt
 
 # Build model.
@@ -26,7 +28,7 @@ Nc = 5
 verbosity = 3
 [VAR, LB, UB, GUESS] = mpc.getCasadiVars(Nx,Nu,Nt,Nc)    
 [CON, CONLB, CONUB] = mpc.getCollocationConstraints(f,VAR,Delta)
-CON = mpc.flattenlist(CON)
+CON = mpcutil.flattenlist(CON)
 CONLB.shape = (CONLB.size,) # In-place flatten.
 CONUB.shape = (CONUB.size,)
 
@@ -39,7 +41,7 @@ nlpObj = casadi.MX(0) # Start with dummy objective.
 nlpCon = casadi.vertcat(CON)
 
 # Create solver and stuff.
-[OPTVAR, obj, status, solver] = mpc.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, None, verbosity)
+[OPTVAR, obj, status, solver] = solvers.callSolver(VAR, LB, UB, GUESS, nlpObj, nlpCon, CONLB, CONUB, None, verbosity)
 x = np.hstack(OPTVAR["x",:])
 u = np.hstack(OPTVAR["u",:])
 z = np.hstack(OPTVAR["xc",:])

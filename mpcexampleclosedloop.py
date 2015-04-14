@@ -2,7 +2,7 @@
 
 # Imports.
 import numpy as np
-import mpc_tools_casadi as mpc
+import mpctools.legacy as mpc
 
 # Define continuous time model.
 Acont = np.array([[0,1],[0,-1]])
@@ -13,7 +13,7 @@ m = Bcont.shape[1] # Number of control elements
 # Discretize.
 dt = .025
 N = 20
-(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)
+(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 A = [Adisc]
 B = [Bdisc]
 
@@ -38,7 +38,7 @@ xcl[:,0] = x0
 ucl = np.zeros((m,nsim))
 for k in range(nsim):
     # Solve linear MPC problem.
-    sol = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=0)
+    sol = mpc.linear.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=0)
     print "Iteration %d Status: %s" % (k,sol["status"])
     xcl[:,k] = sol["x"][:,0]
     ucl[:,k] = sol["u"][:,0]
@@ -46,5 +46,5 @@ for k in range(nsim):
 xcl[:,nsim] = x0 # Store final state.
 
 # Plot things.
-fig = mpc.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0])
+fig = mpc.plots.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0])
 fig.show()

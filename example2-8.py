@@ -5,7 +5,7 @@ usePf = False
 
 # Imports.
 import numpy as np
-import mpc_tools_casadi as mpc
+import mpctools.legacy.tools as mpc
 import matplotlib.pyplot as plt
 
 N = 3
@@ -13,9 +13,9 @@ Nx = 2
 Nu = 1
 
 # Model and stage cost.
-F = lambda x,u : [x[0] + u[0], x[1] + u[0]**3]
-l = lambda x,u : [mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)]
-Pf = lambda x : [1000*mpc.mtimes(x.T,x)] # Huge terminal penalty.
+def F(x,u): return [x[0] + u[0], x[1] + u[0]**3]
+def l(x,u): return [mpc.util.mtimes(x.T,x) + mpc.util.mtimes(u.T,u)]
+def Pf(x): return [1000*mpc.mtimes(x.T,x)] # Huge terminal penalty.
 
 def nlsim(x0,u,N):
     """
@@ -71,7 +71,7 @@ Nguessmethods = len(guessfuncs)
 verb = 0
 uopt = {}
 phiopt = {}
-figure = plt.figure(figsize=(4,8))
+figure = plt.figure(figsize=(6,8))
 guessmethod = 0
 for guessmethod in range(Nguessmethods):
     guess = {}
@@ -98,16 +98,19 @@ for guessmethod in range(Nguessmethods):
     c = guessfuncs[guessmethod][2]
     ax.plot(theta/np.pi,uopt[f],"-o",color=c,label=f,markerfacecolor=c,markeredgecolor="none",markersize=3)
     ax.set_ylabel(r"Guess: %s" % f)
-    ax.set_xlabel(r"$\theta/\pi$")
-
+    if guessmethod == 0:
+        plt.title("Control Input ($u_0$)")
+    elif guessmethod == Nguessmethods - 1:
+        ax.set_xlabel(r"$\theta/\pi$")
+    
     # Plot optimal cost.    
     ax = figure.add_subplot(Nguessmethods, 2, 2*guessmethod + 2)
     c = guessfuncs[guessmethod][2]
     ax.plot(theta/np.pi,phiopt[f],"-o",color=c,label=f,markerfacecolor=c,markeredgecolor="none",markersize=3)
     ax.set_ylabel(r"Guess: %s" % f)
-    ax.set_xlabel(r"$\theta/\pi$")
-    
     if guessmethod == 0:
-        plt.title("Guess Strategies")
+        plt.title("Objective Function ($V$)")
+    elif guessmethod == Nguessmethods - 1:
+        ax.set_xlabel(r"$\theta/\pi$")
 plt.tight_layout(pad=.5)
-plt.savefig("example2-8%s.pdf" % "Pf" if usePf else "")
+plt.savefig("example2-8%s.pdf" % ("Pf" if usePf else "",))

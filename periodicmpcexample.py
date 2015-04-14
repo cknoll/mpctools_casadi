@@ -3,11 +3,11 @@
 # Imports.
 import numpy as np
 import scipy.signal as spsignal
-import mpc_tools_casadi as mpc
+import mpctools.legacy as mpc
 
 # Define optimal periodic solution.
 T = 1
-f = lambda t : spsignal.sawtooth(2*np.pi/T*t + np.pi/2,.5)
+def f(t): return spsignal.sawtooth(2*np.pi/T*t + np.pi/2,.5)
 
 # Define continuous time model.
 Acont = np.array([[-1]])
@@ -19,7 +19,7 @@ p = Bcont.shape[1] # Number of control elements
 dt = .01
 N = 250
 t = np.arange(N+1)*dt
-(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)
+(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 A = [Adisc]
 B = [Bdisc]
 
@@ -40,10 +40,10 @@ for k in range(N+1):
 x0 = np.array([-2])
 
 # Solve linear MPC problem.
-solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds)
+solution = mpc.linear.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds)
 x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpc.mpcplot(x,u,t,f(t[np.newaxis,:]))
+fig = mpc.plots.mpcplot(x,u,t,f(t[np.newaxis,:]))
 fig.show()

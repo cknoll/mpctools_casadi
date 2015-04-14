@@ -1,53 +1,57 @@
 # Control of the Van der Pol oscillator.
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import numpy as np
 
 # Define model and get simulator.
 Delta = .5
+Nsim = 20
 Nx = 2
 Nu = 1
 def ode(x,u):
-    return [(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]]
+    return np.array([(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]])
 
 # Create a simulator.
-vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
+vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu, vector=True)
 
 # Then get nonlinear casadi functions and a linearization.
-ode_casadi = mpc.getCasadiFunc(ode, Nx, Nu, name="f")
-lin = mpc.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
+ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
+lin = mpc.util.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
+
+# Also discretize using RK4.
+def ode_rk4(x,u):
+    return mpc.util.rk4(ode, x, [u], Delta=Delta, M=1)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F")
 
 # Define stage cost and terminal weight.
-lfunc = lambda x,u: [mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)]
-l = mpc.getCasadiFunc(lfunc, Nx, Nu, name="l")
+def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
+l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
 
-Pffunc = lambda x: [10*mpc.mtimes(x.T,x)]
-Pf = mpc.getCasadiFunc(Pffunc, Nx, name="Pf")
+def Pffunc(x): return 10*mpc.mtimes(x.T,x)
+Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 # Create linear discrete-time model for comparison.
-Ffunc = lambda x,u: [mpc.mtimes(mpc.DMatrix(lin["A"]),x) + mpc.mtimes(mpc.DMatrix(lin["B"]),u)]
-F = mpc.getCasadiFunc(Ffunc, Nx, Nu, name="F")
-
-# Bounds on u.
-bounds = dict(uub=[1],ulb=[-.75])
+def Ffunc(x,u): return (mpc.mtimes(mpc.util.DMatrix(lin["A"]),x) +
+    mpc.mtimes(mpc.util.DMatrix(lin["B"]),u))
+F = mpc.getCasadiFunc(Ffunc, [Nx,Nu], ["x","u"], funcname="F")
 
 # Make optimizers.
 x0 = np.array([0,1])
 Nt = 20
 commonargs = dict(
-    N=Nt,
+    N={"x":Nx, "u":Nu, "t":Nt},
     verbosity=0,
-    l=[l],
+    l=l,
     x0=x0,
     Pf=Pf,
-    bounds=bounds,
-    returnTimeInvariantSolver=True,
+    lb={"u" : -.75*np.ones((Nsim,Nu))},
+    ub={"u" : np.ones((Nsim,Nu))},
+    runOptimization=False,
 )
 solvers = {}
-solvers["lmpc"] = mpc.nmpc(F=[F],**commonargs)
-solvers["nmpc"] = mpc.nmpc(F=[ode_casadi],timemodel="rk4",M=1,Delta=Delta,**commonargs)
+solvers["lmpc"] = mpc.nmpc(f=F,**commonargs)
+solvers["nmpc"] = mpc.nmpc(f=ode_rk4_casadi,**commonargs)
 
 # Now simulate.
-Nsim = 20
 times = Delta*Nsim*np.linspace(0,1,Nsim+1)
 x = {}
 u = {}
@@ -57,10 +61,10 @@ for method in solvers.keys():
     u[method] = np.zeros((Nsim,Nu))
     for t in range(Nsim):
         solvers[method].fixvar("x",0,x[method][t,:])
-        sol = solvers[method].solve()
-        print "%5s %d: %s" % (method,t,sol["status"])
-        u[method][t,:] = sol["u"][0,:]
+        solvers[method].solve()
+        print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
+        u[method][t,:] = solvers[method].var["u",0,:]
         x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
-    mpc.mpcplot(x[method].T,u[method].T,times,title=method)
+    mpc.plots.mpcplot(x[method].T,u[method].T,times,title=method)
         
         

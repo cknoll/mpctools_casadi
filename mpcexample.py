@@ -2,7 +2,7 @@
 
 # Imports.
 import numpy as np
-import mpc_tools_casadi as mpc
+import mpctools.legacy as mpc
 
 # Define continuous time model.
 Acont = np.array([[0,1],[0,-1]])
@@ -14,7 +14,7 @@ p = Bcont.shape[1] # Number of control elements
 dt = .025
 N = 200
 t = np.arange(N+1)*dt
-(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)
+(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 A = [Adisc]
 B = [Bdisc]
 
@@ -33,12 +33,12 @@ R = [np.eye(p)]
 x0 = np.array([10,0])
 
 # Solve linear MPC problem.
-solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=1)
+solution = mpc.linear.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=1)
 x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
+fig = mpc.plots.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
 fig.show()
 fig.tight_layout(pad=.5)
 fig.savefig("mpcexample.pdf",bbox_inches="tight",pad_inches=0)

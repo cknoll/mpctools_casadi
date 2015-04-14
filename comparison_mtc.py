@@ -1,35 +1,40 @@
 # Control of the Van der Pol oscillator using mpc_tools_casadi.
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import numpy as np
 
 # Define model and get simulator.
 Delta = .5
+Nt = 20
 Nx = 2
 Nu = 1
 def ode(x,u):
-    return [(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]]
+    return np.array([(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]])
 
 # Create a simulator.
-vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu)
+vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu, vector=True)
 
 # Then get nonlinear casadi functions and rk4 discretization.
-ode_casadi = mpc.getCasadiFunc(ode, Nx, Nu, name="f")
-ode_rk4_casadi = mpc.getRungeKutta4(ode_casadi, Delta)
+def ode_rk4(x,u):
+    return mpc.util.rk4(ode, x, [u], Delta=Delta)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F")
 
 # Define stage cost and terminal weight.
-lfunc = lambda x,u: [mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)]
-l = mpc.getCasadiFunc(lfunc, Nx, Nu, name="l")
+def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
+l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
 
-Pffunc = lambda x: [10*mpc.mtimes(x.T,x)]
-Pf = mpc.getCasadiFunc(Pffunc, Nx, name="Pf")
+def Pffunc(x): return 10*mpc.mtimes(x.T,x)
+Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 # Bounds on u.
+lb = {"u" : -.75*np.ones((Nt,Nu))}
+ub = {"u" : np.ones((Nt,Nu))}
 bounds = dict(uub=[1],ulb=[-.75])
 
 # Make optimizers.
 x0 = np.array([0,1])
-Nt = 20
-solver = mpc.nmpc(F=[ode_rk4_casadi],N=Nt,verbosity=0,l=[l],x0=x0,Pf=Pf,bounds=bounds,returnTimeInvariantSolver=True)
+N = {"x":Nx, "u":Nu, "t":Nt}
+solver = mpc.nmpc(f=ode_rk4_casadi,N=N,verbosity=0,l=l,x0=x0,Pf=Pf,
+                  lb=lb,ub=ub,runOptimization=False)
 
 # Now simulate.
 Nsim = 20
@@ -42,14 +47,14 @@ for t in range(Nsim):
     solver.fixvar("x",0,x[t,:])
     
     # Solve nlp.
-    sol = solver.solve()
+    solver.solve()
     
     # Print stats.
-    print "%d: %s" % (t,sol["status"])
-    u[t,:] = sol["u"][0,:]
+    print "%d: %s" % (t,solver.stats["status"])
+    u[t,:] = solver.var["u",0,:]
     
     # Simulate.
     x[t+1,:] = vdp.sim(x[t,:],u[t,:])
     
 # Plots.
-mpc.mpcplot(x.T,u.T,times)
+mpc.plots.mpcplot(x.T,u.T,times)
