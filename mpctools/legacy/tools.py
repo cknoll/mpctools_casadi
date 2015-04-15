@@ -912,3 +912,60 @@ def getRungeKutta4(f,Delta,M=1,d=False,name=None,argsizes=None):
     F.init()
     
     return F
+
+
+class OneStepSimulator(object):
+    """
+    Simulates a continuous-time system.
+    """
+    def __init__(self,ode,Delta,Nx,Nu,Nd=0,Nw=0,vector=False):
+        """
+        Initialize by specifying model and sizes of everything.
+        """
+        # Create variables.
+        x = casadi.SX.sym("x",Nx)
+        p = casadi.SX.sym("p",Nu+Nd+Nw)
+        u = p[:Nu]
+        odeargs = {"x":x}
+        if Nu > 0:
+            odeargs["u"] = u
+        if Nd > 0:
+            d = p[Nu:Nu+Nd]
+            odeargs["d"] = d
+        if Nw > 0:
+            w = p[Nu+Nd:]
+            odeargs["w"] = w
+        
+        # Save sizes. Really we should make these all properties because
+        # changing them doesn't do anything.
+        self.Nx = Nx
+        self.Nu = Nu
+        self.Nd = Nd
+        self.Nw = Nw
+        self.Delta = Delta
+        
+        # Decide how to call ode.
+        if vector:
+            f = ode(**odeargs)
+        else:
+            f = casadi.vertcat(ode(**odeargs))    
+        
+        # Now define integrator for simulation.
+        model = casadi.SXFunction(casadi.daeIn(x=x,p=p),casadi.daeOut(ode=f))
+        model.init()
+        
+        self.__Integrator = casadi.Integrator("cvodes",model)
+        self.__Integrator.setOption("tf",Delta)
+        self.__Integrator.init()
+
+    def sim(self,x0,u=[],d=[],w=[]):
+        """
+        Simulate one timestep.
+        """
+        self.__Integrator.setInput(x0,"x0")
+        self.__Integrator.setInput(casadi.vertcat([u,d,w]),"p")
+        self.__Integrator.evaluate()
+        xf = self.__Integrator.getOutput("xf")
+        self.__Integrator.reset()
+        
+        return np.array(xf).flatten()

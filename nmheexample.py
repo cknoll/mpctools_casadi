@@ -55,9 +55,8 @@ def measurement(x):
 
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nw],["x","u","w"],"F")
 
-# Make a simulator. Must set vector=True because our ode function is vectorized
-# using np.array.
-model = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd=0, Nw=Nw, vector=True)    
+# Make a simulator.
+model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nw], ["x","u","w"])    
 
 # Convert continuous-time f to explicit discrete-time F with RK4.
 def ode_rk4(x,u,w=[0,0,0]):
@@ -84,7 +83,7 @@ ysim = np.zeros((Nsim,Ny))
 
 for t in range(Nsim):
     ysim[t] = measurement(xsim[t]) + v[t,:]    
-    xsim[t+1,:] = model.sim(xsim[t,:],u=usim[t,:],w=w[t,:])
+    xsim[t+1,:] = model.sim(xsim[t,:],usim[t,:],w[t,:])
     
 # Plots.
 colors = ["red","blue","green"]

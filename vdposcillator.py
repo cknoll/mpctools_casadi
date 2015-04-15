@@ -11,7 +11,7 @@ def ode(x,u):
     return np.array([(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]])
 
 # Create a simulator.
-vdp = mpc.OneStepSimulator(ode, Delta, Nx, Nu, vector=True)
+vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
 # Then get nonlinear casadi functions and a linearization.
 ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")

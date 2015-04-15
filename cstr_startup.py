@@ -45,8 +45,9 @@ def ode_rk4(x,u,d):
 
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],funcname="ode_rk4")
-cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd, vector=True)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],
+                                   funcname="ode_rk4")
+cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
 # Steady-state values.
 cs = .878
@@ -99,7 +100,8 @@ def stagecost(x,u,xsp,usp):
     
     # Calculate stage cost.
     return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
-l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],funcname="l")
+l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],
+                      funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
@@ -223,7 +225,8 @@ for method in solvers.keys():
         solvers[method].par["u_prev",0] = ucl[method][t,:]
 
 # Define plotting function.
-def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},keys=None,bounds=None,ilegend=0):
+def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},
+             markers={},keys=None,bounds=None,ilegend=0):
     if keys is None:
         keys = x.keys()
     for k in keys:    
@@ -239,7 +242,8 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},
         ax = fig.add_subplot(gs[i*Nu:(i+1)*Nu,0])
         for k in keys:
             t = np.arange(0,x[k].shape[0])*Delta
-            args = {"color":colors.get(k,"black"), "label":labels.get(k,k), "marker":markers.get(k,"")}
+            args = {"color":colors.get(k,"black"), "label":labels.get(k,k),
+                    "marker":markers.get(k,"")}
             [line] = ax.plot(t,x[k][:,i],markeredgecolor="none",**args)
             if i == ilegend:
                 leglines.append(line)
@@ -257,7 +261,8 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},markers={},
             ax.step(t,u[k][:,i],where="post",**args)
         if bounds is not None:
             for b in set(["uub", "ulb"]).intersection(bounds.keys()):
-                ax.plot(np.array([t[0],t[-1]]),np.ones((2,))*bounds[b][i],'--k')
+                ax.plot(np.array([t[0],t[-1]]),np.ones((2,))*bounds[b][i],
+                        '--k')
         ax.set_ylabel(ylabelsu[i])
         mpc.plots.zoomaxis(ax,yscale=1.25)
     ax.set_xlabel("Time (min)")
@@ -273,5 +278,6 @@ colors = {"lmpc":"blue", "nmpc":"green", "uncont":"red"}
 labels = {"lmpc":"LMPC", "nmpc":"NMPC", "uncont":"Uncontrolled"}
 markers = {"lmpc":"s", "nmpc":"o", "uncont":"^"}
 plotbounds = dict([(k,bounds[k][0]) for k in ["ulb","uub"]])
-fig = cstrplot(xcl, ucl, ysp, colors=colors, contVars=contVars, labels=labels, keys=keys, markers={}, bounds=plotbounds, ilegend=2)
+fig = cstrplot(xcl, ucl, ysp, colors=colors, contVars=contVars, labels=labels,
+               keys=keys, markers={}, bounds=plotbounds, ilegend=2)
 fig.savefig("cstr_startup.pdf")

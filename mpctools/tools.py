@@ -761,13 +761,16 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True):
 # ============
 
 def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
-                        abstol=1e-8,reltol=1e-8):
+                        abstol=1e-8,reltol=1e-8,wrap=True):
     """
     Gets a Casadi integrator for function f from 0 to Delta.
     
     Argsizes should be a list with the number of elements for each input. Note
     that the first argument is assumed to be the differential variables, and
     all others are kept constant.
+    
+    wrap can be set to False to return the raw casadi Integrator object, i.e.,
+    with inputs x and p instead of the arguments specified by the user.
     """
     if len(argsizes) < 1:
         raise IndexError("argsizes must have at least one element!")
@@ -794,17 +797,76 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     
     # Now do the subtle bit. Integrator has arguments x0 and p, but we need
     # arguments as given by the user. First we need MX arguments.
-    X0 = casadi.MX.sym(argnames[0],argsizes[0])
-    PAR = [casadi.MX.sym(argnames[i],argsizes[i]) for i
-        in range(1,len(argsizes))]    
-    
-    wrappedIntegrator = integrator(x0=X0,p=casadi.vertcat(PAR))
-    F = casadi.MXFunction([X0] + PAR,wrappedIntegrator)
-    F.setOption("name",funcname)
-    F.init()
-    
-    return F
+    if wrap:
+        X0 = casadi.MX.sym(argnames[0],argsizes[0])
+        PAR = [casadi.MX.sym(argnames[i],argsizes[i]) for i
+            in range(1,len(argsizes))]    
+        
+        wrappedIntegrator = integrator(x0=X0,p=casadi.vertcat(PAR))
+        F = casadi.MXFunction([X0] + PAR,wrappedIntegrator)
+        F.setOption("name",funcname)
+        F.init()
+        
+        return F
+    else:
+        return integrator
 
+class DiscreteSimulator(object):
+    """
+    Simulates one timestep of a continuous-time system.
+    """
+    
+    @property
+    def Delta(self):
+        return self.__Delta
+        
+    @property
+    def Nargs(self):
+        return self.__Nargs
+        
+    @property
+    def args(self):
+        return self.__argnames
+        
+    def __init__(self,ode,Delta,argsizes,argnames=None):
+        """
+        Initialize by specifying model and sizes of everything.
+        """
+        # Make sure there is at least one argument.
+        if len(argsizes) == 0:
+            raise ValueError("Model must have at least 1 argument.")
+        
+        # Save sizes.
+        self.__Delta = Delta
+        self.__Nargs = len(argsizes)        
+        
+        # Decide argument names.
+        if argnames is None:
+            argnames = ["x"] + ["p_%d" % (i,) for i in range(1,self.Nargs)]
+        
+        # Store names and Casadi Integrator object.
+        self.__argnames = argnames
+        self.__integrator = getCasadiIntegrator(ode,Delta,
+                                                argsizes,argnames,wrap=False)
+
+    def sim(self,*args):
+        """
+        Simulate one timestep.
+        """
+        # Check arguments.
+        if len(args) != self.Nargs:
+            raise ValueError("Wrong number of arguments: "
+                "%d given; %d expected." % (len(args),self.Nargs))
+        self.__integrator.setInput(args[0],"x0")
+        if len(args) > 1:
+            self.__integrator.setInput(casadi.vertcat(args[1:]),"p")
+        
+        # Call integrator.        
+        self.__integrator.evaluate()
+        xf = self.__integrator.getOutput("xf")
+        self.__integrator.reset()
+        
+        return np.array(xf).flatten()
 
 def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     """

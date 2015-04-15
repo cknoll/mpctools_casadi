@@ -19,8 +19,8 @@ def ode(x,u):
 #<<ENDCHUNK>>
 
 # Create a simulator.
-vdp = mpc.OneStepSimulator(ode,
-    Delta, Nx, Nu, vector=True)
+vdp = mpc.DiscreteSimulator(ode,
+    Delta, [Nx,Nu], ["x","u"])
 
 #<<ENDCHUNK>>
 

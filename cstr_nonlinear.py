@@ -65,9 +65,10 @@ def ode_rk4(x,u,d):
 
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode",True)
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],"ode_rk4",True)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],
+                                   "ode_rk4",True)
 
-cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd, vector=True)
+cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
 # Update the steady-state values a few times to make sure they don't move.
 for i in range(10):
@@ -88,7 +89,8 @@ def ode_augmented(x,u,d=ds):
     
     dxdt = mpc.util.vertcat([cstrmodel(c,T,h,Tc,F+dhat[2],F0)] + [0]*Ny)
     return dxdt
-cstraug = mpc.OneStepSimulator(ode_augmented, Delta, Nx + Nid, Nu, Nd, vector=True)
+cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
+                                [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 
 def ode_augmented_rk4(x,u,d=ds):
     return mpc.util.rk4(ode_augmented,x,[u,d],Delta,2)
@@ -103,10 +105,14 @@ def measurement(x,d=ds):
 ys = measurement(xaugs)
 
 # Turn into casadi functions.
-ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
-ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented_rk4,[Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4")
-ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,[Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4")
-measurement_casadi = mpc.getCasadiFunc(measurement,[Nx+Nid,Nd],["xaug","d"],"measurement")
+ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
+ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented_rk4,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4")
+ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
+    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4")
+measurement_casadi = mpc.getCasadiFunc(measurement,
+    [Nx+Nid,Nd],["xaug","d"],"measurement")
 
 # Now get a linearization at this steady state.
 ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
@@ -131,7 +137,8 @@ def stagecost(x,u,xsp,usp):
     
     # Calculate stage cost.
     return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
-l = mpc.getCasadiFunc(stagecost,[Nx+Nid,Nu,Nx+Nid,Nu],["x","u","x_sp","u_sp"],funcname="l")
+l = mpc.getCasadiFunc(stagecost,
+    [Nx+Nid,Nu,Nx+Nid,Nu],["x","u","x_sp","u_sp"],funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
@@ -156,7 +163,8 @@ nmpc = mpc.nmpc(ode_augmented_rk4_casadi,l,N,xaug0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
     verbosity=0,timelimit=60,runOptimization=False,scalar=useCasadiSX)
 
 # Define augmented system with disturbance model.
-ss_augmented = mpc.util.getLinearization(ode_augmented_casadi, xaugs, us, ds, Delta)
+ss_augmented = mpc.util.getLinearization(ode_augmented_casadi,
+                                         xaugs, us, ds, Delta)
 Aaug = ss_augmented["A"]
 Baug = ss_augmented["B"]
 Caug = mpc.util.getLinearization(measurement_casadi, xaugs)["A"]
@@ -185,10 +193,8 @@ Rvinv = linalg.inv(Rv)
 def lest(w,v): return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
 lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
-#lxest = lambda x: mpc.mtimes(x.T,Qwinv,x)
-#lxest = mpc.getCasadiFuncGeneralArgs(lxest,[Nx + Nid],["x"],"lx",True)
-#x0bar = xaugs
-lxest = None # We shouldn't need a prior.
+# Don't use a prior.
+lxest = None
 x0bar = None
 
 # Define plotting function.
@@ -236,9 +242,10 @@ for linear in [True,False]:
     err = y.copy()
     v = y.copy()
     
-    xhatm = np.zeros((Nsim+1,Nx+Nid)) # Augmented state estimate before measurement.
+    # xhatm is xhat( k | k-1 ). xhat is xhat( k | k ).
+    xhatm = np.zeros((Nsim+1,Nx+Nid))
     xhatm[0,:] = xaugs # Start with estimate at steaty state.
-    xhat = np.zeros((Nsim,Nx+Nid)) # Augmented state estimate after measurement.
+    xhat = np.zeros((Nsim,Nx+Nid))
     
     # Pick disturbance, setpoint, and initial condition.
     d = np.zeros((Nsim,Nd))
@@ -253,18 +260,31 @@ for linear in [True,False]:
         H = np.zeros((Nu,Ny))
         for i in range(len(contVars)):
             H[i,contVars[i]] = 1
-        G = np.bmat([[np.eye(Nx) - A, -B],[H.dot(C), np.zeros((H.shape[0], Nu))]]).A
+        # The trailing .A casts to array data type (from matrix).
+        G = np.bmat([[np.eye(Nx) - A, -B],
+                      [H.dot(C), np.zeros((H.shape[0], Nu))]]).A
     else:
-        # Make steady-state target selector bounds.
-        sstarglb = {"u" : np.tile(us - ubounds, (1,1))}
-        sstargub = {"u" : np.tile(us + ubounds, (1,1))}
-        sstargguess = {"u" : np.tile(us, (1,1)), "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)), "y" : np.tile(xs, (1,1))}        
-        sstargp = np.tile(ds, (1,1)) # Parameters for system.
-        sstargN = {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd}
-        sstarg = mpc.sstarg(ode_augmented_casadi,measurement_casadi,sstargN,
-            lb=sstarglb,ub=sstargub,guess=sstargguess,p=sstargp,
-            verbosity=0,discretef=False,runOptimization=False,
-            scalar=useCasadiSX)
+        # Make steady-state target selector.
+        sstargargs = {
+            "f" : ode_augmented_casadi,
+            "h" : measurement_casadi,
+            "lb" : {"u" : np.tile(us - ubounds, (1,1))},
+            "ub" : {"u" : np.tile(us + ubounds, (1,1))},
+            "guess" : {
+                "u" : np.tile(us, (1,1)),
+                "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
+                "y" : np.tile(xs, (1,1)),
+            },
+            "p" : np.tile(ds, (1,1)), # Parameters for system.
+            "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd},
+            "verbosity" : 0,
+            "discretef" : False,
+            "runOptimization" : False,
+            "scalar" : useCasadiSX,
+        }
+        sstarg = mpc.sstarg(**sstargargs)
+        
+        # Preallocate a guess dictionary that we will change.
         estimatorguess = {}
         estimatorguess["x"] = np.tile(xaugs, (1,1))
         estimatorguess["v"] = np.zeros((1,Nv))
@@ -272,7 +292,8 @@ for linear in [True,False]:
     
     for n in range(Nsim):
         # Take plant measurement.
-        y[n,:] = measurement(np.concatenate((x[n,:],np.zeros((Nid,))))) + v[n,:]
+        y[n,:] = measurement(np.concatenate(
+            (x[n,:],np.zeros((Nid,))))) + v[n,:]
         
         # Update state estimate with measurement.
         err[n,:] = y[n,:] - measurement(xhatm[n,:])
@@ -283,7 +304,8 @@ for linear in [True,False]:
             
             # Steady-state target.
             dhat = xhat[n,Nx:]
-            rhs = np.concatenate((Bd.dot(dhat), H.dot(ysp[n,:] - ys - Cd.dot(dhat))))
+            rhs = np.concatenate((Bd.dot(dhat), H.dot(ysp[n,:] - ys
+                - Cd.dot(dhat))))
             qsp = linalg.solve(G,rhs) # Similar to "G\rhs" in Matlab.
             xaugsp[n,:Nx] = qsp[:Nx] + xs
             usp[n,:] = qsp[Nx:] + us
@@ -302,29 +324,44 @@ for linear in [True,False]:
                 sstarg.par["p",0] = d[n,:]
             else:
                 # Do full-information estimation.
-                N = {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":n}
-                estsol = mpc.nmhe(f=ode_estimator_rk4_casadi,h=measurement_casadi,u=u[:n,:],y=y[:n+1,:],l=lest,N=N,
-                    lx=lxest,x0bar=x0bar,p=np.tile(ds,(n+1,1)),verbosity=0,guess=estimatorguess,timelimit=5,scalar=useCasadiSX)
+                nmheargs = {
+                    "f" : ode_estimator_rk4_casadi,
+                    "h" : measurement_casadi,
+                    "u" : u[:n,:],
+                    "y" : y[:n+1,:],
+                    "l" : lest,
+                    "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":n},
+                    "lx" : lxest,
+                    "x0bar" : x0bar,
+                    "p" : np.tile(ds,(n+1,1)),
+                    "verbosity" : 0,
+                    "guess" : estimatorguess,
+                    "timelimit" : 5,
+                    "scalar" : useCasadiSX                        
+                }
+                estsol = mpc.nmhe(**nmheargs)
                 
-                print "Estimator: %s, " % (estsol["status"],),
-                #mpc.keyboard()             
+                print "Estimator: %s, " % (estsol["status"],),            
                 xhat[n,:] = estsol["x"][-1,:] # Update our guess.
                 
                 # Update estimator guess.
                 estimatorguess = {}
                 for k in ["x","w","v"]:
                     if k in estsol.keys():
-                        estimatorguess[k] = np.concatenate((estsol[k][:,...],estsol[k][-1:,...]))
+                        # Duplicate final guess to prepare for new data at the
+                        # next timestep.
+                        estimatorguess[k] = np.concatenate((estsol[k][:,...],
+                            estsol[k][-1:,...]))
                     elif n == 0 and k == "w":
                         estimatorguess[k] = np.zeros((1,Nw))
                     else:
-                        raise KeyError("Entry '%s' missing from estimator solution. Something went wrong." % (k,))
-                
+                        # This should never happen.
+                        raise KeyError("Entry '%s' missing from estimator "
+                            "solution. Something went wrong." % (k,))
                 dguess = ds
                 sstarg.par["p",0] = ds                
                 
             # Use nonlinear steady-state target selector.
-            xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:])) # Setpoint for augmented state.
             x0hat = xhat[n,:]
             
             if n == 0:
@@ -332,8 +369,11 @@ for linear in [True,False]:
             else:
                 uguess = u[n-1,:]
             sstarg.fixvar("y",0,ysp[n,contVars],contVars)
+            
+            # Pick setpoint for augmented state and fix the augmented states.            
+            xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:]))
             sstarg.guess["x",0] = xtarget
-            sstarg.fixvar("x",0,xhat[n,Nx:],range(Nx,Nx+Nid)) # Fix the augmented states.
+            sstarg.fixvar("x",0,xhat[n,Nx:],range(Nx,Nx+Nid))
 
             sstarg.guess["u",0] = uguess
             sstarg.solve()
@@ -368,12 +408,16 @@ for linear in [True,False]:
             xhatm[n+1,:] = cstraug.sim(xhat[n,:], u[n,:], ds)
             print ""
         else:
-            xhatm[n+1,:] = Aaug.dot(xhat[n,:] - xaugs) + Baug.dot(u[n,:] - us) + xaugs
+            xhatm[n+1,:] = Aaug.dot(xhat[n,:] - xaugs) + Baug.dot(u[n,:]
+                - us) + xaugs
     
     # Take final measurement.
-    y[Nsim,:] = measurement(np.concatenate((x[Nsim,:],np.zeros((Nid,))))) + v[Nsim,:]
+    y[Nsim,:] = measurement(np.concatenate((x[Nsim,:],
+        np.zeros((Nid,))))) + v[Nsim,:]
     endtime = time.clock()
-    print "%s Took %.5g s." % ("Linear" if linear else "Nonlinear", endtime - starttime,)
+    print "%s Took %.5g s." % ("Linear" if linear else "Nonlinear",
+                               endtime - starttime)
        
-    fig = cstrplot(x,u,ysp=None,contVars=[],title="Linear" if linear else "Nonlinear")
+    fig = cstrplot(x,u,ysp=None,contVars=[],
+                   title="Linear" if linear else "Nonlinear")
 fig.savefig("cstr_nonlinear.pdf")
