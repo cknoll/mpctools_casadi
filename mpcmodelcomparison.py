@@ -48,7 +48,8 @@ Pf = mpc.getCasadiFunc(Pffunc,[Nx],["x"],"Pf")
 print "=Linear="
 opt_lmpc = mpc_old.linear.lmpc([A],[B],x0,Nt,[Q],[R],bounds=bounds,
                                verbosity=verb)
-fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp,xinds=[0,1])
+fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp,
+                             xinds=[0,1],timefirst=False)
 fig_lmpc.canvas.set_window_title("Linear MPC")
 fig_lmpc.show()
 
@@ -59,7 +60,7 @@ F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
 print "\n=Exact Discretization="
 N = {"x":Nx, "u":Nu, "t":Nt}
 opt_dnmpc = mpc.nmpc(F,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
-fig_dnmpc = mpc.plots.mpcplot(opt_dnmpc["x"].T,opt_dnmpc["u"].T,t,xsp,
+fig_dnmpc = mpc.plots.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,
                               xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 fig_dnmpc.show()
@@ -75,7 +76,7 @@ F_rk4 = mpc.getCasadiFunc(F_rk4,[Nx,Nu],["x","u"],"F_rk4")
 
 print "\n=RK4 Discretization="
 opt_crk4nmpc = mpc.nmpc(F_rk4,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
-fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"].T,opt_crk4nmpc["u"].T,t,
+fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,
                                  xsp,xinds=[0,1])
 fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
 fig_crk4nmpc.show()
@@ -84,8 +85,8 @@ print "\n=Collocation Discretization="
 Ncolloc = N.copy()
 Ncolloc["c"] = Mcolloc
 opt_ccollocnmpc = mpc.nmpc(F,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,Delta=Delta)
-fig_ccollocnmpc = mpc.plots.mpcplot(opt_ccollocnmpc["x"].T,
-                                    opt_ccollocnmpc["u"].T,t,xsp,xinds=[0,1])
+fig_ccollocnmpc = mpc.plots.mpcplot(opt_ccollocnmpc["x"],
+                                    opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
 fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
 fig_ccollocnmpc.show()
 
@@ -95,8 +96,8 @@ print "\n=Casadi Integrator Discretization="
 F_integrator = mpc.tools.getCasadiIntegrator(f,Delta,[Nx,Nu],["x","u"],"int_f")
 opt_integrator = mpc.nmpc(F_integrator,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,
                           scalar=False)
-fig_integrator = mpc.plots.mpcplot(opt_integrator["x"].T,
-                                   opt_integrator["u"].T,t,xsp,xinds=[0,1])
+fig_integrator = mpc.plots.mpcplot(opt_integrator["x"],
+                                   opt_integrator["u"],t,xsp,xinds=[0,1])
 fig_integrator.canvas.set_window_title("NMPC with Casadi Integrators")
 fig_integrator.show()
 

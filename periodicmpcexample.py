@@ -45,5 +45,5 @@ x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpc.plots.mpcplot(x,u,t,f(t[np.newaxis,:]))
+fig = mpc.plots.mpcplot(x,u,t,f(t[np.newaxis,:]),timefirst=False)
 fig.show()

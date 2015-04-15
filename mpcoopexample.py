@@ -105,7 +105,7 @@ for method in ["nmpc","lmpc","solver","solver_SX"]:
 
     # Plot things.
     fig = mpc.plots.mpcplot(xcl[method],ucl[method],t,np.zeros(
-        xcl[method].shape),xinds=[0])
+        xcl[method].shape),xinds=[0],timefirst=False)
     fig.canvas.set_window_title(method)    
     fig.show()
 

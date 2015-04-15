@@ -363,18 +363,17 @@ for linear in [True,False]:
                 
             # Use nonlinear steady-state target selector.
             x0hat = xhat[n,:]
-            
-            if n == 0:
-                uguess = us
-            else:
-                uguess = u[n-1,:]
-            sstarg.fixvar("y",0,ysp[n,contVars],contVars)
-            
+             
             # Pick setpoint for augmented state and fix the augmented states.            
             xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:]))
             sstarg.guess["x",0] = xtarget
             sstarg.fixvar("x",0,xhat[n,Nx:],range(Nx,Nx+Nid))
-
+            sstarg.fixvar("y",0,ysp[n,contVars],contVars)
+            
+            if n == 0:
+                uguess = us
+            else:
+                uguess = u[n-1,:]            
             sstarg.guess["u",0] = uguess
             sstarg.solve()
             

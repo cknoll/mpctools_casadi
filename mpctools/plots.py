@@ -6,7 +6,7 @@ Contains all of the plotting functions for mpc-tools-casadi.
 """
 
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
-            title=None):
+            title=None,timefirst=True):
     """
     Makes a plot of the state and control trajectories for an mpc problem.
     
@@ -21,6 +21,10 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     
     Returns the figure handle used for plotting.
     """
+    # Transpose data if time is the first dimension; we need it second.
+    if timefirst:
+        x = x.T
+        u = u.T
     
     # Process arguments.
     if xinds is None:

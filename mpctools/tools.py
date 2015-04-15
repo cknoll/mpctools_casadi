@@ -1,4 +1,4 @@
-from __future__ import print_function, division # Grab some handy Python3 stuff.
+from __future__ import print_function, division # Grab handy Python3 stuff.
 import numpy as np
 import casadi
 import casadi.tools as ctools
@@ -23,6 +23,11 @@ Functions for solving MPC problems using Casadi and Ipopt.
 #
 # - We use the print function here, so any calls to print must have the
 #   arguments surrounded by parentheses.
+#
+#
+# - If any Python file gets longer than about 1000 lines, consider splitting it
+#   or moving functions to subfiles. Be sure to import everything that was
+#   moved so that existing code is not affected.
 
 # =================================
 # MPC and MHE
@@ -33,7 +38,7 @@ Functions for solving MPC problems using Casadi and Ipopt.
 # replace.
 
 def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
-    uprev=None,verbosity=5,timelimit=60,Delta=1,runOptimization=True,
+    uprev=None,verbosity=5,timelimit=60,Delta=None,runOptimization=True,
     scalar=True):
     """
     Solves nonlinear MPC problem.
@@ -146,7 +151,7 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
 
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
-    verbosity=5,largs=["w","v"],timelimit=60,Delta=1,runOptimization=True,
+    verbosity=5,largs=["w","v"],timelimit=60,Delta=None,runOptimization=True,
     scalar=True):
     """
     Solves nonlinear MHE problem.
@@ -184,7 +189,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
         N["v"] = N["y"] 
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
-        
+    
     # Now get the shapes of all the variables that are present.
     allShapes = __generalVariableShapes(N,finalx=True,finaly=True)
     if "c" not in N:
@@ -320,19 +325,27 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     varlb = var(-np.inf)
     varub = var(np.inf)
     varguess = var(0)
-    dataAndStructure = [(guess,varguess,"guess"), (lb,varlb,"lb"), (ub,varub,"ub")]
+    dataAndStructure = [(guess,varguess,"guess"), (lb,varlb,"lb"),
+                        (ub,varub,"ub")]
     if par is not None:
         parval = par(0)
         dataAndStructure.append((guess,parval,"par"))
     else:
         parval = None
-
+        
+    # Check timestep.
+    if Delta is None:
+        Delta = 1
+        if "c" in N.keys() and N["c"] > 0:
+            warnings.warn("Using default value Delta = 1.")        
+        
     # Sort out bounds and parameters.
     for (data,structure,name) in dataAndStructure:
         for v in set(data.keys()).intersection(structure.keys()):
             # Check sizes.            
             if len(structure[v]) < data[v].shape[0]:
-                warnings.warn("Extra time points in %s['%s']. Ignoring." % (name,v))
+                warnings.warn("Extra time points in %s['%s']. "
+                    "Ignoring." % (name,v))
             elif len(structure[v]) > data[v].shape[0]:
                 raise IndexError("Too few time points in %s['%s']!" % (name,v))
             

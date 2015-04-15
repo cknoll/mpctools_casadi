@@ -90,4 +90,4 @@ for t in range(Nsim):
 #<<ENDCHUNK>>
     
 # Plots.
-mpc.plots.mpcplot(x.T,u.T,times)
+mpc.plots.mpcplot(x,u,times)

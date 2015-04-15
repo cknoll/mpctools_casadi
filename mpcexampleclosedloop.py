@@ -45,6 +45,8 @@ for k in range(nsim):
     x0 = np.dot(A[0],x0) + np.dot(B[0],sol["u"][:,0])
 xcl[:,nsim] = x0 # Store final state.
 
-# Plot things.
-fig = mpc.plots.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0])
+# Plot things. Since time is along the second dimension, we must specify
+# timefirst = False.
+fig = mpc.plots.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0],
+                        timefirst=False)
 fig.show()

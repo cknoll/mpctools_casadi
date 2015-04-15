@@ -78,58 +78,82 @@ Consult the docstrings throughout \texttt{mpc-tools-casadi} to see what options 
 
 \paragraph*{Simulating Nonlinear Systems.}
 
-To facilitate nonlinear simulations, we provide the \texttt{OneStepSimulator} class, which is a wrapper a \casadi{} \texttt{Integrator} object.
+To facilitate nonlinear simulations, we provide the \texttt{DiscreteSimulator} class, which is a wrapper a \casadi{} \texttt{Integrator} object.
 To initialize, the syntax is
 %
 \begin{lstlisting}[frame=L]
-model = OneStepSimulator(ode,Delta,Nx,Nu)
+model = OneStepSimulator(ode,Delta,argsizes)
 \end{lstlisting}
 %
-where \texttt{ode} is a Python function that takes two keyword arguments \texttt{x} and \texttt{u} of lengths \texttt{Nx} and \texttt{Nu}.
-Optional arguments \texttt{Nd} or \texttt{Nw} can be set to positive integers to add additional arguments.
+where \texttt{ode} is a Python function that takes a fixed number of arguments whose lengths are given (in order) in the list \texttt{argsizes}.
 
 Once the object has been built, one timestep can be simulated using
 \begin{lstlisting}[frame=L]
 xnext = model.sim(x,u)
 \end{lstlisting}
 
+Note that the number of arguments will vary based on how many entries you supplied in argsizes.
+
 \paragraph*{Building \casadi{} Functions.}
 
 To simplify creation of \casadi{} functions, there are a few convenience wrappers.
 
-\funcname{getCasadiFunc(f,Nx,Nu,Nd)}
+\funcname{getCasadiFunc(f,argsizes,argnames)}
 
-Takes a Python function and sizes of $x$, $u$, and/or $d$ to build a \casadi{} \texttt{MXFunction} object.
-Note that the original function \texttt{f} should return a list of values (or at least something that can be passed as an argument to \casadi's \texttt{vertcat}).
+Takes a Python function and sizes of arguments to build a \casadi{} \texttt{SXFunction} object.
+Note that the original function \texttt{f} should return a single numpy vector (e.g., by calling \texttt{np.array} before returning).
+The input \texttt{argnames} is optional, but it should be a list of strings that give variable names.
+This helps make things self-documenting.
 
-\funcname{getCasadiFuncGeneralArgs(f,varsizes)}
-
-For functions with arguments other than $x$, $u$, or $d$, use this version instead. \texttt{varsizes} is a list of integers giving the sizes of the inputs to \texttt{f} in positional order.
-
-\funcname{getCasadiIntegrator(f,Delta,Nx,Nu,Nd)}
+\funcname{getCasadiIntegrator(f,Delta,argsizes,argnames)}
 
 Returns an \texttt{Integrator} object to integrate the Python function \texttt{f} from time 0 to \texttt{Delta}.
+\texttt{argsizes} and \texttt{argnames} are the same as in \texttt{getCasadiFunc}, but the differential variables (i.e., $x$ in $dx/dt = f(x,y,z)$) must come first.
 
-\funcname{getRungeKutta4(f,Delta,M=1)}
+\funcname{util.rk4(f,x0,par,Delta,M=1)}
 
 Returns an explicit Runge-Kutta 4th order discretization with \texttt{M} steps of size \texttt{Delta}/\texttt{M}.
-Note that for this function, \texttt{f} must already be an \texttt{MXFunction}, i.e., you should use it \emph{after} calling \texttt{getCasadiFunc}.
+\texttt{x0} should be the initial condition for the differential variables, and \texttt{par} should be a list of all other inputs to \texttt{f} (which are held constant during integration).
+An example usage is below.
+
+\begin{lstlisting}[frame=L]
+import mpctools as mpc
+
+# 2 states and 1 control.
+def ode(x,u):
+    dxdt = [x[0]**2 + u[0], x[1] - u[0]]
+    return np.array(dxdt)
+
+Delta = 0.5 # Set timestep.
+def ode_rk4(x,u):
+    return mpc.util.rk4(ode,x,[u],Delta)
+
+ode_rk4_casadi = mpc.getCasadiFunc(
+    ode_casadi, [2,1], ["x","u"])
+\end{lstlisting}
+
 
 \paragraph*{Solving MPC Problems.}
 
-For discrete-time regulation problems, the function \texttt{nmpc} should be used.
+For regulation problems, the function \texttt{nmpc} should be used.
 
-\funcname{nmpc(F,l,x0,N)}
+\funcname{nmpc(f,l,N,x0)}
 
-\texttt{F} and \texttt{l} should be Python \emph{lists} of \casadi{} discrete-time functions to describe state evolution and stage costs.
-These lists are accessed modulo length with respect to time, so $T$-periodic systems should have $T$ entries, time-invariant systems should have only one entry, etc.
-\texttt{x0} is the starting state, and \texttt{N} is the number of stages to consider in the horizon. Additional optional arguments are given below.
+\texttt{f} and \texttt{l} should be individual \casadi{} functions to describe state evolution and stage costs.
+\texttt{N} is a dictionary that holds all of the relevant sizes.
+It must have entries \lstinline|"x"|, \lstinline|"u"|, and \lstinline|"t"|, all of which are integers.
+\texttt{x0} is the starting state.
+Additional optional arguments are given below.
 
 \begin{itemize}[noitemsep,nolistsep]
     \item \texttt{Pf}: a single \casadi{} function of $x$ to use as a terminal cost.
-    \item \texttt{bounds}: A dictionary with entries \lstinline@"uub"@, \lstinline@"ulb"@, \lstinline@"xub"@, and/or \lstinline@"xlb"@ to define box constraints on $u$ or $x$.
-    Each entry should be a list of vectors that define the bounds throughout the time horizon.
-    These lists are accessed modulo length, so they need only have one element if the bounds are time-invariant.
+    \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries with entries \lstinline@"x"@ and/or \lstinline@"u"@, to define box constraints or an initial guess for the optimal values of $x$ and $u$.
+    Entries for $x$ should be a numpy array of size \lstinline@N["t"]+1@ by \lstinline@N["x"]@, and for $u$, entries should be \lstinline@N["t"]@ by \lstinline@N["u"]@.
+    \item \texttt{uprev}: Value of the previous control input.
+    If provided, variables $\Delta u$ will be added to the control problem.
+    Bounds for $\Delta u$ can be specified as \lstinline|"Du"| entries in \texttt{lb} and \texttt{ub}.
+    \item \texttt{largs}: List of strings specifying the arguments of \texttt{l} in order.
+    \lstinline|"Du"| can be included in this list if you wish to use rate-of-change penalties for $u$.
     \item \texttt{verbosity}: an integer to control how detailed the solver output is.
     Lower numbers give less output.
 \end{itemize}
@@ -140,50 +164,12 @@ These are both arrays with each column corresponding to values at different time
 Also given are \lstinline@"obj"@ with the optimal objective function value and \lstinline@"status"@ as reported by the optimizer.
 
 For continuous-time problems, there are a few options.
-To use Runge-Kutta methods, you can either convert your function ahead of time with \texttt{getRungeKutta4}, or you can specify optional arguments \lstinline@timemodel="rk4"@ and \lstinline@Delta=dt@ to have the continuous-time functions converted automatically.
-To use collocation, you can use \lstinline@timemodel="colloc"@.
-This also requires specifying the sample time.
-Note that for both options, an argument \texttt{M} controls how many interpolation points are used on each time interval.
+To use Runge-Kutta methods, you can convert your function ahead of time (e.g., with \texttt{util.rk4} as above).
+To use collocation, you can add an entry \lstinline|"c"| to the argument \texttt{N} to specify the number of collocation points on each time interval.
+This also requires specifying the sample time \texttt{Delta}.
 
 Currently, there is no support for a continuous-time objective function (i.e., continuous-time integral of a cost function).
 We plan to add support for this feature in the future, but in principle you could augment your model with an integrator state to calculate the objective function.
-
-\paragraph*{Time-Invariant Problems.}
-
-If your system is time-invariant and you plan to be solving the problem repeatedly, speed can be improved by using the \texttt{TimeInvariantSolver} class.
-
-The easiest way to build one of these objects is by setting the optional argument \texttt{returnTimeInvariantSolver} to \texttt{True} in \texttt{nmpc}.
-Below we list the useful methods for this class.
-
-\funcname{fixvar(var,t,val)}
-
-Fixes the variable named \texttt{var} to take on the value \texttt{val} at time \texttt{t}.
-This is most useful for changing the initial conditions, e.g., with
-%
-\begin{lstlisting}[frame=L]
-solver.fixvar("x",0,x0)
-\end{lstlisting}
-%
-which allows for easy re-optimization.
-
-\funcname{solve()}
-
-Returns a dictionary similar to the output of \texttt{nmpc}.
-Note, however, that the entries \lstinline@"x"@ and \lstinline@"u"@ have time running along the \emph{rows} of the array and \emph{not} the columns.
-
-\funcname{saveguess(guess)}
-
-Takes a solution dictionary and stores the values as a guess to the optimizer.
-By default, time values are offset by 1. This is done so that
-%
-\begin{lstlisting}[frame=L]
-sol = solver.solve()
-if sol["status"] == "Solve_Succeeded":
-    solver.saveguess(sol)
-    solver.fixvar("x",0,sol["x"][1,:]
-\end{lstlisting}
-%
-prepares the solver for re-optimization at the next time point by using the final $N-1$ values of the previous trajectory as a guess for the first $N-1$ time periods in the next optimization.
 
 \paragraph*{State Estimation.}
 
@@ -192,13 +178,14 @@ For nonlinear state estimation, we provide a moving-horizon estimation function 
 \funcname{nmhe(f,h,u,y,l,N)}
 
 Solves a nonlinear MHE problem.
-As with \texttt{nmpc}, arguments \texttt{f}, \texttt{h}, and \texttt{l} should be Python \emph{lists} of \casadi{} functions.
+As with \texttt{nmpc}, arguments \texttt{f}, \texttt{h}, and \texttt{l} should be individual \casadi{} functions.
 \texttt{f} must be $f(x,u,w)$, \texttt{h} must be $h(x)$, and \texttt{l} must be $\ell(w,v)$.
 \texttt{u} and \texttt{y} must be arrays of past control inputs and measurements.
 These arrays must have time running along rows so that \lstinline@y[t,:]@ gives the value of $y$ at time $t$.
 
 Different from \texttt{nmpc}, the input \texttt{N} must be a dictionary of sizes.
 This must have entries \lstinline@"t"@, \lstinline@"x"@, \lstinline@"u"@, and \lstinline@"y"@.
+Note that \lstinline@N["t"]@ gives the number of time \emph{intervals}, which means \texttt{u} should have \lstinline@N["t"]@ data points, while \texttt{y} should have \lstinline@N["t"] + 1@ data points.
 It may also have a \lstinline@"w"@ entry, but this is set equal to \lstinline@N["x"]@ if not supplied.
 Note that for feasibility reasons, \lstinline@N["v"]@ is always set to \lstinline@N["y"]@ regardless of user input. Additional optional arguments are given below.
 
@@ -207,12 +194,9 @@ Note that for feasibility reasons, \lstinline@N["v"]@ is always set to \lstinlin
     \texttt{lx} should be a \casadi{} function of only $x$.
     It is included in the objective function as $\ell_x(x_0 - \overline{x}_0)$, i.e., penalizing the difference between the value of the variable $x_0$ and the prior mean $\overline{x}_0$.
     \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries to hold bounds and a guess for the decision variables.
-    Each argument should only have entries for the variables with explicit bounds or for which you have a guess, and within each argument, each dictionary entry should be a 2D array with time running along the rows.
+    Same as in \texttt{nmpc}.
     \item \texttt{verbosity}: same as in \texttt{nmpc}.
 \end{itemize}
-
-Note that because these optimization problems inherently change data and horizon lengths, there is no equivalent to \texttt{TimeInvariantSolver} for the NMPC problems.
-This functionality may be added later, but for now all problems have to be built from scratch using the \texttt{nmhe} function.
 
 \funcname{ekf(f,h,x,u,w,y,P,Q,R)}
 
@@ -227,22 +211,82 @@ Returns a list of
     [P(k+1|k), \; \hat{x}(k+1|k), \; P(k|k), \; \hat{x}(k|k)].
 \end{equation*}
 
+\paragraph*{Steady-State Targets.}
+
+For steady-state target selection, we provide a function \texttt{sstarg} as described below.
+
+\funcname{sstarg(f,h,N)}
+
+Solves a nonlinear steady-state target problem.
+\texttt{f} must be $f(x,u)$ and \texttt{h} must be $h(x)$
+As with the other functions, the input \texttt{N} must be a dictionary of sizes.
+This must have entries \lstinline@"x"@, \lstinline@"u"@, and \lstinline@"y"@.
+Additional arguments are below.
+
+\begin{itemize}[noitemsep,nolistsep]
+    \item \texttt{phi}, \texttt{phiargs}: Objective function for if the solution is non-unique.
+    \texttt{phi} must be a \casadi{} function with the arguments as given in \texttt{phiargs}.
+    \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries to hold bounds and a guess for the decision variables.
+    Each entry must be a 1 by $n$ array, i.e., with a dummy "time" dimension first to match \texttt{nmpc} and \texttt{nmhe}.
+    Note that if you want to force outputs $y$ to a specific value, you should set equal lower and upper bounds for those entries.
+    \item \texttt{verbosity}: same as in \texttt{nmpc}.
+\end{itemize}
+
+\paragraph*{Time-Invariant Problems.}
+
+If your system is time-invariant and you plan to be solving the problem repeatedly, speed can be improved by using the \texttt{ControlSolver} class.
+
+The easiest way to build one of these objects is by setting the optional argument \texttt{runOptimization} to \texttt{False} in \texttt{nmpc}, \texttt{nmhe}, or \texttt{sstarg}.
+This returns a \texttt{ControlSolver} object instead of immediately optimizing and returning the solution.
+Below we list the useful methods for this class.
+
+\funcname{fixvar(var,t,val)}
+
+Fixes the variable named \texttt{var} to take on the value \texttt{val} at time \texttt{t}.
+This is most useful for changing the initial conditions, e.g., with
+%
+\begin{lstlisting}[frame=L]
+solver.fixvar("x",0,x0)
+\end{lstlisting}
+%
+which allows for easy re-optimization.
+You can also specify a fourth argument \texttt{inds}, if you only want to set a subset of indices for that variable (e.g., \lstinline|solver.fixvar("y",0,ysp[contVars],contVars)| to only fix the values of $y$ for controlled variables).
+
+\funcname{solve()}
+
+Solves the optimization problem.
+Some stats (including solver success or failure) is stored into the \texttt{solver.stats} dictionary, and the optimal values of the variables are in the \texttt{solver.var} struct (e.g., \lstinline|solver.var["x",t]| gives the optimal value of $x$ at time $t$).
+
+\funcname{saveguess()}
+
+Takes the current solution and stores the values as a guess to the optimizer.
+By default, time values are offset by 1. This is done so that
+%
+\begin{lstlisting}[frame=L]
+solver.solve()
+if solver.stats["status"] == "Solve_Succeeded":
+    solver.saveguess()
+    solver.fixvar("x",0,sol["x"][1,:])
+\end{lstlisting}
+%
+prepares the solver for re-optimization at the next time point by using the final $N-1$ values of the previous trajectory as a guess for the first $N-1$ time periods in the next optimization.
+
 \paragraph{Plotting.}
 
 For quick plotting, we have the \texttt{mpcplot} function.
-Required arguments are \texttt{x} and \texttt{u}, both 2D arrays with each column giving the value of $x$ or $u$ at a given time point, and a vector \texttt{t} of time points.
-Note that \texttt{t} should have as many entries as \texttt{x} has columns, while \texttt{u} should have one fewer column.
+Required arguments are \texttt{x} and \texttt{u}, both 2D arrays with each row giving the value of $x$ or $u$ at a given time point, and a vector \texttt{t} of time points.
+Note that \texttt{t} should have as many entries as \texttt{x} has rows, while \texttt{u} should have one fewer rows.
 
 \paragraph*{Functions from Octave/\textsc{Matlab}.}
 
 For convenience, we have included a few simple control-related functions from Octave/\textsc{Matlab}.
 
-\funcname{dlqr(A,B,Q,R)}, \funcname[0pt]{dlqe(A,C,Q,R)}
+\funcname{util.dlqr(A,B,Q,R)}, \funcname[0pt]{util.dlqe(A,C,Q,R)}
 
 Discrete-time linear-quadratic regulator and estimator.
 Note that cross-penalties are not supported.
 
-\funcname{c2d(A,B,Delta)}
+\funcname{util.c2d(A,B,Delta)}
 
 Converts continuous-time model $(A,B)$ to discrete time with sample time \texttt{Delta}.
 
@@ -264,54 +308,12 @@ Below we list some common issues that may cause headaches.
     If you encounter errors such as ``\texttt{cannot cast shape (n,1) to shape (n,)}'' or something of that nature, be careful about whether you are working with 1D \texttt{arrays}, vectors stored as \texttt{matrix} objects, etc.
     This may mean adding \texttt{np.newaxis} to your assignment statements or using constructs like \lstinline@np.array(x).flatten()@ to force your data to have the right shape.
     
-    \item Dimensions for data arrays.
+    \item Forgetting \casadi{} functions return lists.
     
-    During initial development, \textsc{Matlab}'s ``everything is a matrix of doubles'' philosophy was still embraced.
-    This meant that when storing time-series data for a variable $x$, it made sense to think of each time point as a column vector, and thus data is structured as \lstinline@x[i,t]@ with $i$ the components of $x$ and $t$ the time series.
-    This is how things are arranged in \texttt{nmpc} and \texttt{mpcplot}.
-    
-    However, as development proceeded, we realized that there is no reason why each $x$ has to be a vector.
-    For instance, you may want to arrange your states as a 3D array.
-    This meant that \lstinline@x[i_1,t,i_2,i_3]@ would get confusing, and so the logical choice would be to put time along the first dimension and let an arbitrary number of dimensions follow.
-    This is the convention used in \texttt{nmpc} and \texttt{TimeInvariantSolver}.
-    Eventually, we plan to rewrite everything to use this ``time first'' paradigm, but for now we are stuck with this fragmentation, and care is needed.
-    
-    \item Not passing lists of functions to \texttt{nmpc} or \texttt{nmhe}.
-    
-    These arguments are lists to support systems where the evolution equations may change drastically in time.
-    For time-invariant systems, there is only one such function, and so you may forget to enclose it in a list.
-    Any errors that say something ``cannot be indexed'' are likely due to this omission.
-    
-    A related issue is that \casadi{} \texttt{MXFunctions} always return lists, and so you will need to index the returned value to get what you want, e.g.,
+    \casadi{} \texttt{SXFunctions} (e.g., the output of \texttt{getCasadiFunc}) always return lists, and so you will need to index the returned value to get what you want, e.g.,
     %
 \begin{lstlisting}[frame=L]
 z = f([x,y])[0]
-\end{lstlisting}
-    
-    \item Not using iterables in user-defined functions.
-    
-    Whenever you pass a Python function to \texttt{getCasadiFunction}, \casadi{}'s \texttt{vertcat} function is called on its output.
-    This means that
-    %
-\begin{lstlisting}[frame=L]
-def myfunc(x):
-    return [x[0]**2, 1/x[1]]
-\end{lstlisting}
-    %
-    would give the expected results, i.e., a \casadi{} function that returns a vector of 2 elements.
-    However, if your functions are defined using matrix operations, e.g.,
-    %
-\begin{lstlisting}[frame=L]
-def myfunc(x):         # This is a bad definition.
-    return mtimes(A,x) # Output can't be vertcated.
-\end{lstlisting}
-    %
-    then this causes an error because you cannot call \texttt{vertcat} on a single vector not enclosed in a list.
-    The simple resolution is to make the output be a one-element list, i.e.,
-    %
-\begin{lstlisting}[frame=L]
-def myfunc(x)
-    return [mtimes(A,x)]
 \end{lstlisting}
     
     \item Poor initial guesses to solvers.

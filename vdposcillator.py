@@ -65,6 +65,6 @@ for method in solvers.keys():
         print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
         u[method][t,:] = solvers[method].var["u",0,:]
         x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
-    mpc.plots.mpcplot(x[method].T,u[method].T,times,title=method)
+    mpc.plots.mpcplot(x[method],u[method],times,title=method)
         
         
