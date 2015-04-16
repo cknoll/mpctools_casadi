@@ -1,7 +1,9 @@
 \documentclass[xcolor=dvipsnames]{beamer}
 
-\usepackage{listings}
-\providecommand{\lstinline}{}
+\usetheme{Madrid}
+
+\usepackage{listings,booktabs,textcomp}
+\providecommand{\lstinline}{} % This makes my IDE happy.
 
 \lstdefinestyle{makefile}{
     language={[gnu]make},
@@ -11,21 +13,34 @@
     keywordstyle=\color{Blue}\ttfamily,
     stringstyle=\color{Purple}\ttfamily,
     commentstyle=\color{ForestGreen}\ttfamily,
-    escapechar=@
+    escapechar=@,
+    upquote=true,
 }
 
 \lstdefinestyle{shell}{
     language=bash,
     basicstyle=\ttfamily\footnotesize,
+    upquote=true,
 }
 
 \lstdefinestyle{python}{
     language=Python,
-    basicstyle=\ttfamily,
-    keywordstyle=\color{Blue}\ttfamily,
-    stringstyle=\color{Purple}\ttfamily,
-    commentstyle=\color{ForestGreen}\ttfamily,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{Blue},
+    stringstyle=\color{Purple},
+    commentstyle=\color{ForestGreen},
     escapechar=@,
+    upquote=true,
+}
+
+\lstdefinestyle{matlab}{
+    language=Matlab,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{Blue},
+    stringstyle=\color{Purple},
+    commentstyle=\color{ForestGreen},
+    escapechar=!,
+    upquote=true,
 }
 
 \newcommand{\codeemph}[1]{\textcolor{NavyBlue}{\small\bfseries #1}}
@@ -47,77 +62,111 @@
 \frame{\titlepage}
 
 
-\begin{frame}[fragile]{Ubuntu/Debian Installation}
-
-NumPy, Matplotlib, Spyder
-\begin{itemize}
-    \item Standard package: \lstinline[style=shell]@$ sudo apt-get spyder@
-\end{itemize}
-
-\medskip
-
-CasADi:
-\begin{itemize}
-    \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/Binaryinstallationlinux}
-    \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
-    \item Install: \lstinline[style=shell]@$ dpkg -i <filename>.deb@
-\end{itemize}
-
-\medskip
-
-Our python modules
-\begin{itemize}
-    \item Clone Mercurial repo: \lstinline[style=shell]!$ hg clone https://hg.cae.wisc.edu/hg/mpc-tools-casadi!
-\end{itemize}
-
-\end{frame}
-
-\begin{frame}[fragile]{Developers}
-
-A few extra steps if you want to be able to push changes:
-
-\begin{itemize}
-    \item Get Jim to authorize you
-    \item Go to \smallurl{https://my.cae.wisc.edu/}
-    \item Web Tools $\rightarrow$ Repositories
-    \item Set Alternate Repository Passwords
-    \item Add lines to \smallurl{.hg/hgrc}:
-\end{itemize}
-
-\begin{lstlisting}[style=shell]
-    [auth]
-    .prefix = hg.cae.wisc.edu/hg
-    .username = <username>
-    .password = <password>
-\end{lstlisting}
-
-\end{frame}
 
 \begin{frame}{Windows Installation}
+    
+    A Windows Python distribution.
+    \begin{itemize}
+        \item E.g., Python(x,y): \smallurl{https://code.google.com/p/pythonxy/}
+    \end{itemize}
+    
+    \medskip
+    
+    CasADi:
+    \begin{itemize}
+        \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/BinaryInstallationWindows}
+        \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
+        \item Install as you would normal Windows programs
+    \end{itemize}
+    
+    \medskip
+    
+    Our python modules
+    \begin{itemize}
+        \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
+        \item Download \texttt{.zip} file on the left.
+    \end{itemize}
+    
+\end{frame}
 
-A Windows Python distribution.
+
+
+\begin{frame}[fragile]{Ubuntu/Debian Installation}
+    
+    Python, NumPy, Matplotlib
+    \begin{itemize}
+        \item E.g., with Spyder (an IDE): \lstinline[style=shell]@$ sudo apt-get install spyder@
+    \end{itemize}
+    
+    \medskip
+    
+    CasADi:
+    \begin{itemize}
+        \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/Binaryinstallationlinux}
+        \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
+        \item Install: \lstinline[style=shell]@$ dpkg -i <filename>.deb@
+    \end{itemize}
+    
+    \medskip
+    
+    Our python modules
+    \begin{itemize}
+        \item Clone Mercurial repo: \lstinline[style=shell]!$ hg clone https://hg.cae.wisc.edu/hg/mpc-tools-casadi!
+        \item Or, download a copy from \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
+    \end{itemize}
+    
+\end{frame}
+
+
+%\begin{frame}[fragile]{Developers}
+%
+%A few extra steps if you want to be able to push changes:
+%
+%\begin{itemize}
+%    \item Get Jim to authorize you
+%    \item Go to \smallurl{https://my.cae.wisc.edu/}
+%    \item Web Tools $\rightarrow$ Repositories
+%    \item Set Alternate Repository Passwords
+%    \item Add lines to \smallurl{.hg/hgrc}:
+%\end{itemize}
+%
+%\begin{lstlisting}[style=shell]
+%    [auth]
+%    .prefix = hg.cae.wisc.edu/hg
+%    .username = <username>
+%    .password = <password>
+%\end{lstlisting}
+%
+%\end{frame}
+
+
+
+\begin{frame}{What's in \texttt{mpc-tools-casadi}?}
+
 \begin{itemize}
-    \item E.g., Python(x,y): \smallurl{https://code.google.com/p/pythonxy/}
-\end{itemize}
-
-\medskip
-
-CasADi:
-\begin{itemize}
-    \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/BinaryInstallationWindows}
-    \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
-    \item Install as you would normal Windows programs
-\end{itemize}
-
-\medskip
-
-Our python modules
-\begin{itemize}
-    \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
-    \item Download \texttt{.zip} file on the left.
+    \item A Python package \texttt{mpctools}.
+    \begin{itemize}
+        \item Also a sub-package \texttt{mpctools.legacy} that contains old versions.
+        \item You should never need this.
+    \end{itemize}
+    \item A cheatsheet (in the \texttt{doc} folder).
+    \begin{itemize}
+        \item Should get you started writing your own code.
+        \item Includes the most important functions you will need to use.
+    \end{itemize}
+    \item A bunch of example files.
+    \begin{itemize}
+        \item \texttt{cstr.py}: Example 1.11 (nonlinear CSTR) from Rawlings and Mayne, but in Python.
+        \item \texttt{cstr\_startup.py}: startup and a setpoint change (with no disturbances) for the CSTR system from Example 1.11.
+        \item \texttt{nmpcexample.py}: Comparison of linear vs. nonlinear MPC for a nonlinear system.
+        \item \texttt{nmheexample.py}: Full-information estimation and MHE for  Example 4.27 (nonlinear batch reactor) from Rawlings and Mayne.
+        \item \texttt{example4-27.py}: A CasADi-only version of Example 4.27.
+        \item \texttt{cstr\_nonlinear.py}: Example 1.11 using nonlinear MPC and MHE. 
+    \end{itemize}
 \end{itemize}
 
 \end{frame}
+
 
 \begin{frame}{Why did we need to write this code?}
 
@@ -172,7 +221,229 @@ for j in range(deg+1):
 
 \end{frame}
 
-\begin{frame}{What do we have so far?}
+\begin{frame}[fragile]{Python Basics}
+    For our purposes Python+Numpy isn't that much different from Octave/\textsc{Matlab}.
+    
+    \begin{center}
+        \begin{tabular}{ll}
+            \toprule
+            Octave/\textsc{Matlab} & Python+Numpy \\
+            \midrule
+            \lstinline[style=matlab]!A = zeros(3,2);! & \lstinline[style=python]!A = np.zeros((3,2))! \\
+            \lstinline[style=matlab]!x = ones(2,1); %  2D.! & \lstinline[style=python]!x = np.ones((2,)) #  1D.! \\
+            \lstinline[style=matlab]!y = A*x;! & \lstinline[style=python]!y = A.dot(x)! \\
+            \lstinline[style=matlab]!z = y.^2; %  Elementwise.! & \lstinline[style=python]!z = y**2 #  Elementwise.! \\
+            \lstinline[style=matlab]!A(1,1) = 2; %  One-based.! & \lstinline[style=python]!A[0,0] = 2 #  Zero-based.! \\
+            \lstinline[style=matlab]!A(2,:) = [3,4];! & \lstinline[style=python]!A[1,:] = np.array([3,4])! \\
+            \lstinline[style=matlab]!s = struct('field',1);! & \lstinline[style=python]!s = {"field"  : 1}! \\
+            \lstinline[style=matlab]!disp(s.field);! & \lstinline[style=python]!print s["field"]! \\
+            \bottomrule
+        \end{tabular}
+    \end{center}
+    
+\end{frame}
+
+
+\begin{frame}{General Tips}
+    \begin{itemize}
+        \item Remember that indexing is 0-based.
+        \item Use NumPy's \texttt{array} instead of \texttt{matrix}.
+        \begin{itemize}
+            \item Despite what Octave/\textsc{Matlab} says, everything is \emph{not} a matrix of doubles
+            \item Have to use \texttt{A.dot(x)} instead of \texttt{A*x}
+            \item However, indexing is MUCH easier with arrays
+        \end{itemize}
+        \item Use \texttt{bmat([[A,B],[C,D]]).A} to assemble matrices from blocks.
+        \begin{itemize}
+            \item Equivalent to \texttt{[A, B; C, D]} in Octave/\textsc{Matlab}
+            \item Trailing \texttt{.A} casts back to \texttt{array} type from \texttt{matrix}
+        \end{itemize}
+        \item Use \texttt{scipy.linalg.solve(A,b)} to compute $A^{-1}b$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{System Model}
+
+Start by defining the system model as a Python function.
+
+\begin{lstlisting}[style=python]
+def ode(x,u,d):
+    # Grab the states, controls, and disturbance.
+    [c, T, h] = x[:Nx]
+    [Tc, F] = u[:Nu]
+    [F0] = d[:Nd]
+    
+    # Now create the right-hand side function of the ODE.
+    rate = k0*c*np.exp(-E/T)
+    
+    dxdt = [
+        F0*(c0 - c)/(np.pi*r**2*h) - rate,
+        F0*(T0 - T)/(np.pi*r**2*h)
+        - dH/(rho*Cp)*rate
+        + 2*U/(r*rho*Cp)*(Tc - T),
+        (F0 - F)/(np.pi*r**2)
+    ]
+    
+    return np.array(dxdt)
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{System Simulation}
+
+The nonlinear system can be simulated using CasADi \texttt{integrator} objects with a convenient wrapper.
+    
+\begin{lstlisting}[style=python]
+# Turn into casadi function and simulator.
+ode_casadi = mpc.getCasadiFunc(ode,
+    [Nx,Nu,Nd],["x","u","d"],funcname="ode")
+cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+
+# Simulate with nonlinear model.
+x[n+1,:] = cstr.sim(x[n,:] + xs, u[n,:] + us, d[n,:] + ds) - xs
+\end{lstlisting}
+
+\end{frame}
+
+\begin{frame}[fragile]{Calls to LQR and LQE}
+
+\vspace{-10pt}
+The functions \texttt{dlqr} and \texttt{dlqe} are also provided in \texttt{mpc-tools-casadi}.
+\begin{columns}[T]
+
+\begin{column}[T]{0.49\textwidth}
+\begin{block}{Octave/\textsc{Matlab}}
+
+\begin{lstlisting}[style=matlab]
+% Get LQR.
+[K, Pi] = dlqr(A, B, Q, R);
+
+% Get Kalman filter.
+[L, M, P] = dlqe(Aaug, ...
+    eye(naug), Caug, Qw, Rv);
+Lx = L(1:n,:);
+Ld = L(n+1:end,:);
+
+\end{lstlisting}
+
+\end{block}
+\end{column}
+
+\begin{column}[T]{0.49\textwidth}
+\begin{block}{CasADi/Python}
+
+\begin{lstlisting}[style=python]
+# Get LQR.
+[K, Pi] = mpc.util.dlqr(A,B,Q,R)
+
+# Get Kalman filter.
+[L, P] = mpc.util.dlqe(Aaug,
+    Caug, Qw, Rv)
+Lx = L[:Nx,:]
+Ld = L[Nx:,:]        
+
+
+\end{lstlisting}
+
+\end{block}
+\end{column}
+
+\end{columns}     
+
+\end{frame}
+
+\begin{frame}[fragile]{Controller Simulation}
+
+\vspace{-1.5em}
+\begin{columns}[T]
+
+\begin{column}[T]{0.45\textwidth}
+\begin{block}{Octave/\textsc{Matlab}}
+\vspace*{-.75em}
+\begin{lstlisting}[style=matlab,basicstyle=\ttfamily\fontsize{5pt}{6}\selectfont]
+for i = 1:ntimes
+  % Take plant measurement.
+  y(:,i) = C*x(:,i) + v(:,i);
+  
+  % Update state estimate with measurement.
+  ey = y(:,i) - C*xhatm(:,i) -Cd*dhatm(:,i);
+  xhat(:,i) = xhatm(:,i) + Lx*ey;
+  dhat(:,i) = dhatm(:,i) + Ld*ey; 
+  
+  % Steady-state target.
+  H  = [1 0 0; 0 0 1];
+  G = [eye(n)-A, -B; H*C, zeros(size(H,1), m)];
+  qs = G\[Bd*dhat(:,i); ...
+      H*(target.yset-Cd*dhat(:,i))];
+  xss = qs(1:n); 
+  uss = qs(n+1:end);
+  
+  % Regulator.
+  u(:,i) = K*(xhat(:,i) - xss) + uss; 
+  if (i == ntimes) break; end 
+  
+  % Simulate with nonlinear model.
+  t = [time(i); mean(time(i:i+1)); time(i+1)];
+  z0 = x(:,i) + zs;   F0 = p(:,i) + Fs;
+  Tc = u(1,i) + Tcs;  F  = u(2,i) + Fs;
+  [tout, z] = ode15s(@massenbal, t, z0, opts);
+  x(:,i+1) = z(end,:)' - zs;
+  
+  % Advance state estimate.
+  xhatm(:,i+1) = A*xhat(:,i) ...
+      + Bd*dhat(:,i) + B*u(:,i);
+  dhatm(:,i+1) = dhat(:,i);
+end
+\end{lstlisting}
+\vspace{-.5em}
+\end{block}
+\end{column}
+
+\begin{column}[T]{0.45\textwidth}
+\begin{block}{Python+Numpy \vphantom{/}}
+\vspace*{-.75em}
+\begin{lstlisting}[style=python,basicstyle=\ttfamily\fontsize{5pt}{6}\selectfont]
+for n in range(Nsim + 1):
+    # Take plant measurement.
+    y[n,:] = C.dot(x[n,:]) + v[n,:]
+    
+    # Update state estimate with measurement.
+    err[n,:] = (y[n,:] - C.dot(xhatm[n,:])
+        - Cd.dot(dhatm[n,:]))
+    xhat[n,:] = xhatm[n,:] + Lx.dot(err[n,:])
+    dhat[n,:] = dhatm[n,:] + Ld.dot(err[n,:])
+    
+    # Make sure we aren't at the last timestep.
+    if n == Nsim: break
+
+    # Steady-state target.
+    rhs = np.concatenate((Bd.dot(dhat[n,:]),
+        H.dot(ysp[n,:] - Cd.dot(dhat[n,:]))))
+    qsp = linalg.solve(G,rhs) # i.e. G\rhs.
+    xsp = qsp[:Nx]
+    usp = qsp[Nx:]
+    
+    # Regulator.
+    u[n,:] = K.dot(xhat[n,:] - xsp) + usp
+    
+    # Simulate with nonlinear model.
+    x[n+1,:] = cstr.sim(x[n,:] + xs,
+        u[n,:] + us, d[n,:] + ds) - xs
+    
+    # Advance state estimate.
+    xhatm[n+1,:] = (A.dot(xhat[n,:])
+        + Bd.dot(dhat[n,:]) + B.dot(u[n,:]))
+    dhatm[n+1,:] = dhat[n,:]
+                       
+\end{lstlisting}
+\vspace{-.5em}
+\end{block}
+\end{column}
+
+\end{columns}     
+
+\end{frame}
+
+\begin{frame}{What can we do with \texttt{mpc-tools-casadi}?}
     \begin{itemize}
         \item Discrete-time linear MPC
         \item Discrete-time nonlinear MPC
@@ -185,6 +456,7 @@ for j in range(deg+1):
         \begin{itemize}
             \item Explicit models
             \item Runge-Kutta discretization
+            \item Collocation
         \end{itemize}
         \item Basic plotting function
         \item Example scripts
@@ -194,6 +466,7 @@ for j in range(deg+1):
             \item Periodic linear
             \item Example 2-8
             \item Simple collocation
+            \item Example 1-11
         \end{itemize}
     \end{itemize}
     
@@ -201,106 +474,154 @@ for j in range(deg+1):
 
 \begin{frame}[fragile,allowframebreaks]{Example Script}
 
-Example script for a simple linear MPC problem.
+Example script for a simple nonlinear MPC problem.
 
-\begin{lstlisting}[style=python,basicstyle=\ttfamily\fontsize{8}{10}\selectfont]
-# MPC for a multivariable system.
-
-# Imports.
+\begin{lstlisting}[style=python,basicstyle=\ttfamily\fontsize{6pt}{8}\selectfont]
+# Control of the Van der Pol oscillator.
+import mpctools as mpc
 import numpy as np
-@\codeemph{import mpc\_tools\_casadi as mpc}@
 
-# Define continuous time model.
-Acont = np.array([[0,1],[0,-1]])
-Bcont = np.array([[0],[10]])
-n = Acont.shape[0] # Number of states.
-p = Bcont.shape[1] # Number of control elements
+# Define model and get simulator.
+Delta = .5
+Nsim = 20
+Nx = 2
+Nu = 1
+def ode(x,u):
+    dxdt = [(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]]
+    return np.array(dxdt)
 
-# Discretize.
-dt = .025
-N = 200
-t = np.arange(N+1)*dt
-@\codeemph{(Adisc,Bdisc) = mpc.c2d(Acont,Bcont,dt)}@
-A = [Adisc]
-B = [Bdisc]
+# Create a simulator.
+vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
-# Bounds on u.
-umax = 1
-ulb = [np.array([-umax])]
-uub = [np.array([umax])]
-bounds = dict(uub=uub,ulb=ulb)
+# Then get nonlinear casadi functions and a linearization.
+ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
+lin = mpc.util.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
 
-# Define Q and R matrices and q penalty for periodic solution.
-Q = [np.diag([1,0])]
-q = [np.zeros((n,1))]
-R = [np.eye(p)]
+# Also discretize using RK4.
+def ode_rk4(x,u):
+    return mpc.util.rk4(ode, x, [u], Delta=Delta, M=1)
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F")
 
-# Initial condition.
-x0 = np.array([10,0])
+# Define stage cost and terminal weight.
+def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
+l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
 
-# Solve linear MPC problem.
-@\codeemph{solution = mpc.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=1)}@
-x = solution["x"]
-u = solution["u"]
+def Pffunc(x): return 10*mpc.mtimes(x.T,x)
+Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
-# Plot things.
-@\codeemph{fig = mpc.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])}@
-fig.show()
+# Create linear discrete-time model for comparison.
+def Ffunc(x,u): return (mpc.mtimes(mpc.util.DMatrix(lin["A"]),x) +
+    mpc.mtimes(mpc.util.DMatrix(lin["B"]),u))
+F = mpc.getCasadiFunc(Ffunc, [Nx,Nu], ["x","u"], funcname="F")
+
+# Make optimizers.
+x0 = np.array([0,1])
+Nt = 20
+commonargs = dict(
+    N={"x":Nx, "u":Nu, "t":Nt},
+    verbosity=0,
+    l=l,
+    x0=x0,
+    Pf=Pf,
+    lb={"u" : -.75*np.ones((Nsim,Nu))},
+    ub={"u" : np.ones((Nsim,Nu))},
+    runOptimization=False,
+)
+solvers = {}
+solvers["lmpc"] = mpc.nmpc(f=F,**commonargs)
+solvers["nmpc"] = mpc.nmpc(f=ode_rk4_casadi,**commonargs)
+
+# Now simulate.
+times = Delta*Nsim*np.linspace(0,1,Nsim+1)
+x = {}
+u = {}
+for method in solvers.keys():
+    x[method] = np.zeros((Nsim+1,Nx))
+    x[method][0,:] = x0
+    u[method] = np.zeros((Nsim,Nu))
+    for t in range(Nsim):
+        solvers[method].fixvar("x",0,x[method][t,:])
+        solvers[method].solve()
+        print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
+        u[method][t,:] = solvers[method].var["u",0,:]
+        x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
+    fig = mpc.plots.mpcplot(x[method],u[method],times,title=method)
+    fig.savefig("vdposcillator_%s.pdf" % (method,))
 \end{lstlisting}
 
 \end{frame}
 
 \begin{frame}{Output}
-\begin{center}
-    \includegraphics[height=.8\textheight]{mpcexample.pdf}
-\end{center}
-\end{frame}
 
-\begin{frame}{What do we still need?}
-    \begin{itemize}
-        \item Continuous-time formulation
-        \begin{itemize}
-            \item Time-varying functions
-            \item Quadrature for objective function
-            \item DAE systems
-        \end{itemize}
-        \item Quality guess generation
-        \begin{itemize}
-            \item Solve sequence of smaller problems
-            \item Use as initial guess for large problem
-        \end{itemize}
-        \item Moving horizon simulation
-        \begin{itemize}
-            \item Generate all constraints once
-            \item Select appropriate subset for each step
-            \item Use previous solution as initial guess
-            \item ``Version 0.1'' of OOP approach (needs a big rewrite though)
-        \end{itemize}
-    \end{itemize}
-\end{frame}
-
-\begin{frame}{Additional Notes}
-
+For this problem, nonlinear MPC performs slightly better.
 \begin{itemize}
-    \item We may not be able to write good CasADi code, but we at least want to write good Python code
-    \begin{itemize}
-        \item \smallurl{http://docs.python-guide.org/en/latest/writing/style/}
-        \item \smallurl{https://www.python.org/dev/peps/pep-0008/}
-    \end{itemize}
-    \item NumPy is verbose and takes getting used to, especially if you're using matrices
-    \item Duck-typing makes me nervous, but it's kind of a major paradigm of Python
-    \begin{itemize}
-        \item Lists vs. NumPy vectors
-        \item NumPy matrices vs. arrays
-        \item CasADi \texttt{MX} vs. \texttt{SX}
-    \end{itemize}
-    \item ``Easier to Ask Forgiveness than Permission'' is challenging if you don't know what exceptions might be raised
-    \begin{itemize}
-        \item Takes some getting used to if you've been raised on ``Look Before You Leap'' (common in Octave/\textsc{Matlab})
-        \item A brief discussion: \smallurl{http://code.activestate.com/lists/python-list/337643/}
-    \end{itemize}
+    \item The computation isn't much more time-consuming because of the power of Casadi.
+    \item The problem isn't difficult to set up because of \texttt{mpc-tools-casadi}.
 \end{itemize}
-
+    
+\begin{columns}
+    \begin{column}{.475\textwidth}
+        \begin{block}{Linear MPC}
+            \begin{center}
+                \includegraphics[width=\textwidth]{vdposcillator_lmpc.pdf}
+            \end{center}
+        \end{block}
+    \end{column}
+    \begin{column}{.475\textwidth}
+        \begin{block}{Nonlinear MPC}
+            \begin{center}
+                \includegraphics[width=\textwidth]{vdposcillator_nmpc.pdf}
+            \end{center}
+        \end{block}
+    \end{column}
+\end{columns}
 \end{frame}
+
+%\begin{frame}{What do we still need?}
+%    \begin{itemize}
+%        \item Continuous-time formulation
+%        \begin{itemize}
+%            \item Time-varying functions
+%            \item Quadrature for objective function
+%            \item DAE systems
+%        \end{itemize}
+%        \item Quality guess generation
+%        \begin{itemize}
+%            \item Solve sequence of smaller problems
+%            \item Use as initial guess for large problem
+%        \end{itemize}
+%        \item Moving horizon simulation
+%        \begin{itemize}
+%            \item Generate all constraints once
+%            \item Select appropriate subset for each step
+%            \item Use previous solution as initial guess
+%            \item ``Version 0.1'' of OOP approach (needs a big rewrite though)
+%        \end{itemize}
+%    \end{itemize}
+%\end{frame}
+%
+%\begin{frame}{Additional Notes}
+%
+%\begin{itemize}
+%    \item We may not be able to write good CasADi code, but we at least want to write good Python code
+%    \begin{itemize}
+%        \item \smallurl{http://docs.python-guide.org/en/latest/writing/style/}
+%        \item \smallurl{https://www.python.org/dev/peps/pep-0008/}
+%    \end{itemize}
+%    \item NumPy is verbose and takes getting used to, especially if you're using matrices
+%    \item Duck-typing makes me nervous, but it's kind of a major paradigm of Python
+%    \begin{itemize}
+%        \item Lists vs. NumPy vectors
+%        \item NumPy matrices vs. arrays
+%        \item CasADi \texttt{MX} vs. \texttt{SX}
+%    \end{itemize}
+%    \item ``Easier to Ask Forgiveness than Permission'' is challenging if you don't know what exceptions might be raised
+%    \begin{itemize}
+%        \item Takes some getting used to if you've been raised on ``Look Before You Leap'' (common in Octave/\textsc{Matlab})
+%        \item A brief discussion: \smallurl{http://code.activestate.com/lists/python-list/337643/}
+%    \end{itemize}
+%\end{itemize}
+%
+%\end{frame}
 
 \end{document}

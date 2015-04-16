@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
 
 """
 Contains all of the plotting functions for mpc-tools-casadi.
@@ -25,6 +26,8 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     if timefirst:
         x = x.T
         u = u.T
+        if xsp is not None:
+            xsp = xsp.T
     
     # Process arguments.
     if xinds is None:
@@ -57,6 +60,8 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         a.set_xlabel("Time")
         a.set_ylabel("Control %d" % (uind + 1))
         zoomaxis(a,yscale=1.05)
+        prettyaxesbox(a)
+        prettyaxesbox(a,facecolor="white",front=False)
     
     # x plots.    
     for i in range(len(xinds)):
@@ -70,6 +75,8 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         a.set_xlabel("Time")
         a.set_ylabel("State %d" % (xind + 1))
         zoomaxis(a,yscale=1.05)
+        prettyaxesbox(a)
+        prettyaxesbox(a,facecolor="white",front=False)
     
     # Layout tightness.
     if not tightness is None:
@@ -104,3 +111,41 @@ def zoomaxis(axes=None,xscale=None,yscale=None):
             (minlim,maxlim) = getter()
             offset = .5*scale*(maxlim - minlim)
             setter(minlim - offset, maxlim + offset)
+
+def prettyaxesbox(ax=None,linewidth=None,edgecolor="k",facecolor="none",front=True):
+    """
+    Replaces the box around the axes with a fancybox.
+
+    This makes it an actual box and not just four lines.
+    
+    If linewidth is None, uses the initialized linewidth.
+    """
+    # First, figure out what axes object to use.
+    if ax is None:
+        ax = plt.gca()
+    
+    # Get linewidth if necessary.
+    if linewidth is None:
+        linewidth = 1
+    
+    # Now we're going to make the box around the axes look better.
+    ap = ax.axesPatch
+    zorders = [c.get_zorder() for c in ax.get_children()]    
+    if front:
+        z = max(zorders) + 1
+    else:
+        z = min(zorders) - 1
+    prettybox = FancyBboxPatch(ap.get_xy(),ap.get_width(),ap.get_height(),
+                               boxstyle="square,pad=0.",ec=edgecolor,
+                               fc=facecolor,transform=ap.get_transform(),
+                               lw=linewidth,zorder=z)
+
+    # Make current box invisible and make our better one.    
+    ap.set_edgecolor("none")
+    ax.set_frame_on(False)
+    ax.add_patch(prettybox)
+    prettybox.set_clip_on(False)
+    plt.draw()
+    
+    return prettybox            
+            

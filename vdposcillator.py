@@ -8,7 +8,8 @@ Nsim = 20
 Nx = 2
 Nu = 1
 def ode(x,u):
-    return np.array([(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]])
+    dxdt = [(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]]
+    return np.array(dxdt)
 
 # Create a simulator.
 vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
@@ -65,6 +66,8 @@ for method in solvers.keys():
         print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
         u[method][t,:] = solvers[method].var["u",0,:]
         x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
-    mpc.plots.mpcplot(x[method],u[method],times,title=method)
+    fig = mpc.plots.mpcplot(x[method],u[method],times,
+                            np.zeros(x[method].shape),title=method)
+    fig.savefig("vdposcillator_%s.pdf" % (method,),facecolor="none")
         
         

@@ -38,7 +38,7 @@ x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpc.plots.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0])
+fig = mpc.plots.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0],timefirst=False)
 fig.show()
 fig.tight_layout(pad=.5)
 fig.savefig("mpcexample.pdf",bbox_inches="tight",pad_inches=0)
