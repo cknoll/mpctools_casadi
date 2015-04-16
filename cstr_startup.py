@@ -235,7 +235,7 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},
     ylabelsu = ["$T_c$ (K)", "$F$ (kL/min)"]
     
     gs = gridspec.GridSpec(Nx*Nu,2)    
-    fig = plt.figure(figsize=(10,6))
+    fig = plt.figure(figsize=(10,6),facecolor="none")
     leglines = []
     leglabels = []
     for i in range(Nx):
@@ -252,6 +252,9 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},
             ax.step(t,xsp[:,i],linestyle="--",color="black",where="post")
         ax.set_ylabel(ylabelsx[i])
         mpc.plots.zoomaxis(ax,yscale=1.1)
+        mpc.plots.prettyaxesbox(ax)
+        mpc.plots.prettyaxesbox(ax,
+            facecolor="white",front=False)
     ax.set_xlabel("Time (min)")
     for i in range(Nu):
         ax = fig.add_subplot(gs[i*Nx:(i+1)*Nx,1])
@@ -265,6 +268,9 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},
                         '--k')
         ax.set_ylabel(ylabelsu[i])
         mpc.plots.zoomaxis(ax,yscale=1.25)
+        mpc.plots.prettyaxesbox(ax)
+        mpc.plots.prettyaxesbox(ax,
+            facecolor="white",front=False)
     ax.set_xlabel("Time (min)")
     fig.legend(leglines,leglabels,loc="lower center",ncol=len(keys))
     fig.tight_layout(pad=.5,rect=(0,.075,1,1))
@@ -280,4 +286,4 @@ markers = {"lmpc":"s", "nmpc":"o", "uncont":"^"}
 plotbounds = dict([(k,bounds[k][0]) for k in ["ulb","uub"]])
 fig = cstrplot(xcl, ucl, ysp, colors=colors, contVars=contVars, labels=labels,
                keys=keys, markers={}, bounds=plotbounds, ilegend=2)
-fig.savefig("cstr_startup.pdf")
+fig.savefig("cstr_startup.pdf",facecolor="none")

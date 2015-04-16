@@ -233,16 +233,22 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
                     where="post")
         ax.set_ylabel(ylabelsx[i])
         mpc.plots.zoomaxis(ax,yscale=1.1)
+        mpc.plots.prettyaxesbox(ax)
+        mpc.plots.prettyaxesbox(ax,
+            facecolor="white",front=False)
     ax.set_xlabel("Time (min)")
     for i in range(Nu):
         ax = fig.add_subplot(gs[i*Nx:(i+1)*Nx,1])
         ax.step(t,u[:,i] + us[i],'-k',where="post")
         ax.set_ylabel(ylabelsu[i])
         mpc.plots.zoomaxis(ax,yscale=1.25)
+        mpc.plots.prettyaxesbox(ax)
+        mpc.plots.prettyaxesbox(ax,
+            facecolor="white",front=False)
     ax.set_xlabel("Time (min)")
     fig.tight_layout(pad=.5)
     if title is not None:
         fig.canvas.set_window_title(title)
     return fig
 fig = cstrplot(x,u,ysp=None,contVars=[],title=None) 
-fig.savefig("cstr_python.pdf")
+fig.savefig("cstr_python.pdf",facecolor="none")
