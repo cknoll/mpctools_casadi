@@ -250,10 +250,11 @@ for i = 1: ntimes
     %<<ENDCHUNK>>
     
     %% advance state estimates
-    xhat_(:,i+1) = A*xhat(:,i) + Bd*dhat(:,i) + B*u(:,i);
+    xhat_(:,i+1) = A*xhat(:,i) + ...
+        Bd*dhat(:,i) + B*u(:,i);
     dhat_(:,i+1) = dhat(:,i);
 end
-u(:,end) = u(:,end-1); % Repeat this for stairstep plot.
+u(:,end) = u(:,end-1); % Repeat for stair plot.
 
 %<<ENDCHUNK>>
 
@@ -263,7 +264,8 @@ ud = u + kron(ones(1, ntimes), [Tcs; Fs]);
 
 % *** Plots ***
 figure()
-axmul = eye(4) + .05*[1,-1,0,0;-1,1,0,0;0,0,1,-1;0,0,-1,1];
+axmul = eye(4) + .05*[1,-1,0,0; ...
+    -1,1,0,0;0,0,1,-1;0,0,-1,1];
 subplot(3,2,1)
 plot(time, yd(1,:), '-or')
 ylabel('c (kmol/m^3)')

@@ -46,10 +46,13 @@ def ode(x,u,d):
     return np.array(dxdt)
 
 # Turn into casadi function and simulator.
-ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
-cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+ode_casadi = mpc.getCasadiFunc(ode,
+    [Nx,Nu,Nd],["x","u","d"],funcname="ode")
+cstr = mpc.DiscreteSimulator(ode, Delta,
+    [Nx,Nu,Nd], ["x","u","d"])
 
-# We don't need to take any derivatives by hand because Casadi can do that.
+# We don't need to take any derivatives by hand
+# because Casadi can do that.
 
 #<<ENDCHUNK>>
 
@@ -61,9 +64,11 @@ Fs = .1
 Tcs = 300
 F0s = .1
 
-# Update the steady-state values a few times to make sure they don't move.
+# Update the steady-state values a few times to make
+# sure they don't move.
 for i in range(10):
-    [cs,Ts,hs] = cstr.sim([cs,Ts,hs],[Tcs,Fs],[F0s]).tolist()
+    [cs,Ts,hs] = cstr.sim([cs,Ts,hs],[Tcs,Fs],
+        [F0s]).tolist()
 xs = np.array([cs,Ts,hs])
 us = np.array([Tcs,Fs])
 ds = np.array([F0s])
@@ -71,7 +76,8 @@ ds = np.array([F0s])
 #<<ENDCHUNK>>
 
 # Now get a linearization at this steady state.
-ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+ss = mpc.util.linearizeModel(ode_casadi, 
+    [xs,us,ds], ["A","B","Bp"], Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
@@ -88,7 +94,7 @@ R = np.diag(us**-2)
 #<<ENDCHUNK>>
 
 # Define disturbance model.
-useGoodDisturbanceModel = True # Can be false to pick the bad one with offset.
+useGoodDisturbanceModel = True
 
 # Bad disturbance model with offset.
 if useGoodDisturbanceModel:
@@ -108,15 +114,17 @@ else:
     Cd[2,1] = 1
 
 # Augmented system. Trailing .A casts to array type.    
-Aaug = np.bmat([[A,Bd],[np.zeros((Nid,Nx)),np.eye(Nid)]]).A
+Aaug = np.bmat([[A,Bd],
+    [np.zeros((Nid,Nx)),np.eye(Nid)]]).A
 Baug = np.vstack((B,np.zeros((Nid,Nu))))
 Caug = np.hstack((C,Cd))
 
 # Check rank condition for augmented system.
-svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A, -Bd],[C,Cd]]))
+svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A,
+                                -Bd],[C,Cd]]))
 rank = sum(svds > 1e-10)
 if rank < Nx + Nid:
-    print "***Warning: augmented system is not detectable!"
+    print "*Warning: system not detectable!"
 
 #<<ENDCHUNK>>
 
@@ -141,7 +149,7 @@ y = np.zeros((Nsim+1,Ny))
 err = y.copy()
 v = y.copy()
 xhat = x.copy() # State estimate after measurement.
-xhatm = xhat.copy() # State estimate prior to measurement.
+xhatm = xhat.copy() # ... before measurement.
 dhat = np.zeros((Nsim+1,Nid))
 dhatm = dhat.copy()
 
@@ -170,7 +178,8 @@ for n in range(Nsim + 1):
     y[n,:] = C.dot(x[n,:]) + v[n,:]
     
     # Update state estimate with measurement.
-    err[n,:] = y[n,:] - C.dot(xhatm[n,:]) - Cd.dot(dhatm[n,:])
+    err[n,:] = (y[n,:] - C.dot(xhatm[n,:])
+        - Cd.dot(dhatm[n,:]))
     xhat[n,:] = xhatm[n,:] + Lx.dot(err[n,:])
     dhat[n,:] = dhatm[n,:] + Ld.dot(err[n,:])
     
@@ -180,8 +189,8 @@ for n in range(Nsim + 1):
     #<<ENDCHUNK>>
 
     # Steady-state target.
-    rhs = np.concatenate((Bd.dot(dhat[n,:]), H.dot(ysp[n,:]
-        - Cd.dot(dhat[n,:]))))
+    rhs = np.concatenate((Bd.dot(dhat[n,:]),
+        H.dot(ysp[n,:] - Cd.dot(dhat[n,:]))))
     qsp = Ginv.dot(rhs)
     xsp = qsp[:Nx]
     usp = qsp[Nx:]
@@ -194,12 +203,14 @@ for n in range(Nsim + 1):
     #<<ENDCHUNK>>    
     
     # Simulate with nonlinear model.
-    x[n+1,:] = cstr.sim(x[n,:] + xs, u[n,:] + us, d[n,:] + ds) - xs
+    x[n+1,:] = cstr.sim(x[n,:] + xs, u[n,:] + us,
+        d[n,:] + ds) - xs
     
     #<<ENDCHUNK>>    
     
     # Advance state estimate.
-    xhatm[n+1,:] = A.dot(xhat[n,:]) + Bd.dot(dhat[n,:]) + B.dot(u[n,:])
+    xhatm[n+1,:] = (A.dot(xhat[n,:])
+        + Bd.dot(dhat[n,:]) + B.dot(u[n,:]))
     dhatm[n+1,:] = dhat[n,:]
 
 #<<ENDCHUNK>>
@@ -218,7 +229,8 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
         ax = fig.add_subplot(gs[i*Nu:(i+1)*Nu,0])
         ax.plot(t,x[:,i] + xs[i],'-ok')
         if i in contVars:
-            ax.step(t,ysp[:,i] + xs[i],'-r',where="post")
+            ax.step(t,ysp[:,i] + xs[i],'-r',
+                    where="post")
         ax.set_ylabel(ylabelsx[i])
         mpc.plots.zoomaxis(ax,yscale=1.1)
     ax.set_xlabel("Time (min)")

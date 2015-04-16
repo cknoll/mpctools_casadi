@@ -443,6 +443,25 @@ for n in range(Nsim + 1):
 
 \end{frame}
 
+\begin{frame}{Results}
+
+\begin{columns}
+    \begin{column}{.475\textwidth}
+        \begin{block}{Octave/\textsc{Matlab}}
+            
+        \end{block}
+    \end{column}
+    
+    \begin{column}{.475\textwidth}
+        \begin{block}{Python+Numpy \vphantom{/}}
+            
+        \end{block}
+    \end{column}
+\end{columns}
+
+\end{frame}
+
+
 \begin{frame}{What can we do with \texttt{mpc-tools-casadi}?}
     \begin{itemize}
         \item Discrete-time linear MPC
@@ -577,29 +596,50 @@ For this problem, nonlinear MPC performs slightly better.
 \end{columns}
 \end{frame}
 
-%\begin{frame}{What do we still need?}
-%    \begin{itemize}
-%        \item Continuous-time formulation
-%        \begin{itemize}
-%            \item Time-varying functions
-%            \item Quadrature for objective function
-%            \item DAE systems
-%        \end{itemize}
-%        \item Quality guess generation
-%        \begin{itemize}
-%            \item Solve sequence of smaller problems
-%            \item Use as initial guess for large problem
-%        \end{itemize}
-%        \item Moving horizon simulation
-%        \begin{itemize}
-%            \item Generate all constraints once
-%            \item Select appropriate subset for each step
-%            \item Use previous solution as initial guess
-%            \item ``Version 0.1'' of OOP approach (needs a big rewrite though)
-%        \end{itemize}
-%    \end{itemize}
-%\end{frame}
-%
+\begin{frame}{More Complicated Example}
+
+Using \texttt{mpc-tools-casadi}, we can replace the LQR and KF from Example 1.11 with nonlinear MPC and MHE.
+
+\begin{itemize}
+    \item \texttt{cstr\_startup.py} shows basic structure and a setpoint change.
+    \item \texttt{cstr\_nonlinear.py} shows steady-state target finding and NMHE.
+    \item See the cheatsheet for important functions and syntax.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Output}
+    
+    Here, nonlinear MPC knows to be less aggressive.
+    \begin{center}
+        
+     \end{center}
+\end{frame}
+
+
+\begin{frame}{What can't we do yet?}
+    \begin{itemize}
+        \item True continuous-time formulation
+        \begin{itemize}
+            \item Time-varying functions
+            \item Quadrature for objective function
+            \item DAE systems
+        \end{itemize}
+        \item Quality guess generation
+        \begin{itemize}
+            \item Solve sequence of smaller problems
+            \item Use as initial guess for large problem
+            \item Must do ``by hand''
+        \end{itemize}
+        \item General nonlinear state constraints
+        \begin{itemize}
+            \item Available in principle: augment model
+            \item However, would need slack guess
+            \item Better support soon
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
 %\begin{frame}{Additional Notes}
 %
 %\begin{itemize}
