@@ -10,3 +10,4 @@ doc/*.aux
 doc/*.synctex.gz
 doc/*.snm
 doc/*.toc
+cstr-matlab/*

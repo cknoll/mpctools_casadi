@@ -5,6 +5,8 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
+#<<ENDCHUNK>>
+
 # Define some parameters and then the CSTR model.
 Nx = 3
 Nu = 2
@@ -22,6 +24,8 @@ U = 54.94
 rho = 1000
 Cp = .239
 dH = -5e4
+
+#<<ENDCHUNK>>
 
 def ode(x,u,d):
     # Grab the states, controls, and disturbance.
@@ -45,6 +49,10 @@ def ode(x,u,d):
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
 cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
+# We don't need to take any derivatives by hand because Casadi can do that.
+
+#<<ENDCHUNK>>
+
 # Steady-state values.
 cs = .878
 Ts = 324.5
@@ -60,18 +68,24 @@ xs = np.array([cs,Ts,hs])
 us = np.array([Tcs,Fs])
 ds = np.array([F0s])
 
+#<<ENDCHUNK>>
+
 # Now get a linearization at this steady state.
-ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
+ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
 C = np.eye(Nx)
+
+#<<ENDCHUNK>>
 
 # Weighting matrices for controller.
 Q = np.diag(xs**-2)
 R = np.diag(us**-2)
 
 [K, Pi] = mpc.util.dlqr(A,B,Q,R)
+
+#<<ENDCHUNK>>
 
 # Define disturbance model.
 useGoodDisturbanceModel = True # Can be false to pick the bad one with offset.
@@ -93,26 +107,30 @@ else:
     Cd[0,0] = 1
     Cd[2,1] = 1
 
+# Augmented system. Trailing .A casts to array type.    
+Aaug = np.bmat([[A,Bd],[np.zeros((Nid,Nx)),np.eye(Nid)]]).A
+Baug = np.vstack((B,np.zeros((Nid,Nu))))
+Caug = np.hstack((C,Cd))
+
 # Check rank condition for augmented system.
 svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A, -Bd],[C,Cd]]))
 rank = sum(svds > 1e-10)
 if rank < Nx + Nid:
     print "***Warning: augmented system is not detectable!"
 
-# Build augmented matrices.
+#<<ENDCHUNK>>
+
+# Build augmented penalty matrices for KF.
 Qw = eps*np.eye(Nx + Nid)
 Qw[-1,-1] = 1
 Rv = eps*np.diag(xs**2)
-
-# Below, trailing .A casts to array type.    
-Aaug = np.bmat([[A,Bd],[np.zeros((Nid,Nx)),np.eye(Nid)]]).A
-Baug = np.vstack((B,np.zeros((Nid,Nu))))
-Caug = np.hstack((C,Cd))
 
 # Get Kalman filter.
 [L, P] = mpc.util.dlqe(Aaug, Caug, Qw, Rv)
 Lx = L[:Nx,:]
 Ld = L[Nx:,:]
+
+#<<ENDCHUNK>>
 
 # Now simulate things.
 Nsim = 50
@@ -127,17 +145,25 @@ xhatm = xhat.copy() # State estimate prior to measurement.
 dhat = np.zeros((Nsim+1,Nid))
 dhatm = dhat.copy()
 
-# Pick disturbance, setpoint, and initial condition.
+#<<ENDCHUNK>>
+
+# Pick disturbance and setpoint.
 d = np.zeros((Nsim,Nd))
 d[:,0] = (t[:-1] >= 10)*.1*F0s
 ysp = np.zeros(y.shape)
 contVars = [0,2] # Concentration and height.
 
+#<<ENDCHUNK>>
+
 # Steady-state target selector matrices.
 H = np.zeros((Nu,Ny))
-for i in range(len(contVars)):
-    H[i,contVars[i]] = 1
-G = np.bmat([[np.eye(Nx) - A, -B],[H.dot(C), np.zeros((H.shape[0], Nu))]]).A
+H[range(len(contVars)),contVars] = 1
+Ginv = np.array(np.bmat([
+    [np.eye(Nx) - A, -B],
+    [H.dot(C), np.zeros((H.shape[0], Nu))]
+]).I) # Take inverse.
+
+#<<ENDCHUNK>>
 
 for n in range(Nsim + 1):
     # Take plant measurement.
@@ -151,23 +177,32 @@ for n in range(Nsim + 1):
     # Make sure we aren't at the last timestep.
     if n == Nsim: break
 
+    #<<ENDCHUNK>>
+
     # Steady-state target.
     rhs = np.concatenate((Bd.dot(dhat[n,:]), H.dot(ysp[n,:]
         - Cd.dot(dhat[n,:]))))
-    qsp = linalg.solve(G,rhs) # Similar to "G\rhs" in Matlab.
+    qsp = Ginv.dot(rhs)
     xsp = qsp[:Nx]
     usp = qsp[Nx:]
+    
+    #<<ENDCHUNK>>    
     
     # Regulator.
     u[n,:] = K.dot(xhat[n,:] - xsp) + usp
     
+    #<<ENDCHUNK>>    
+    
     # Simulate with nonlinear model.
     x[n+1,:] = cstr.sim(x[n,:] + xs, u[n,:] + us, d[n,:] + ds) - xs
+    
+    #<<ENDCHUNK>>    
     
     # Advance state estimate.
     xhatm[n+1,:] = A.dot(xhat[n,:]) + Bd.dot(dhat[n,:]) + B.dot(u[n,:])
     dhatm[n+1,:] = dhat[n,:]
 
+#<<ENDCHUNK>>
 
 # Define plotting function.
 def cstrplot(x,u,ysp=None,contVars=[],title=None):

@@ -97,6 +97,40 @@ def getLinearization(f,xs,us=None,ds=None,Delta=None):
     return {"A": A, "B": B, "Bp": Bp, "f": fs}
 
 
+def linearizeModel(f,args,names=None,Delta=None):
+    """
+    Returns linear (affine) state-space model for f at the point point.
+    
+    This is just a rewrite of getLinearization to take an arbitrary number
+    of arguments.
+    """
+    # Decide names.
+    if names is None:
+        names = ["A"] + ["B_%d" % (i,) for i in range(1,len(args))]
+    
+    # Evaluate function.
+    fs = np.array(f(args)[0])    
+    
+    # Now do jacobian.
+    jacobians = []
+    for i in range(len(args)):
+        jac = f.jacobian(i,0) # df/d(args[i]).
+        jac.init()
+        jacobians.append(np.array(jac(args)[0]))
+    
+    # Decide whether or not to discretize.
+    if Delta is not None:
+        (A, Bfactor) = c2d(jacobians[0],np.eye(jacobians[0].shape[0]),Delta)
+        jacobians = [A] + [Bfactor.dot(j) for j in jacobians[1:]]
+        fs = Bfactor.dot(fs)
+    
+    # Package everything up.
+    ss = dict(zip(names,jacobians))
+    if "f" not in ss.keys():
+        ss["f"] = fs
+    return ss
+    
+    
 def c2d_augmented(A,B,Bp,f,Delta):
     """
     Discretizes affine system (A,B,Bp,f) with timestep Delta.

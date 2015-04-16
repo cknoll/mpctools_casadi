@@ -1,30 +1,32 @@
-ENDCHUNK = "#<<ENDCHUNK>>"
+ENDCHUNK = set(["#<<ENDCHUNK>>","%<<ENDCHUNK>>"])
 
-def comparison(infiles,outfile):
+def comparison(infiles,outfile,styles=None):
     """
     Opens finfiles and spits out comparison tex file.
     """
     
     files = [open(f,"r") for f in infiles]
     out = open(outfile,"w")
+    if styles is None:
+        styles = [""]*len(infiles)
     
     keepgoing = True
     while keepgoing:
         keepgoing = False
         out.write(r"\sepline" + "\n\n")
         out.write(r"\begin{parcolumns}{%d}" % (len(files),) + "\n")
-        for f in files:
+        for (f,style) in zip(files,styles):
             lines = []
             stopchunk = False
             while not stopchunk:
                 line = f.readline()
-                if line.strip() == ENDCHUNK or len(line) == 0:
+                if line.strip() in ENDCHUNK or len(line) == 0:
                     stopchunk = True
                     if len(line) > 0:
                         keepgoing = True
                 else:
                     lines.append(line)
-            outputlines(out,lines)
+            outputlines(out,lines,style)
         out.write(r"\end{parcolumns}" + "\n\n")
     
     # Clean up.    
@@ -33,7 +35,7 @@ def comparison(infiles,outfile):
         f.close()
         
         
-def outputlines(f,lines):
+def outputlines(f,lines,style=""):
     """
     Clean up lines and then write a colchunk environment to f.
     """
@@ -48,7 +50,7 @@ def outputlines(f,lines):
         lines = lines[nhead:ntail+1]
         
         # Now add lstlisting environment.
-        lines.insert(0,r"\begin{lstlisting}" + "\n")
+        lines.insert(0,r"\begin{lstlisting}" + style + "\n")
         lines.append(r"\end{lstlisting}" + "\n")
 
     # Write colchunk begin and end.
@@ -58,4 +60,5 @@ def outputlines(f,lines):
     # Finally write.
     f.writelines(lines)
 
-comparison(["../comparison_casadi.py","../comparison_mtc.py"],"sidebyside.tex")    
+comparison(["../comparison_casadi.py","../comparison_mtc.py"],"sidebyside.tex")
+comparison(["../cstr.m","../cstr.py"],"sidebyside-cstr.tex",styles=["[style=matlab]","[style=python]"])    

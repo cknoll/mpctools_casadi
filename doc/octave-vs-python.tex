@@ -1,0 +1,63 @@
+\documentclass{article}
+
+\usepackage[left=.25in,right=.25in,top=.75in,bottom=.75in]{geometry}
+\usepackage{mathtools,bm,textcomp,multicol,parcolumns,enumitem,array}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+
+% Stuff for source codes.
+\usepackage{listings}
+\providecommand{\lstinline}{}
+\lstdefinestyle{python}{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{Blue}\ttfamily,
+    stringstyle=\color{Purple}\ttfamily,
+    commentstyle=\color{ForestGreen}\ttfamily,
+    upquote=true,
+    showstringspaces=false,
+%    numbers=left,
+    stepnumber=10,
+    firstnumber=0,
+    numberstyle=\scriptsize,
+    escapechar=@,
+    morekeywords={as},
+    upquote=true,
+}
+
+\lstdefinestyle{matlab}{
+    language=Matlab,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{Blue},
+    stringstyle=\color{Purple},
+    commentstyle=\color{ForestGreen},
+    upquote=true,
+}
+
+\newcommand{\smallurl}[2][\scriptsize]{\texttt{#1$<$#2$>$}}
+\newcommand{\funcname}[2][.25em]{\vspace{#1}\noindent\texttt{#2}\nopagebreak\vspace{#1}}
+\newcommand{\casadi}{CasADi}
+
+%\newcommand{\sepline}{\hrule}
+\providecommand{\sepline}{\vspace{-2em}}
+
+\title{Octave vs. Python for Example 1.11}
+
+\begin{document}
+
+%\pagestyle{empty}
+%\thispagestyle{empty}
+
+\begin{center}
+    \LARGE Octave vs. Python for Example 1.11
+\end{center}
+
+Below, we present an example file to show that, for our purposes, Python isn't that much different from Octave/\textsc{Matlab}
+On the left side, we show the the script written using Octave (\textsc{Matlab} compatibility requires breaking out the subfunctions), while on the right, we show the script rewritten to use Python+Casadi (with a bit of \texttt{mpc-tools-casadi} as well).
+
+\hspace{1em}
+
+\input{sidebyside-cstr.tex}
+
+\end{document}
