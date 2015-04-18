@@ -758,10 +758,7 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True):
     args = [XSym(name,size) for (name,size) in zip(varnames,varsizes)]
     
     # Now evaluate function and make a Casadi object.    
-    if scalar:
-        fval = [f(*args)]
-    else:
-        fval = [casadi.vertcat(f(*args))]
+    fval = [casadi.vertcat(f(*args))]
     fcasadi = XFunction(args,fval)
     fcasadi.setOption("name",funcname)
     fcasadi.init()
@@ -794,7 +791,7 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     x0 = casadi.SX.sym(argnames[0],argsizes[0])
     par = [casadi.SX.sym(argnames[i],argsizes[i]) for i
         in range(1,len(argsizes))]
-    fode = f(x0,*par)   
+    fode = casadi.vertcat(f(x0,*par))   
     
     # Build ODE and integrator.
     invar = casadi.daeIn(x=x0,p=casadi.vertcat(par))
