@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
+import casadi
+
 # Define some parameters and then the CSTR model.
 Nx = 3
 Nu = 2
@@ -31,7 +33,7 @@ def ode(x,u,d):
     # Now create the ODE.
     rate = k0*c*np.exp(-E/T)
         
-    dxdt = np.array([
+    dxdt = casadi.vertcat([
         F0*(c0 - c)/(np.pi*r**2*h) - rate,
         F0*(T0 - T)/(np.pi*r**2*h)
             - dH/(rho*Cp)*rate
@@ -40,13 +42,13 @@ def ode(x,u,d):
     ])
     return dxdt
 
-def ode_rk4(x,u,d):
-    return mpc.util.rk4(ode,x,[u,d],Delta,1)
+#def ode_rk4(x,u,d):
+#    return np.array(mpc.util.rk4(ode,x,[u,d],Delta,1))
 
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],
-                                   funcname="ode_rk4")
+ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],
+                                   funcname="ode_rk4",rk4=True,Delta=Delta)
 cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
 # Steady-state values.
@@ -83,14 +85,14 @@ model_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="cstr")
 Fnonlinear = ode_rk4_casadi
 
 def measurement(x,d):
-    return x
+    return np.array(x)
 h = mpc.getCasadiFunc(measurement,[Nx,Nd],["x","d"],funcname="h")
 
 def linmodel(x,u,d):
     Ax = mpc.mtimes(A,x-xs) + xs
     Bu = mpc.mtimes(B,u-us)
     Bpd = mpc.mtimes(Bp,d-ds)
-    return Ax + Bu + Bpd
+    return np.array(Ax + Bu + Bpd)
 Flinear = mpc.getCasadiFunc(linmodel,[Nx,Nu,Nd],["x","u","d"],funcname="F")
 
 def stagecost(x,u,xsp,usp):
@@ -99,7 +101,7 @@ def stagecost(x,u,xsp,usp):
     du = u - usp
     
     # Calculate stage cost.
-    return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
+    return np.array(mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du))
 l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],
                       funcname="l")
 
@@ -108,7 +110,7 @@ def costtogo(x,xsp):
     dx = x - xsp
     
     # Calculate cost to go.
-    return mpc.mtimes(dx.T,Pi,dx)
+    return np.array(mpc.mtimes(dx.T,Pi,dx))
 Pf = mpc.getCasadiFunc(costtogo,[Nx,Nx],["x","s_xp"],funcname="Pf")
 
 # First see what happens if we try to start up the reactor under no control.

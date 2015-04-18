@@ -8,6 +8,16 @@ from .. import util
 Solvers and helper functions for legacy mpc-tools-casadi code.
 """
 
+_MAX_VERBOSITY = 100
+
+def setMaxVerbosity(verb=100):
+    """
+    Sets a module override for maximum verbosity setting.
+    """
+    global _MAX_VERBOSITY
+    _MAX_VERBOSITY = verb
+
+
 def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
     parval=None,verbosity=5,timelimit=60,isQp=False,runOptimization=True):
     """
@@ -25,6 +35,8 @@ def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
     nlpInputs = {"x" : var}
     if par is not None:
         nlpInputs["p"] = par
+    
+    verbosity = min(_MAX_VERBOSITY,verbosity)
     
     nlp = casadi.MXFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(f=obj,g=con))
     solver = casadi.NlpSolver("ipopt",nlp)
@@ -125,6 +137,8 @@ class TimeInvariantSolver(object):
         """
         Store variables, constraints, etc., and generate the solver.
         """
+        verbosity = min(_MAX_VERBOSITY,verbosity)
+        
         self.__var = var
         self.__lb = varlb
         self.__ub = varub
@@ -300,6 +314,7 @@ class TargetSelector(object):
         Then it will be solved as an unconstrained minimization of the residual,
         which should be better than with tight constraints.
         """
+        verbosity = max(_MAX_VERBOSITY,verbosity)
         
         # Save sizes.
         self.Nx = Nx

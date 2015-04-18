@@ -730,7 +730,8 @@ def __casadiSymStruct(allVars,theseVars=None,scalar=True):
     return struct([structArgs])
 
 
-def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True):
+def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
+                  rk4=False,Delta=1,M=1):
     """
     Takes a function handle and turns it into a Casadi function.
     
@@ -757,18 +758,48 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True):
         raise ValueError("varnames must be the same length as varsizes!")    
     args = [XSym(name,size) for (name,size) in zip(varnames,varsizes)]
     
-    # Now evaluate function and make a Casadi object.    
-    fval = [casadi.vertcat(f(*args))]
+    # Now evaluate function and make a Casadi object.  
+    fval = [safevertcat(f(*args))]
     fcasadi = XFunction(args,fval)
     fcasadi.setOption("name",funcname)
-    fcasadi.init()
+    fcasadi.init()    
+    
+    if rk4:
+        def wrappedf(*args):
+            return fcasadi(args)[0]
+        frk4 = util.rk4(wrappedf, args[0], args[1:], Delta, M)
+        fcasadi = XFunction(args,[frk4])
+        fcasadi.init()
     
     return fcasadi
 
-    
 # =============
 # Miscellany
 # ============
+
+
+def safevertcat(args):
+    """
+    Safer wrapper for casadi's vertcat.
+    
+    If a single SX or MX object is passed, then this doesn't do anything.
+    Otherwise, casadi.vertcat is called.
+    """
+    try:    
+        val = casadi.vertcat(args)
+    except NotImplementedError as vertcaterr:
+        okay = vertcaterr.message.find("Wrong number or type of arguments for "
+            "overloaded function 'vertcat'.") >= 0
+        if okay:
+            try:
+                val = casadi.vertcat([args])
+            except NotImplementedError as err:
+                raise ValueError("Unable to vertcat arguments:\n%s"
+                    % (err.message,))
+        else:
+            raise vertcaterr
+    return val
+
 
 def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
                         abstol=1e-8,reltol=1e-8,wrap=True):
@@ -791,7 +822,7 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     x0 = casadi.SX.sym(argnames[0],argsizes[0])
     par = [casadi.SX.sym(argnames[i],argsizes[i]) for i
         in range(1,len(argsizes))]
-    fode = casadi.vertcat(f(x0,*par))   
+    fode = safevertcat(f(x0,*par))   
     
     # Build ODE and integrator.
     invar = casadi.daeIn(x=x0,p=casadi.vertcat(par))

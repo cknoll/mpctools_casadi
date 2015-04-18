@@ -5,6 +5,7 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import time
+import casadi
 
 # Decide whether to use casadi SX objects or MX. I would expect SX to be faster
 # (i.e. set useCasadiSX to True), but it seems MX does much better for this
@@ -60,13 +61,13 @@ def ode(x,u,d):
     [F0] = d[0:Nd]
     return cstrmodel(c,T,h,Tc,F,F0)
 
-def ode_rk4(x,u,d):
-    return mpc.util.rk4(ode,x,[u,d],Delta,2)
+#def ode_rk4(x,u,d):
+#    return mpc.util.rk4(ode,x,[u,d],Delta,2)
 
 # Turn into casadi function and simulator.
-ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode",True)
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4,[Nx,Nu,Nd],["x","u","d"],
-                                   "ode_rk4",True)
+ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
+ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],
+                                   "ode_rk4",rk4=True,Delta=Delta,M=2)
 
 cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
@@ -87,16 +88,10 @@ def ode_augmented(x,u,d=ds):
     [Tc, F] = u[0:Nu]
     [F0] = d[0:Nd]
     
-    dxdt = mpc.util.vertcat([cstrmodel(c,T,h,Tc,F+dhat[2],F0)] + [0]*Ny)
+    dxdt = np.concatenate((cstrmodel(c,T,h,Tc,F+dhat[2],F0),np.zeros((Ny,))))
     return dxdt
 cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                 [Nx+Nid,Nu,Nd], ["xaug","u","d"])
-
-def ode_augmented_rk4(x,u,d=ds):
-    return mpc.util.rk4(ode_augmented,x,[u,d],Delta,2)
-
-def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-    return mpc.util.rk4(ode_augmented,x,[u,d],Delta,2) + w
 
 def measurement(x,d=ds):
     [c, T, h] = x[0:Nx]
@@ -107,15 +102,20 @@ ys = measurement(xaugs)
 # Turn into casadi functions.
 ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
     [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
-ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented_rk4,
-    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4")
+ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",
+    rk4=True,Delta=Delta,M=2)
+
+def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
+    return ode_augmented_rk4_casadi([x,u,d])[0] + w
+
 ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_augmented_rk4")
+    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
 measurement_casadi = mpc.getCasadiFunc(measurement,
     [Nx+Nid,Nd],["xaug","d"],"measurement")
 
 # Now get a linearization at this steady state.
-ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
+ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
@@ -163,11 +163,11 @@ nmpc = mpc.nmpc(ode_augmented_rk4_casadi,l,N,xaug0,lb,ub,guess,Pf=Pf,sp=sp,p=p,
     verbosity=0,timelimit=60,runOptimization=False,scalar=useCasadiSX)
 
 # Define augmented system with disturbance model.
-ss_augmented = mpc.util.getLinearization(ode_augmented_casadi,
-                                         xaugs, us, ds, Delta)
+ss_augmented = mpc.util.linearizeModel(ode_augmented_casadi,[xaugs, us, ds],
+                                         ["A","B","Bp"], Delta)
 Aaug = ss_augmented["A"]
 Baug = ss_augmented["B"]
-Caug = mpc.util.getLinearization(measurement_casadi, xaugs)["A"]
+Caug = mpc.util.linearizeModel(measurement_casadi,[xaugs, ds],["C","Cp"])["C"]
 
 # Extract the various submatrices.
 Bd = Aaug[:Nx,Nx:]

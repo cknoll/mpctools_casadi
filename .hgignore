@@ -11,3 +11,4 @@ doc/*.synctex.gz
 doc/*.snm
 doc/*.toc
 cstr-matlab/*
+runall.log

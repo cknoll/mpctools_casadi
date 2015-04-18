@@ -35,7 +35,6 @@ def rk4(f,x0,par,Delta=1,M=1):
         j += 1
     return x
 
-
 def atleastnd(arr,n=2):
     """
     Adds an initial singleton dimension to arrays with fewer than n dimensions.

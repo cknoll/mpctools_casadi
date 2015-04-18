@@ -7,6 +7,15 @@ import time
 Holds solver interfaces, wrappers, and class definitions.
 """
 
+_MAX_VERBOSITY = 100
+
+def setMaxVerbosity(verb=100):
+    """
+    Sets a module override for maximum verbosity setting.
+    """
+    global _MAX_VERBOSITY
+    _MAX_VERBOSITY = verb
+
 
 def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
     parval=None,verbosity=5,timelimit=60,isQp=False,runOptimization=True,
@@ -96,7 +105,7 @@ class ControlSolver(object):
         
     @verbosity.setter
     def verbosity(self,v):
-        self.__verbosity = min(max(v,0),12)
+        self.__verbosity = min(min(max(v,0),12),_MAX_VERBOSITY)
         
     def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
         parval=None,verbosity=5,timelimit=60,isQp=False,scalar=True):
@@ -106,8 +115,6 @@ class ControlSolver(object):
         These arguments should be almost identical to callSolver, which is
         simply a functional wrapper for this class.
         """
-
-        #raise NotImplementedError("Work in progress.")        
         
         # First store everybody to the object.
         self.__var = var
