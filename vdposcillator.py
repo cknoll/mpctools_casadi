@@ -19,9 +19,8 @@ ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 lin = mpc.util.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
 
 # Also discretize using RK4.
-def ode_rk4(x,u):
-    return mpc.util.rk4(ode, x, [u], Delta=Delta, M=1)
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F")
+ode_rk4_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="F",
+                                   rk4=True,Delta=Delta,M=1)
 
 # Define stage cost and terminal weight.
 def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)

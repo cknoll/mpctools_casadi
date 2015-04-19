@@ -16,7 +16,7 @@ Nx = 2
 Nu = 2
 Nd = 0
 
-xsp = np.zeros((Nx,Nt+1))
+xsp = np.zeros((Nt+1,Nx))
 
 # We're going to solve the same problem using linear mpc, nonlinear mpc
 # starting with an exact discrete-time model, and nonlinear mpc starting from
@@ -48,7 +48,7 @@ Pf = mpc.getCasadiFunc(Pffunc,[Nx],["x"],"Pf")
 print "=Linear="
 opt_lmpc = mpc_old.linear.lmpc([A],[B],x0,Nt,[Q],[R],bounds=bounds,
                                verbosity=verb)
-fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp,
+fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp.T,
                              xinds=[0,1],timefirst=False)
 fig_lmpc.canvas.set_window_title("Linear MPC")
 fig_lmpc.show()

@@ -59,8 +59,6 @@ ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nw],["x","u","w"],"F")
 model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nw], ["x","u","w"])    
 
 # Convert continuous-time f to explicit discrete-time F with RK4.
-#def ode_rk4(x,u,w=[0,0,0]):
-#    return mpc.util.rk4(ode, x, [u,w], Delta=Delta, M=2)
 F = mpc.getCasadiFunc(ode,[Nx,Nu,Nw],["x","u","w"],"F",rk4=True,Delta=Delta,M=2)
 H = mpc.getCasadiFunc(measurement,[Nx],["x"],"H")
 
