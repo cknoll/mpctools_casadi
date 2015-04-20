@@ -105,16 +105,9 @@ Note that the original function \texttt{f} should return a single numpy vector (
 The input \texttt{argnames} is optional, but it should be a list of strings that give variable names.
 This helps make things self-documenting.
 
-\funcname{getCasadiIntegrator(f,Delta,argsizes,argnames)}
-
-Returns an \texttt{Integrator} object to integrate the Python function \texttt{f} from time 0 to \texttt{Delta}.
-\texttt{argsizes} and \texttt{argnames} are the same as in \texttt{getCasadiFunc}, but the differential variables (i.e., $x$ in $dx/dt = f(x,y,z)$) must come first.
-
-\funcname{util.rk4(f,x0,par,Delta,M=1)}
-
-Returns an explicit Runge-Kutta 4th order discretization with \texttt{M} steps of size \texttt{Delta}/\texttt{M}.
-\texttt{x0} should be the initial condition for the differential variables, and \texttt{par} should be a list of all other inputs to \texttt{f} (which are held constant during integration).
-An example usage is below.
+Optional arguments are available to return a Runge-Kutta discretization.
+For this, you must specify \lstinline|rk4=True| and also provide arguments \texttt{Delta} with the timestep and \texttt{M} with the number of steps to take in each interval.
+Example usage is shown below.
 
 \begin{lstlisting}[frame=L]
 import mpctools as mpc
@@ -124,14 +117,17 @@ def ode(x,u):
     dxdt = [x[0]**2 + u[0], x[1] - u[0]]
     return np.array(dxdt)
 
-Delta = 0.5 # Set timestep.
-def ode_rk4(x,u):
-    return mpc.util.rk4(ode,x,[u],Delta)
+ode = mpc.getCasadiFunc(ode, [2,1], ["x","u"])
 
-ode_rk4_casadi = mpc.getCasadiFunc(
-    ode_casadi, [2,1], ["x","u"])
+Delta = 0.5 # Set timestep.
+ode_rk4 = mpc.getCasadiFunc(ode, [2,1], ["x","u"],
+    rk4=True, Delta=Delta, M=1)
 \end{lstlisting}
 
+\funcname{getCasadiIntegrator(f,Delta,argsizes,argnames)}
+
+Returns an \texttt{Integrator} object to integrate the Python function \texttt{f} from time 0 to \texttt{Delta}.
+\texttt{argsizes} and \texttt{argnames} are the same as in \texttt{getCasadiFunc}, but the differential variables (i.e., $x$ in $dx/dt = f(x,y,z)$) must come first.
 
 \paragraph*{Solving MPC Problems.}
 

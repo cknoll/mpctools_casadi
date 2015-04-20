@@ -2,7 +2,7 @@
 #
 
 import mpcsim as sim
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import numpy as np
 from scipy import linalg
 
@@ -96,8 +96,8 @@ def runsim(k, simcon, opnclsd, options):
 
         # Create casadi function and simulator.
 
-        ode_casadi = mpc.getCasadiFunc(ode,Nx,Nu,Nd,name="ode")
-        cstr = mpc.OneStepSimulator(ode, Delta, Nx, Nu, Nd)
+        ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
+        cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
         # Set the steady-state values.
 
@@ -119,7 +119,7 @@ def runsim(k, simcon, opnclsd, options):
 
         # Now get a linearization at this steady state.
 
-        ss = mpc.getLinearization(ode_casadi, xs, us, ds, Delta)
+        ss = mpc.util.getLinearization(ode_casadi, xs, us, ds, Delta)
         A = ss["A"]
         B = ss["B"]
         Bp = ss["Bp"]
@@ -136,7 +136,7 @@ def runsim(k, simcon, opnclsd, options):
 
         # Calculate lqr control
 
-        [K, Pi] = mpc.dlqr(A,B,Q,R)
+        [K, Pi] = mpc.util.dlqr(A,B,Q,R)
 
         # Specify which disturbance model to use.
 
@@ -191,7 +191,7 @@ def runsim(k, simcon, opnclsd, options):
 
         # Get steady-state Kalman filter.
 
-        [L, P] = mpc.dlqe(Aaug, Caug, Qw, Rv)
+        [L, P] = mpc.util.dlqe(Aaug, Caug, Qw, Rv)
         Lx = L[:Nx,:]
         Ld = L[Nx:,:]
 
