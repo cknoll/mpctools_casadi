@@ -15,6 +15,7 @@ examplefiles = [
     "cstr.py",
     "cstr_startup.py",
     "cstr_nonlinear.py",
+    "cstr_nmpc_nmhe.py",
     "collocationexample.py",
     "comparison_casadi.py",
     "comparison_mtc.py",
@@ -30,6 +31,7 @@ examplefiles = [
 ]
 
 for f in examplefiles:
+    plt.ioff()
     print "%s ... " % (f,),
     sys.stdout = devnull
     try:

@@ -1,0 +1,419 @@
+# Example 1.11 from Rawlings and Mayne with linear and nonlinear control.
+import mpctools as mpc
+import numpy as np
+from scipy import linalg
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+import time
+
+# Decide whether to use casadi SX objects or MX. I would expect SX to be faster
+# (i.e. set useCasadiSX to True), but it seems MX does much better for this
+# problem (i.e. set useCasadiMX to False). Not sure why.
+useCasadiSX = False
+useMeasuredState = False
+
+# Define some parameters and then the CSTR model.
+Nx = 3
+Nu = 2
+Nd = 1
+Ny = Nx
+Nid = Ny # Number of integrating disturbances.
+Nw = Nx + Nid # Noise on augmented state.
+Nv = Ny # Noise on outputs.
+Delta = 1
+eps = 1e-6 # Use this as a small number.
+
+T0 = 350
+c0 = 1
+r = .219
+k0 = 7.2e10
+E = 8750
+U = 54.94
+rho = 1000
+Cp = .239
+dH = -5e4
+
+def cstrmodel(c,T,h,Tc,F,F0):
+    # ODE for CSTR.
+    rate = k0*c*np.exp(-E/T)
+        
+    dxdt = np.array([
+        F0*(c0 - c)/(np.pi*r**2*h) - rate,
+        F0*(T0 - T)/(np.pi*r**2*h)
+            - dH/(rho*Cp)*rate
+            + 2*U/(r*rho*Cp)*(Tc - T),    
+        (F0 - F)/(np.pi*r**2)
+    ])
+    return dxdt
+
+# Steady-state values.
+cs = .878
+Ts = 324.5
+hs = .659
+Fs = .1
+Tcs = 300
+F0s = .1
+
+def ode(x,u,d):
+    # Grab the states, controls, and disturbance.
+    [c, T, h] = x[0:Nx]
+    [Tc, F] = u[0:Nu]
+    [F0] = d[0:Nd]
+    return cstrmodel(c,T,h,Tc,F,F0)
+
+ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="rk4",
+                                   rk4=True,Delta=Delta,M=1)
+
+# Turn into casadi function and simulator.
+ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
+ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],
+                                   "ode_rk4",rk4=True,Delta=Delta,M=2)
+
+cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+
+# Update the steady-state values a few times to make sure they don't move.
+for i in range(10):
+    [cs,Ts,hs] = cstr.sim([cs,Ts,hs],[Tcs,Fs],[F0s]).tolist()
+xs = np.array([cs,Ts,hs])
+xaugs = np.concatenate((xs,np.zeros((Nid,))))
+us = np.array([Tcs,Fs])
+ds = np.array([F0s])
+ps = np.concatenate((ds,xs,us))
+
+# Define augmented model for state estimation.    
+def ode_augmented(x,u,d=ds):
+    # Grab states, estimated disturbances, controls, and actual disturbance.
+    [c, T, h] = x[0:Nx]
+    dhat = x[Nx:Nx+Nid]
+    [Tc, F] = u[0:Nu]
+    [F0] = d[0:Nd]
+    
+    dxdt = np.concatenate((cstrmodel(c,T,h,Tc,F+dhat[2],F0),np.zeros((Ny,))))
+    return dxdt
+cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
+                                [Nx+Nid,Nu,Nd], ["xaug","u","d"])
+def measurement(x,d=ds):
+    [c, T, h] = x[0:Nx]
+    dhat = x[Nx:Nx+Nid]
+    return np.array([c + dhat[0], T, h + dhat[1]])
+ys = measurement(xaugs)
+
+# Turn into casadi functions.
+ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
+ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",
+    rk4=True,Delta=Delta,M=2)
+
+def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
+    return ode_augmented_rk4_casadi([x,u,d])[0] + w
+
+ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
+    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
+measurement_casadi = mpc.getCasadiFunc(measurement,
+    [Nx+Nid,Nd],["xaug","d"],"measurement")
+
+# Weighting matrices for controller.
+Q = .5*np.diag(xs**-2)
+R = 2*np.diag(us**-2)
+
+# Now get a linearization at this steady state and calculate Riccati cost-to-go.
+ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+A = ss["A"]
+B = ss["B"]
+Bp = ss["Bp"]
+C = np.eye(Nx)
+
+[K, Pi] = mpc.util.dlqr(A,B,Q,R)
+
+def stagecost(x,u,xsp,usp,Deltau):
+    # Return deviation variables.
+    dx = x[:Nx] - xsp[:Nx]
+    du = u - usp
+    
+    # Calculate stage cost.
+    return (mpc.mtimes(dx.T,Q,dx) + .1*mpc.mtimes(du.T,R,du)
+        + mpc.mtimes(Deltau.T,R,Deltau))
+
+largs = ["x","u","x_sp","u_sp","Du"]
+l = mpc.getCasadiFunc(stagecost,
+    [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l")
+
+def costtogo(x,xsp):
+    # Deviation variables.
+    dx = x[:Nx] - xsp[:Nx]
+    
+    # Calculate cost to go.
+    return mpc.mtimes(dx.T,Pi,dx)
+Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
+
+# Build augmented estimator matrices.
+Qw = eps*np.eye(Nx + Nid)
+Qw[-1,-1] = 1
+Rv = eps*np.diag(xs**2)
+Qwinv = linalg.inv(Qw)
+Rvinv = linalg.inv(Rv)
+
+# Define stage costs for estimator.
+def lest(w,v): return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
+lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
+
+# Don't use a prior.
+lxest = None
+x0bar = None
+
+# Now simulate things.
+Nsim = 51
+t = np.arange(Nsim)*Delta
+starttime = time.clock()
+x = np.zeros((Nsim,Nx))
+x[0,:] = xs # Start at steady state.    
+
+u = np.zeros((Nsim,Nu))
+u[0,:] = us # Start at steady state.
+
+usp = np.zeros((Nsim,Nu))
+xaugsp = np.zeros((Nsim,Nx+Nid))
+y = np.zeros((Nsim,Ny))
+err = y.copy()
+v = y.copy()
+
+# xhatm is xhat( k | k-1 ). xhat is xhat( k | k ).
+xhatm = np.zeros((Nsim,Nx+Nid))
+xhatm[0,:] = xaugs # Start with estimate at steaty state.
+xhat = np.zeros((Nsim,Nx+Nid))
+xhat[0,:] = xaugs
+
+# Pick disturbance, setpoint, and initial condition.
+d = np.zeros((Nsim,Nd))
+d[:,0] = (t >= 10)*(t <= 30)*.1*F0s
+d += ds
+
+ysp = np.tile(xs, (Nsim,1))
+contVars = [0,2] # Concentration and height.
+
+# Make NMPC solver.
+Nt = 5
+ubounds = np.array([.05*Tcs, .5*Fs])
+Dubounds = .05*ubounds
+bounds = dict(uub=[us + ubounds],ulb=[us - ubounds])
+lb = {"u" : np.tile(us - ubounds, (Nt,1)), "Du" : np.tile(-Dubounds, (Nt,1))}
+ub = {"u" : np.tile(us + ubounds, (Nt,1)), "Du" : np.tile(Dubounds, (Nt,1))}
+
+N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nt}
+p = np.tile(ds, (Nt,1)) # Parameters for system.
+sp = {"x" : np.tile(xaugs, (Nt+1,1)), "u" : np.tile(us, (Nt,1))}
+guess = sp.copy()
+x0 = xs
+xaug0 = xaugs
+nmpcargs = {
+    "f" : ode_augmented_rk4_casadi,
+    "l" : l,
+    "largs" : largs,
+    "N" : N,
+    "x0" : xaug0,
+    "uprev" : us,
+    "lb" : lb,
+    "ub" : ub,
+    "guess" : guess,
+    "Pf" : Pf,
+    "sp" : sp,
+    "p" : p,
+    "verbosity" : 0,
+    "timelimit" : 60,
+    "runOptimization" : False,
+    "scalar" : useCasadiSX,
+}
+controller = mpc.nmpc(**nmpcargs)
+
+# Make NMHE solver.
+Nmhe = 5
+uguess = np.tile(us,(Nmhe,1))
+xguess = np.tile(xaugs,(Nmhe+1,1))
+yguess = np.tile(ys,(Nmhe+1,1))
+nmheargs = {
+    "f" : ode_estimator_rk4_casadi,
+    "h" : measurement_casadi,
+    "u" : uguess,
+    "y" : yguess,
+    "l" : lest,
+    "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":Nmhe},
+    "lx" : lxest,
+    "x0bar" : x0bar,
+    "p" : np.tile(ds,(Nmhe+1,1)),
+    "verbosity" : 0,
+    "guess" : {"x":xguess, "y":yguess, "u":uguess},
+    "timelimit" : 5,
+    "scalar" : useCasadiSX,
+    "runOptimization" : False,                        
+}
+estimator = mpc.nmhe(**nmheargs)
+
+# Declare ydata and udata. Note that it would make the most sense to declare
+# these using collection.deques since we're always popping the left element or
+# appending a new element, but for these sizes, we can just use a list without
+# any noticable slowdown.
+ydata = [ys]*Nmhe
+udata = [us]*(Nmhe-1)
+
+# Make steady-state target selector.
+sstargargs = {
+    "f" : ode_augmented_casadi,
+    "h" : measurement_casadi,
+    "lb" : {"u" : np.tile(us - ubounds, (1,1))},
+    "ub" : {"u" : np.tile(us + ubounds, (1,1))},
+    "guess" : {
+        "u" : np.tile(us, (1,1)),
+        "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
+        "y" : np.tile(xs, (1,1)),
+    },
+    "p" : np.tile(ds, (1,1)), # Parameters for system.
+    "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd},
+    "verbosity" : 0,
+    "discretef" : False,
+    "runOptimization" : False,
+    "scalar" : useCasadiSX,
+}
+targetfinder = mpc.sstarg(**sstargargs)
+
+# Preallocate a guess dictionary that we will change.
+estimatorguess = {}
+estimatorguess["x"] = np.tile(xaugs, (1,1))
+estimatorguess["v"] = np.zeros((1,Nv))
+estimatorguess["w"] = np.zeros((0,Nw))
+
+for n in range(1,Nsim):
+    # Simulate with nonilnear model.
+    try:
+        x[n,:] = cstr.sim(x[n-1,:], u[n-1,:], d[n-1,:])
+    except:
+        print "***Error during simulation!"
+        break
+    udata.append(u[n-1,:]) # Store latest control move.
+    
+    # Advance state estimate. Use disturbance as modeled.
+    xhatm[n,:] = cstraug.sim(xhat[n-1,:], u[n-1,:], ds)
+    print ""    
+    
+    # Take plant measurement.
+    y[n,:] = measurement(np.concatenate(
+        (x[n,:],np.zeros((Nid,))))) + v[n,:]
+    ydata.append(y[n,:])
+    
+    # Update state estimate with measurement.
+    err[n,:] = y[n,:] - measurement(xhatm[n,:])
+    
+    print "(%3d) " % (n,), 
+    
+    # Handle disturbance.
+    if useMeasuredState:
+        # Just directly measure state and get the correct disturbance.
+        x0hat = x[n,:]
+        xhat[n,:Nx] = x0hat # Estimate is exact.
+        controller.par["p"] = [d[n,:]]*Nt
+        targetfinder.par["p",0] = d[n,:]
+    else:
+        # Do Nonlinear MHE.
+        estimator.par["y"] = ydata
+        estimator.par["u"] = udata
+        estimator.solve()
+        estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
+        
+        print "Estimator: %s, " % (estimator.stats["status"],),            
+        xhat[n,:] = estsol["x"][-1,:] # Update our guess.
+        
+        estimator.saveguess()        
+        
+        # Update estimator guess.
+        estimatorguess = {}
+        for k in ["x","w","v"]:
+            if k in estsol.keys():
+                # Duplicate final guess to prepare for new data at the
+                # next timestep.
+                estimatorguess[k] = np.concatenate((estsol[k][:,...],
+                    estsol[k][-1:,...]))
+            elif n == 0 and k == "w":
+                estimatorguess[k] = np.zeros((1,Nw))
+            else:
+                # This should never happen.
+                raise KeyError("Entry '%s' missing from estimator "
+                    "solution. Something went wrong." % (k,))
+        dguess = ds
+        targetfinder.par["p",0] = ds                
+        
+    # Use nonlinear steady-state target selector.
+    x0hat = xhat[n,:]
+     
+    # Pick setpoint for augmented state and fix the augmented states.            
+    xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:]))
+    targetfinder.guess["x",0] = xtarget
+    targetfinder.fixvar("x",0,xhat[n,Nx:],range(Nx,Nx+Nid))
+    targetfinder.fixvar("y",0,ysp[n,contVars],contVars)
+    
+    uguess = u[n-1,:]            
+    targetfinder.guess["u",0] = uguess
+    targetfinder.solve()
+    
+    xaugsp[n,:] = np.squeeze(targetfinder.var["x",0,:])
+    usp[n,:] = np.squeeze(targetfinder.var["u",0,:])
+
+    print "Target: %s, " % (targetfinder.stats["status"],), 
+    if targetfinder.stats["status"] != "Solve_Succeeded":
+        import pdb; pdb.set_trace()
+        break
+
+    # Now use nonlinear MPC controller.
+    controller.par["x_sp"] = [xaugsp[n,:]]*(Nt + 1)
+    controller.par["u_sp"] = [usp[n,:]]*Nt
+    controller.par["u_prev"] = [u[n-1,:]]
+    controller.fixvar("x",0,x0hat)            
+    controller.solve()
+    print "Controller: %s, " % (controller.stats["status"],), 
+    
+    controller.saveguess()
+    u[n,:] = np.squeeze(controller.var["u",0])
+    
+    # Get rid of oldest y and u data.
+    ydata.pop(0)
+    udata.pop(0)    
+    
+endtime = time.clock()
+print "\n\nNonlinear Took %.5g s." % (endtime - starttime,)
+
+# *****
+# Plots
+# *****
+
+
+# Define plotting function.
+def cstrplot(x,u,ysp=None,contVars=[],title=None):
+    u = np.concatenate((u,u[-1:,:]))
+    t = np.arange(0,x.shape[0])*Delta
+    ylabelsx = ["$c$ (mol/L)", "$T$ (K)", "$h$ (m)"]
+    ylabelsu = ["$T_c$ (K)", "$F$ (kL/min)"]
+    
+    gs = gridspec.GridSpec(Nx*Nu,2)    
+    
+    fig = plt.figure(figsize=(10,6))
+    for i in range(Nx):
+        ax = fig.add_subplot(gs[i*Nu:(i+1)*Nu,0])
+        ax.plot(t,x[:,i],'-ok')
+        if i in contVars:
+            ax.step(t,ysp[:,i],'-r',where="post")
+        ax.set_ylabel(ylabelsx[i])
+        mpc.plots.zoomaxis(ax,yscale=1.1)
+    ax.set_xlabel("Time (min)")
+    for i in range(Nu):
+        ax = fig.add_subplot(gs[i*Nx:(i+1)*Nx,1])
+        ax.step(t,u[:,i],'-k',where="post")
+        ax.set_ylabel(ylabelsu[i])
+        mpc.plots.zoomaxis(ax,yscale=1.25)
+    ax.set_xlabel("Time (min)")
+    fig.tight_layout(pad=.5)
+    if title is not None:
+        fig.canvas.set_window_title(title)
+    return fig
+
+
+actfig = cstrplot(xhatm[:,:Nx],u[:-1,:],ysp=None,contVars=[],title="Estimated")
+estfig = cstrplot(x,u[:-1,:],ysp=None,contVars=[],title="Actual")
