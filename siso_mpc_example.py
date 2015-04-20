@@ -3,7 +3,7 @@
 
 import mpcsim as sim
 import numpy as np
-import mpc_tools_casadi as mpc
+import mpctools as mpc
 import random as rn
 
 def runsim(k, simcon, opnclsd, options):
@@ -57,7 +57,7 @@ def runsim(k, simcon, opnclsd, options):
 
         # Discretize.
 
-        (Adisc,Bdisc) = mpc.c2d(Acont,Bcont,deltat)
+        (Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,deltat)
         A = [Adisc]
         B = [Bdisc]
 
@@ -79,13 +79,13 @@ def runsim(k, simcon, opnclsd, options):
         simcon.gain = Bmod/(1-Amod)
         Fmod = lambda x,u : (mpc.mtimes(Amod,x) + mpc.mtimes(Bmod,u))
         simcon.mod = Fmod
-        Fdiscrete = lambda x,u : list(mpc.mtimes(Amod,x) + mpc.mtimes(Bmod,u))
-        simcon.F = [mpc.getCasadiFunc(Fdiscrete,Nx,Nu,Nd,"F")]
-        l = lambda x,u : [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)
-                  + mpc.mtimes(u.T,mpc.DMatrix(R[0]),u)]
-        simcon.l = [mpc.getCasadiFunc(l,Nx,Nu,Nd,"l")]
-        Pf = lambda x: [mpc.mtimes(x.T,mpc.DMatrix(Q[0]),x)]
-        simcon.Pf = mpc.getCasadiFunc(Pf,Nx,0,0,"Pf")
+        Fdiscrete = lambda x,u : mpc.mtimes(Amod,x) + mpc.mtimes(Bmod,u)
+        simcon.F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
+        l = lambda x,u : (mpc.mtimes(x.T,Q[0],x)
+                  + mpc.mtimes(u.T,R[0],u))
+        simcon.l = mpc.getCasadiFunc(l,[Nx,Nu],["x","u"],"l")
+        Pf = lambda x: mpc.mtimes(x.T,Q[0],x)
+        simcon.Pf = mpc.getCasadiFunc(Pf,[Nx],["x"],"Pf")
 
         # initialize the state
 
@@ -180,15 +180,21 @@ def runsim(k, simcon, opnclsd, options):
         uub = [np.array([mv.maxlim - mv.sstarg])]
         xlb = [np.array([xv.minlim - xv.sstarg - cv.bias])]
         xub = [np.array([xv.maxlim - xv.sstarg - cv.bias])]
-        bounds = dict(uub=uub,ulb=ulb,xub=xub,xlb=xlb)
+        #bounds = dict(uub=uub,ulb=ulb,xub=xub,xlb=xlb)
+        N = {"t" : xv.Nf, "x" : 1, "u" : 1}
+        lb = {"x" : np.tile(xlb[0], (N["t"] + 1, 1)), "u" : np.tile(ulb[0], (N["t"],1))}
+        ub = {"x" : np.tile(xub[0], (N["t"] + 1, 1)), "u" : np.tile(uub[0], (N["t"],1))}
 
         # solve for new input and state
 
-        alg   = mpc.nmpc(simcon.F,simcon.l,[0],xv.Nf,simcon.Pf,
-                bounds,verbosity=0,returnTimeInvariantSolver=True)
+#        alg   = mpc.nmpc(simcon.F,simcon.l,[0],xv.Nf,simcon.Pf,
+#                bounds,verbosity=0,returnTimeInvariantSolver=True)
+        alg = mpc.nmpc(simcon.F,simcon.l,N,[0],Pf=simcon.Pf,lb=lb,ub=ub,verbosity=0,runOptimization=False)
         dxss = xmk - xv.sstarg
         alg.fixvar("x",0,dxss)
-        sol = alg.solve()
+        alg.solve()
+        sol = mpc.util.casadiStruct2numpyDict(alg.var)
+        sol["status"] = alg.stats["status"]
         sol["u"] = sol["u"].T
         sol["x"] = sol["x"].T
         duk  = sol["u"][0,0] 
