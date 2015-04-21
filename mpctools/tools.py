@@ -166,6 +166,8 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
         if "u" in sp.keys():
             largs.append("u_sp")
         funcargs["l"] = largs
+    elif "l" not in funcargs.keys():
+        funcargs["l"] = largs
     
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
         f=f,g=g,h=None,l=l,e=e,funcargs=funcargs,Delta=Delta,

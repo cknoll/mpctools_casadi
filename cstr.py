@@ -13,7 +13,7 @@ Nu = 2
 Nd = 1
 Ny = Nx
 Delta = 1
-eps = 1e-6 # Use this as a small number.
+eps = 1e-5 # Use this as a small number.
 
 T0 = 350
 c0 = 1
@@ -120,6 +120,7 @@ Baug = np.vstack((B,np.zeros((Nid,Nu))))
 Caug = np.hstack((C,Cd))
 
 # Check rank condition for augmented system.
+# See Lemma 1.8 from Rawlings and Mayne (2009).
 svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A,
                                 -Bd],[C,Cd]]))
 rank = sum(svds > 1e-10)

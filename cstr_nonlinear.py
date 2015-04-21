@@ -96,7 +96,7 @@ cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
 def measurement(x,d=ds):
     [c, T, h] = x[0:Nx]
     dhat = x[Nx:Nx+Nid]
-    return np.array([c + dhat[0], T, h + dhat[1]])
+    return np.array([c + dhat[0], T + dhat[1], h])
 ys = measurement(xaugs)
 
 # Turn into casadi functions.
@@ -174,7 +174,7 @@ Bd = Aaug[:Nx,Nx:]
 Cd = Caug[:,Nx:]
 
 # Check rank condition for augmented system.
-svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A, -Bd],[C,Cd]]))
+svds = linalg.svdvals(np.bmat([[np.eye(Nx+Nid) - Aaug],[Caug]]))
 rank = sum(svds > 1e-10)
 if rank < Nx + Nid:
     print "***Warning: augmented system is not detectable!"

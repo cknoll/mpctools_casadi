@@ -80,7 +80,9 @@ us = np.array([Tcs,Fs])
 ds = np.array([F0s])
 ps = np.concatenate((ds,xs,us))
 
-# Define augmented model for state estimation.    
+# Define augmented model for state estimation. We put output disturbances on
+# c and h, and an input disturbance on F. Although h is an integrator, we can
+# put an output disturbance on h because of the input disturbance on F.    
 def ode_augmented(x,u,d=ds):
     # Grab states, estimated disturbances, controls, and actual disturbance.
     [c, T, h] = x[0:Nx]
@@ -161,6 +163,17 @@ lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 # Don't use a prior.
 lxest = None
 x0bar = None
+
+# Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
+Aaug = mpc.util.linearizeModel(ode_augmented_casadi,[xaugs, us, ds],
+                               ["A","B","Bp"], Delta)["A"]
+Caug = mpc.util.linearizeModel(measurement_casadi,[xaugs, ds],
+                               ["C","Cp"])["C"]
+Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
+svds = linalg.svdvals(Oaug)
+rank = sum(svds > 1e-5)
+if rank < Nx + Nid:
+    print "***Warning: augmented system is not detectable!"
 
 # Now simulate things.
 Nsim = 51
