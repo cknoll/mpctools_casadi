@@ -384,7 +384,6 @@ print "\n\nNonlinear Took %.5g s." % (endtime - starttime,)
 # Plots
 # *****
 
-
 # Define plotting function.
 def cstrplot(x,u,ysp=None,contVars=[],title=None):
     u = np.concatenate((u,u[-1:,:]))
@@ -416,4 +415,4 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
 
 
 actfig = cstrplot(xhatm[:,:Nx],u[:-1,:],ysp=None,contVars=[],title="Estimated")
-estfig = cstrplot(x,u[:-1,:],ysp=None,contVars=[],title="Actual")
+estfig = cstrplot(x,u[:-1,:],ysp=ysp,contVars=contVars,title="Actual")

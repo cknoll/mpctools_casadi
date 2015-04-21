@@ -39,7 +39,7 @@ Functions for solving MPC problems using Casadi and Ipopt.
 
 def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     uprev=None,verbosity=5,timelimit=60,Delta=None,runOptimization=True,
-    scalar=True):
+    scalar=True,funcargs={},extrapar={},e=None):
     """
     Solves nonlinear MPC problem.
     
@@ -48,11 +48,21 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     states are present, you must provide a "z" entry.
     
     If provided, p must be a 2D array with the time dimension first. It should
-    have N["t"] rows and N["p"] columns.
+    have N["t"] rows and N["p"] columns. This is for time-varying parameters.
+    Note that they must be specified as a vector. For time-invariant parameters
+    that may have weird sizes (e.g., a terminal penalty matrix that you may
+    want to change), specify the numerical value in an entry of extrapar. Note
+    that the names in extrapar must not conflict with default variable names
+    like 'u', 'u_sp', 'Du', etc.
     
     lb and ub should be dictionaries of bounds for the various variables. Each
     entry should have time as the first index (i.e. lb["x"] should be a
     N["t"] + 1 by N["x"] array). guess should have the same structure.    
+    
+    Function argument are assumed to be the "usual" order, i.e. f(x,u), l(x,u),
+    and Pf(x). If you wish to override any of these, specify a list of variable
+    names in the corresponding entry of extrapar. E.g., for a stage cost
+    l(x,u,x_sp,u_sp,Du), specify funcargs={"l" : ["x","u","x_sp","u_sp","Du"]}.    
     
     sp is a dictionary that holds setpoints for x and u. If supplied, the stage
     cost is assumed to be a function l(x,u,x_sp,u_sp). If not supplied, l is
@@ -66,17 +76,21 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     key "Du" in the lb and ub structs. "Du" can also be specified as in largs.    
     
     The return value is a dictionary with the values of the optimal decision
-    variables and also some time vectors.
+    variables and also some time vectors. Alternatively, if runOptimization is
+    False, then the return value is a ControlSolver object.
     """     
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
-    guess = guess.copy()     
+    guess = guess.copy()
+    funcargs = funcargs.copy()
    
     # Check specified sizes.
     try:
         for i in ["t","x"]:
             if N[i] <= 0:
                 N[i] = 1
+        if e is not None and N["e"] <= 0:
+            N["e"] = 1
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
     
@@ -84,9 +98,13 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     for i in ["y","v"]:
         N.pop(i,None)
     
+    # Sort out extra parameters.
+    extraparshapes = __getShapes(extrapar)
+    
     # Now get the shapes of all the variables that are present.
     deltaVars = ["u"] if uprev is not None else []
-    allShapes = __generalVariableShapes(N,setpoint=sp.keys(),delta=deltaVars)
+    allShapes = __generalVariableShapes(N,setpoint=sp.keys(),delta=deltaVars,
+                                        extra=extraparshapes)
     if "c" not in N:
         N["c"] = 0    
     
@@ -102,7 +120,7 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     # is passed as a set of variables and one is a set of parameters. Note that
     # if this ends up empty, we just set it to None.
     parNames = set(["p"] + [k + "_sp" for k in sp.keys()]
-        + [k + "_prev" for k in deltaVars])
+        + [k + "_prev" for k in deltaVars] + extrapar.keys())
     parStruct = __casadiSymStruct(allShapes,parNames,scalar=scalar)
     if len(parStruct.keys()) == 0:
         parStruct = None
@@ -119,6 +137,10 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
         uprev = np.array(uprev).flatten()
         uprev.shape = (1,uprev.size)
         guess["u_prev"] = uprev
+    for v in extrapar.keys():
+        thispar = np.array(extrapar[v])
+        thispar.shape = (1,) + thispar.shape
+        guess[v] = thispar
     
     # Need to decide about algebraic constraints.
     if "z" in allShapes.keys():
@@ -137,17 +159,18 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
         obj = casadi.SX(0)
     
     # Decide arguments of l.
-    if largs is None:
+    if largs is None and "l" not in funcargs.keys():
         largs = ["x","u"]
         if "x" in sp.keys():
             largs.append("x_sp")
         if "u" in sp.keys():
             largs.append("u_sp")
+        funcargs["l"] = largs
     
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=None,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
-         runOptimization=runOptimization,deltaVars=deltaVars,
-         scalar=scalar)
+        f=f,g=g,h=None,l=l,e=e,funcargs=funcargs,Delta=Delta,
+        verbosity=verbosity,runOptimization=runOptimization,
+        deltaVars=deltaVars,scalar=scalar)
 
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
@@ -231,7 +254,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
         obj += lx([varStruct["x",0] - x0bar])[0]
     
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=h,l=l,largs=largs,Delta=Delta,verbosity=verbosity,
+         f=f,g=g,h=h,l=l,funcargs={"l":largs},Delta=Delta,verbosity=verbosity,
          runOptimization=runOptimization,scalar=scalar)
 
 
@@ -307,11 +330,11 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
 
 
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
-    obj=None,f=None,g=None,h=None,l=None,largs=[],Delta=1,
+    obj=None,f=None,g=None,h=None,l=None,e=None,funcargs={},Delta=1,
     discretef=True,deltaVars=[],finalpoint=True,verbosity=5,
     runOptimization=True,scalar=True):
     """
-    General wrapper for an optimal control problem (e.g. mpc or mhe).
+    General wrapper for an optimal control problem (e.g., mpc or mhe).
     
     struct should be a dictionary of the appropriate parameter or variable
     casadi sym_structs. It should have an entry for each variable/parameter
@@ -362,18 +385,18 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
             struct[k] = par[k]
     
     # Double-check some sizes and then get constraints.
-    for (func,name) in [(f,"f"), (g,"g"), (h,"h")]:
+    for (func,name) in [(f,"f"), (g,"g"), (h,"h"), (e,"e")]:
         if func is None:
             N[name] = 0    
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
-        g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,largs=largs,Ncolloc=N["c"],
+        g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,funcargs=funcargs,Ncolloc=N["c"],
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
-        finalpoint=finalpoint)
+        finalpoint=finalpoint,e=e,Ne=N["e"])
      
     con = []
     conlb = np.zeros((0,))
     conub = conlb.copy()
-    for f in ["state","measurement","algebra","delta"]:
+    for f in ["state","measurement","algebra","delta","path"]:
         if f in constraints.keys():
             con += util.flattenlist(constraints[f]["con"])
             conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
@@ -417,14 +440,15 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
 
 
 def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
-    l=None,largs=[],Ncolloc=0,Delta=1,discretef=True,deltaVars=[],
-    finalpoint=True):
+    l=None,funcargs={},Ncolloc=0,Delta=1,discretef=True,deltaVars=[],
+    finalpoint=True,e=None,Ne=0):
     """
     Creates general state evolution constraints for the following system:
     
        x^+ = f(x,z,u,w,p)                      \n
        g(x,z,w,p) = 0                          \n
        y = h(x,z,p) + v                        \n
+       e(x,z,u,p) <= 0                         \n
        
     The variables are intended as follows:
     
@@ -435,6 +459,11 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
         p: fixed system parameters              \n
         y: meadured outputs                     \n
         v: noise on outputs
+    
+    The arguments of any functions can be overridden by specifying a list of
+    arguments in the appropriate entry of the dictionary funcargs. E.g., if
+    your function f is f(p,y,z) then you would pass {"f" : ["p","y","z"]} for
+    funcargs.    
     
     Also builds up a list of stage costs l(...). Note that if l is given, its
     arguments must be specified in largs as a tuple of variable names.
@@ -468,17 +497,36 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     """
     
     # Figure out what variables are supplied.
-    givenvars = set(var.keys())    
+    givenvars = set(var.keys())
     givenvarscolloc = givenvars.intersection(["x","z"])    
     
-    # Now sort out arguments for each function.
-    isGiven = lambda v: v in givenvars # Membership function.
-    args = {
-        "f" : filter(isGiven, ["x","z","u","w","p"]),
-        "g" : filter(isGiven, ["x","z","w","p"]),
-        "h" : filter(isGiven, ["x","z","p"]),
-        "l" : filter(isGiven, largs)
+    # Decide function arguments.
+    args = funcargs.copy()
+    if l is not None and "l" not in args.keys():
+        raise KeyError("Must supply arguments to l!")
+
+    # Make sure user-defined arguments are valid.
+    for k in args.keys():
+        try:
+            okay = givenvars.issuperset(args[k])
+        except TypeError:
+            raise TypeError("funcargs['%s'] must be a list of strings!" % (k,))
+        if not okay:
+            badvars = set(args[k]).difference(givenvars)
+            raise ValueError("Bad arguments for %s: %s." % (k,repr(badvars)))
+    
+    # Now sort out defaults.
+    defaultargs = {
+        "f" : ["x","z","u","w","p"],
+        "g" : ["x","z","w","p"],
+        "h" : ["x","z","p"],
+        "e" : ["x","z","u","p"],
     }
+    def isGiven(v): # Membership function.
+        return v in givenvars
+    for k in set(defaultargs.keys()).difference(args.keys()):
+        args[k] = filter(isGiven, defaultargs[k])
+    
     # Also define inverse map to get positions of arguments.
     argsInv = {}
     for a in args.keys():
@@ -586,7 +634,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
             if "v" in givenvars:
                 thiscon += var["v"][t]
             measurement.append([thiscon])
-        lb = np.zeros((len(tpoints),Nh))
+        lb = np.zeros((len(measurement),Nh))
         ub = lb.copy()
         returnDict["measurement"] = dict(con=measurement,lb=lb,ub=ub)
     
@@ -616,6 +664,18 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
             cost.append(l(largs[t])[0])
         returnDict["cost"] = cost
     
+    # Nonlinear path constraints.
+    if e is not None:
+        if Ne <= 0:
+            raise ValueError("Ne must be a positive integer!")
+        eargs = getArgs("e",tintervals,var)
+        pathconstraints = []
+        for t in tintervals:
+            pathconstraints.append([e(eargs[t])[0]])
+        lb = -np.inf*np.ones((len(pathconstraints),Ne))
+        ub = np.zeros((len(pathconstraints),Ne))
+        returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)
+        
     return returnDict
 
 
@@ -624,7 +684,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
 # =====================================
 
 def __generalVariableShapes(sizeDict,setpoint=[],delta=[],finalx=True,
-                            finaly=False):
+                            finaly=False,extra={}):
     """
     Generates variable shapes from the size dictionary N.
     
@@ -701,6 +761,15 @@ def __generalVariableShapes(sizeDict,setpoint=[],delta=[],finalx=True,
             elif len(shape) == 1:
                 shape += [1]
             shapeDict[v] = {"repeat" : t, "shape" : tuple(shape)}
+            
+    # Finally, look through extra variables and raise an error if something
+    # will overwrite a variable that is already there.
+    for v in extra.keys():
+        if v in shapeDict.keys():
+            raise KeyError("Extra parameter '%s' shadows a reserved name. "
+                "Please choose a different name." % (v,))
+        else:
+            shapeDict[v] = {"repeat" : 1, "shape" : tuple(extra[v])}
     
     return shapeDict
 
@@ -729,6 +798,25 @@ def __casadiSymStruct(allVars,theseVars=None,scalar=True):
         struct = ctools.struct_symMX
     return struct([structArgs])
 
+def __getShapes(vals,mindims=1):
+    """
+    Gets shapes for each entry of the dictionary vals.
+    
+    Each entry of vals must be castable to a numpy array so that its shape can
+    be determined. Any entry with fewer than ndims dimensions will have
+    ones prepended to the resulting shape.
+    """
+    shapes = {}
+    for k in vals.keys():
+        try:
+            s = np.array(vals[k],dtype=float).shape
+        except ValueError:
+            raise ValueError("Entry '%s' cannot be converted to a numpy array!"
+                % (k,))
+        if len(s) < mindims:
+            s = (1,)*(mindims - len(s)) + s
+        shapes[k] = s
+    return shapes
 
 def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
                   rk4=False,Delta=1,M=1):
