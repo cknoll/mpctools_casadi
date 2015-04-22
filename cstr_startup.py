@@ -42,9 +42,6 @@ def ode(x,u,d):
     ])
     return dxdt
 
-#def ode_rk4(x,u,d):
-#    return np.array(mpc.util.rk4(ode,x,[u,d],Delta,1))
-
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="ode")
 ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],
@@ -95,14 +92,14 @@ def linmodel(x,u,d):
     return np.array(Ax + Bu + Bpd)
 Flinear = mpc.getCasadiFunc(linmodel,[Nx,Nu,Nd],["x","u","d"],funcname="F")
 
-def stagecost(x,u,xsp,usp):
+def stagecost(x,u,xsp,usp,Q,R):
     # Return deviation variables.
     dx = x - xsp
     du = u - usp
-    
     # Calculate stage cost.
     return np.array(mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du))
-l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu],["x","u","x_sp","u_sp"],
+largs = ["x","u","x_sp","u_sp","Q","R"]
+l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu,(Nx,Nx),(Nu,Nu)],largs,
                       funcname="l")
 
 def costtogo(x,xsp):
@@ -155,6 +152,8 @@ nmpc_commonargs = {
     "sp" : sp,
     "runOptimization" : False,
     "uprev" : us,
+    "largs" : largs,
+    "extrapar" : {"Q" : Q, "R" : R}, # In case we want to tune online.
 }
 solvers = {}
 solvers["lmpc"] = mpc.nmpc(f=Flinear,guess=guesslin,**nmpc_commonargs)

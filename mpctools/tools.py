@@ -545,9 +545,19 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     for a in args.keys():
         argsInv[a] = dict([(args[a][j], j) for j in range(len(args[a]))])
     
-    # Define some helper variables.    
-    def getArgs(func,times,var): 
-        return [[var[v][t] for v in args[func]] for t in times]
+    # Define some helper functions/variables.    
+    def getArgs(func,times,var):
+        allargs = []
+        for t in times:
+            thisargs = []
+            for v in args[func]:
+                if len(var[v]) == 1:
+                    thisargs.append(var[v][0])
+                else:
+                    thisargs.append(var[v][t])
+            allargs.append(thisargs)
+        return allargs
+    
     tintervals = range(0,Nt)
     tpoints = range(0,Nt + bool(finalpoint))
     

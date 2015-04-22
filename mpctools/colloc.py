@@ -18,7 +18,7 @@ numerically unstable for high-order polynomials.
   March 2015
 """
 
-def weights(n,include0=False,include1=False):
+def weights(n,include0=True,include1=True):
     """
     Returns collocation weights for order n.
     
@@ -47,6 +47,8 @@ def jacobi(n,alpha,beta,include0=True,include1=True):
     
     d1, d2, and d3 are derivatives at the roots which are given in r.
     """
+    # Suppress some SciPy warnings that may occur.
+    oldNpInvalidSetting = np.seterr(invalid="ignore")["invalid"]    
     
     # Scipy uses different parameters for shifted Jacobi polynomials.
     q = beta + 1
@@ -77,7 +79,10 @@ def jacobi(n,alpha,beta,include0=True,include1=True):
                 d3[i] = y*d3[i] + 3*d2[i]
                 d2[i] = y*d2[i] + 2*d1[i]
                 d1[i] = y*d1[i]
-        
+    
+    # Change back the settings.
+    np.seterr(invalid=oldNpInvalidSetting)
+    
     return [d1, d2, d3, np.array(r)]
         
 def dfopr(n,d1,d2,d3,r,mode="weights"):

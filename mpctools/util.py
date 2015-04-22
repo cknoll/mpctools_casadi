@@ -261,12 +261,23 @@ def smushColloc(t,x,tc,xc):
      - tc: (Nt,Nc)
      - xc: (Nt,Nx,Nc)
     with Nt the number of time periods, Nx the number of states in x, and Nc
-    the number of collocation points on the interior of each time period.
+    the number of collocation points on the interior of each time period. Note
+    that if t or tc is None, then they are constructed using a timestep of 1.
     
     Returns arrays T with size (Nt*(Nc+1) + 1,) and X with size 
     (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
     Also return Tc and Xc which only contain the collocation points.         
     """
+    # Build t and tc if not given.
+    if t is None or tc is None:
+        Nt = xc.shape[0]                
+        t = np.arange(0,Nt+1)
+        import colloc
+        Nc = xc.shape[2]
+        [r, _, _, _] = colloc.weights(Nc)
+        r.shape = (r.size,1)
+        tc = (t[:-1] + r).T.copy()
+    
     # Add some dimensions to make sizes compatible.
     t.shape = (t.size,1)
     x.shape += (1,)
