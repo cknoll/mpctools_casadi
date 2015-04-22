@@ -6,10 +6,9 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import time
 
-# Decide whether to use casadi SX objects or MX. I would expect SX to be faster
-# (i.e. set useCasadiSX to True), but it seems MX does much better for this
-# problem (i.e. set useCasadiMX to False). Not sure why.
-useCasadiSX = False
+# Decide whether to use casadi SX objects or MX. Generally, SX is going to be
+# faster, and that looks like the case for this problem.
+useCasadiSX = True
 useMeasuredState = False
 
 # Define some parameters and then the CSTR model.
@@ -171,7 +170,7 @@ Caug = mpc.util.linearizeModel(measurement_casadi,[xaugs, ds],
                                ["C","Cp"])["C"]
 Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
 svds = linalg.svdvals(Oaug)
-rank = sum(svds > 1e-5)
+rank = sum(svds > 1e-8)
 if rank < Nx + Nid:
     print "***Warning: augmented system is not detectable!"
 
@@ -209,7 +208,6 @@ contVars = [0,2] # Concentration and height.
 Nt = 5
 ubounds = np.array([.05*Tcs, .5*Fs])
 Dubounds = .05*ubounds
-bounds = dict(uub=[us + ubounds],ulb=[us - ubounds])
 lb = {"u" : np.tile(us - ubounds, (Nt,1)), "Du" : np.tile(-Dubounds, (Nt,1))}
 ub = {"u" : np.tile(us + ubounds, (Nt,1)), "Du" : np.tile(Dubounds, (Nt,1))}
 
@@ -289,12 +287,6 @@ sstargargs = {
 }
 targetfinder = mpc.sstarg(**sstargargs)
 
-# Preallocate a guess dictionary that we will change.
-estimatorguess = {}
-estimatorguess["x"] = np.tile(xaugs, (1,1))
-estimatorguess["v"] = np.zeros((1,Nv))
-estimatorguess["w"] = np.zeros((0,Nw))
-
 for n in range(1,Nsim):
     # Simulate with nonilnear model.
     try:
@@ -337,20 +329,6 @@ for n in range(1,Nsim):
         
         estimator.saveguess()        
         
-        # Update estimator guess.
-        estimatorguess = {}
-        for k in ["x","w","v"]:
-            if k in estsol.keys():
-                # Duplicate final guess to prepare for new data at the
-                # next timestep.
-                estimatorguess[k] = np.concatenate((estsol[k][:,...],
-                    estsol[k][-1:,...]))
-            elif n == 0 and k == "w":
-                estimatorguess[k] = np.zeros((1,Nw))
-            else:
-                # This should never happen.
-                raise KeyError("Entry '%s' missing from estimator "
-                    "solution. Something went wrong." % (k,))
         dguess = ds
         targetfinder.par["p",0] = ds                
         
