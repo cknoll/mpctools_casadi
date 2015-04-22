@@ -10,6 +10,7 @@ import time
 # faster, and that looks like the case for this problem.
 useCasadiSX = True
 useMeasuredState = False
+useSstargObjective = True
 
 # Define some parameters and then the CSTR model.
 Nx = 3
@@ -268,6 +269,22 @@ ydata = [ys]*Nmhe
 udata = [us]*(Nmhe-1)
 
 # Make steady-state target selector.
+def sstargobj(y,y_sp,u,u_sp,Q,R):
+    dy = y - y_sp
+    du = u - u_sp
+    return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du)
+if useSstargObjective:
+    phiargs = ["y","y_sp","u","u_sp","Q","R"]
+    phi = mpc.getCasadiFunc(sstargobj,[Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],phiargs)
+else:
+    phiargs = None
+    phi = None
+
+# Weighting matrices.
+Rss = np.zeros((Nu,Nu))
+Qss = np.zeros((Ny,Ny))
+Qss[contVars,contVars] = 1 # Only care about controlled variables.
+
 sstargargs = {
     "f" : ode_augmented_casadi,
     "h" : measurement_casadi,
@@ -280,6 +297,9 @@ sstargargs = {
     },
     "p" : np.tile(ds, (1,1)), # Parameters for system.
     "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd},
+    "phi" : phi,
+    "phiargs" : phiargs,
+    "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},
     "verbosity" : 0,
     "discretef" : False,
     "runOptimization" : False,
@@ -339,7 +359,11 @@ for n in range(1,Nsim):
     xtarget = np.concatenate((ysp[n,:],xhat[n,Nx:]))
     targetfinder.guess["x",0] = xtarget
     targetfinder.fixvar("x",0,xhat[n,Nx:],range(Nx,Nx+Nid))
-    targetfinder.fixvar("y",0,ysp[n,contVars],contVars)
+    if useSstargObjective:
+        targetfinder.par["y_sp"] = ysp[n,:]
+    else:
+        targetfinder.fixvar("y",0,ysp[n,contVars],contVars)
+        
     
     uguess = u[n-1,:]            
     targetfinder.guess["u",0] = uguess
@@ -405,5 +429,5 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
     return fig
 
 
-actfig = cstrplot(xhatm[:,:Nx],u[:-1,:],ysp=None,contVars=[],title="Estimated")
-estfig = cstrplot(x,u[:-1,:],ysp=ysp,contVars=contVars,title="Actual")
+estfig = cstrplot(xhatm[:,:Nx],u[:-1,:],ysp=None,contVars=[],title="Estimated")
+actfig = cstrplot(x,u[:-1,:],ysp=ysp,contVars=contVars,title="Actual")

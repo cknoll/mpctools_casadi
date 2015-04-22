@@ -261,7 +261,8 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
 
 
 def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
-    discretef=True,verbosity=5,timelimit=60,runOptimization=True,scalar=True):
+    discretef=True,verbosity=5,timelimit=60,runOptimization=True,scalar=True,
+    funcargs={},extrapar={}):
     """
     Solves nonlinear steady-state target problem.
     
@@ -284,15 +285,19 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
     
+    # Sort out extra parameters.
+    extraparshapes = __getShapes(extrapar)    
+    
     # Now get the shapes of all the variables that are present.
     N["t"] = 1
-    allShapes = __generalVariableShapes(N,finalx=False,finaly=False)
+    allShapes = __generalVariableShapes(N,finalx=False,finaly=False,
+                                        extra=extraparshapes)
     if "c" not in N:
         N["c"] = 0
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
-    parNames = set(["p"])
+    parNames = set(["p"] + extrapar.keys())
     parStruct = __casadiSymStruct(allShapes,parNames,scalar=scalar)
         
     varNames = set(["x","z","u","y"])
@@ -300,6 +305,10 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
 
     # Now we fill up the parameters in the guess structure.
     guess["p"] = p
+    for v in extrapar.keys():
+        thispar = np.array(extrapar[v])
+        thispar.shape = (1,) + thispar.shape # Prepend dummy time dimension.
+        guess[v] = thispar
     
     # Need to decide about algebraic constraints.
     if "z" in allShapes.keys():
@@ -309,7 +318,9 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     N["h"] = N["y"]
     N["f"] = N["x"]
     
-    # Make objective term.    
+    # Make objective term.
+    if phiargs is None and "phi" in funcargs.keys():
+        phiargs = funcargs["phi"]
     if phi is not None and phiargs is not None:
         args = []
         for v in phiargs:
@@ -318,8 +329,8 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
             elif v in parStruct.keys():
                 args.append(parStruct[v,0])
             else:
-                raise ValueError("Argumet %s is invalid! Must be 'x', 'u', "
-                    "'y', or 'p'!" % (v,))
+                raise ValueError("Argument %s is invalid! Must be 'x', 'u', "
+                    "'y', 'p' or present in extrapar!" % (v,))
         obj = phi(args)[0]
     elif scalar:
         obj = casadi.SX(0)
@@ -327,8 +338,8 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
         obj = casadi.MX(0)
        
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=h,verbosity=verbosity,discretef=discretef,finalpoint=False,
-         runOptimization=runOptimization,scalar=scalar)
+         f=f,g=g,h=h,funcargs=funcargs,verbosity=verbosity,discretef=discretef,
+         finalpoint=False,runOptimization=runOptimization,scalar=scalar)
 
 
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
@@ -845,8 +856,25 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
     if varnames is None:
         varnames = ["x%d" % (i,) for i in range(len(varsizes))]
     elif len(varsizes) != len(varnames):
-        raise ValueError("varnames must be the same length as varsizes!")    
-    args = [XSym(name,size) for (name,size) in zip(varnames,varsizes)]
+        raise ValueError("varnames must be the same length as varsizes!")
+    
+    # Loop through varsizes in case some may be matrices.
+    realvarsizes = []
+    for s in varsizes:
+        goodInput = True
+        try:
+            s = [int(s)]
+        except TypeError:
+            try:
+                s = list(s)
+                goodInput = len(s) <= 2
+            except TypeError:
+                goodInput = False
+        if not goodInput:
+            raise TypeError("Entries of varsizes must be integers or "
+                "two-element lists!")
+        realvarsizes.append(s)
+    args = [XSym(name,*size) for (name,size) in zip(varnames,realvarsizes)]
     
     # Now evaluate function and make a Casadi object.  
     fval = [safevertcat(f(*args))]
