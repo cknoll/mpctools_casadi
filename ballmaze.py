@@ -6,9 +6,9 @@ import itertools
 # Rolling ball game example. Linear model but nonlinear constraints.
 
 movingHorizon = False
-terminalConstraint = False
-terminalWeight = True
-transientCost = False
+terminalConstraint = True
+terminalWeight = False
+transientCost = True
 
 Nx = 4
 Nu = 2
@@ -80,11 +80,16 @@ else:
     def lfunc(x):
         return 0
 l = mpc.getCasadiFunc(lfunc, [Nx], ["x"], "l")
-funcargs = {"f" : ["x","u"], "e" : ["x"], "l" : ["x"]}
 
+rmin = .001
+def terminalconstraint(x):
+    return np.array([x[0]**2 +  x[1]**2 - rmin**2])
 if terminalConstraint:
-    lb["x"][-1,:] = np.zeros(x0.shape)
-    ub["x"][-1,:] = np.zeros(x0.shape)
+    ef = mpc.getCasadiFunc(terminalconstraint, [Nx], ["x"], "ef")
+else:
+    ef = None
+
+funcargs = {"f" : ["x","u"], "e" : ["x"], "l" : ["x"], "ef" : ["x"]}
     
 if terminalWeight:
     Pf = mpc.getCasadiFunc(lambda x: mpc.mtimes(x[0:2].T,x[0:2]), [Nx], ["x"])
@@ -94,7 +99,7 @@ else:
 # Build controller.
 N = {"x":Nx, "u":Nu, "e":Ne, "t":Nt}
 controller = mpc.nmpc(f, l, N, x0, lb, ub, funcargs=funcargs, e=e, Pf=Pf,
-                      verbosity=0, runOptimization=False)
+                      ef=ef, verbosity=0, runOptimization=False)
 x = np.zeros((Nsim+1,Nx))
 x[0,:] = x0
 u = np.zeros((Nsim,Nu))

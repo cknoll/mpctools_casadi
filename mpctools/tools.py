@@ -37,9 +37,10 @@ Functions for solving MPC problems using Casadi and Ipopt.
 # common framework. They appear to be strictly better than the functions they
 # replace.
 
-def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
-    uprev=None,verbosity=5,timelimit=60,Delta=None,runOptimization=True,
-    scalar=True,funcargs={},extrapar={},e=None):
+def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
+    largs=None,sp={},p=None,uprev=None,verbosity=5,timelimit=60,Delta=None,
+    runOptimization=True,scalar=True,funcargs={},extrapar={},e=None,ef=None,
+    periodic=False):
     """
     Solves nonlinear MPC problem.
     
@@ -62,7 +63,9 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     Function argument are assumed to be the "usual" order, i.e. f(x,u), l(x,u),
     and Pf(x). If you wish to override any of these, specify a list of variable
     names in the corresponding entry of extrapar. E.g., for a stage cost
-    l(x,u,x_sp,u_sp,Du), specify funcargs={"l" : ["x","u","x_sp","u_sp","Du"]}.    
+    l(x,u,x_sp,u_sp,Du), specify funcargs={"l" : ["x","u","x_sp","u_sp","Du"]}.
+    Terminal constraints can be specified in ef, but arguments must be given,
+    and u cannot be included since there is no u(N) variable.    
     
     sp is a dictionary that holds setpoints for x and u. If supplied, the stage
     cost is assumed to be a function l(x,u,x_sp,u_sp). If not supplied, l is
@@ -112,9 +115,10 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     for (d,v) in [(lb,-np.inf), (ub,np.inf), (guess,0)]:
         if "x" not in d.keys():
             d["x"] = v*np.ones((N["t"]+1,N["x"]))
-    lb["x"][0,...] = x0
-    ub["x"][0,...] = x0
-    guess["x"][0,...] = x0
+    if x0 is not None:
+        lb["x"][0,...] = x0
+        ub["x"][0,...] = x0
+        guess["x"][0,...] = x0
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters. Note that
@@ -156,7 +160,21 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
         else:
             obj = Pf([varStruct["x",-1]])[0]
     else:
-        obj = casadi.SX(0)
+        obj = None
+    
+    # Terminal constraint (if present).
+    if ef is not None:
+        if "ef" not in funcargs.keys():
+            raise KeyError("Must provide an 'ef' entry in funcargs!")
+        args = __getArgs(funcargs["ef"], N["t"], varStruct, parStruct)
+        con = [ef(args)[0]]
+        Nef = np.prod(con[0].shape) # Figure out number of entries.
+        conlb = -np.inf*np.ones((Nef,))
+        conub = np.zeros((Nef,))
+    else:
+        con = None
+        conlb = None
+        conub = None
     
     # Decide arguments of l.
     if largs is None and "l" not in funcargs.keys():
@@ -171,6 +189,7 @@ def nmpc(f,l,N,x0,lb={},ub={},guess={},g=None,Pf=None,largs=None,sp={},p=None,
     
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
         f=f,g=g,h=None,l=l,e=e,funcargs=funcargs,Delta=Delta,
+        con=con,conlb=conlb,conub=conub,periodic=periodic,
         verbosity=verbosity,runOptimization=runOptimization,
         deltaVars=deltaVars,scalar=scalar)
 
@@ -322,15 +341,16 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     if phiargs is None and "phi" in funcargs.keys():
         phiargs = funcargs["phi"]
     if phi is not None and phiargs is not None:
-        args = []
-        for v in phiargs:
-            if v in varStruct.keys():
-                args.append(varStruct[v,0])
-            elif v in parStruct.keys():
-                args.append(parStruct[v,0])
-            else:
-                raise ValueError("Argument %s is invalid! Must be 'x', 'u', "
-                    "'y', 'p' or present in extrapar!" % (v,))
+        args = __getArgs(phiargs, 0, varStruct, parStruct)        
+#        args = []
+#        for v in phiargs:
+#            if v in varStruct.keys():
+#                args.append(varStruct[v,0])
+#            elif v in parStruct.keys():
+#                args.append(parStruct[v,0])
+#            else:
+#                raise ValueError("Argument %s is invalid! Must be 'x', 'u', "
+#                    "'y', 'p' or present in extrapar!" % (v,))
         obj = phi(args)[0]
     elif scalar:
         obj = casadi.SX(0)
@@ -344,6 +364,7 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
 
 def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     obj=None,f=None,g=None,h=None,l=None,e=None,funcargs={},Delta=1,
+    con=None,conlb=None,conub=None,periodic=False,
     discretef=True,deltaVars=[],finalpoint=True,verbosity=5,
     runOptimization=True,scalar=True):
     """
@@ -405,10 +426,17 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,funcargs=funcargs,Ncolloc=N["c"],
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
         finalpoint=finalpoint,e=e,Ne=N["e"])
-     
-    con = []
-    conlb = np.zeros((0,))
-    conub = conlb.copy()
+    
+    # Build up constraints.
+    if con is None or conlb is None or conub is None:
+        con = []
+        conlb = np.array([])
+        conub = np.array([])
+    #util.keyboard()
+    if periodic and "x" in struct.keys():
+        con.append(struct["x"][0] - struct["x"][-1])
+        conlb = np.concatenate([conlb,np.zeros((N["x"],))])
+        conub = np.concatenate([conub,np.zeros((N["x"],))])
     for f in ["state","measurement","algebra","delta","path"]:
         if f in constraints.keys():
             con += util.flattenlist(constraints[f]["con"])
@@ -549,17 +577,24 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     def getArgs(func,times,var):
         allargs = []
         for t in times:
-            thisargs = []
-            for v in args[func]:
-                if len(var[v]) == 1:
-                    thisargs.append(var[v][0])
-                else:
-                    thisargs.append(var[v][t])
-            allargs.append(thisargs)
+            allargs.append(__getArgs(args[func],t,var))
         return allargs
-    
     tintervals = range(0,Nt)
     tpoints = range(0,Nt + bool(finalpoint))
+    
+#     # We leave the following old definition here just in case we modify 
+#     # __getArgs and need to test it.
+#    def getArgs(func,times,var):    
+#        allargs = []
+#        for t in times:
+#            thisargs = []
+#            for v in args[func]:
+#                if len(var[v]) == 1:
+#                    thisargs.append(var[v][0])
+#                else:
+#                    thisargs.append(var[v][t])
+#            allargs.append(thisargs)
+#        return allargs
     
     # Preallocate return dictionary.
     returnDict = {}    
@@ -698,7 +733,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
         lb = -np.inf*np.ones((len(pathconstraints),Ne))
         ub = np.zeros((len(pathconstraints),Ne))
         returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)
-        
+    #util.keyboard()    
     return returnDict
 
 
@@ -840,6 +875,28 @@ def __getShapes(vals,mindims=1):
             s = (1,)*(mindims - len(s)) + s
         shapes[k] = s
     return shapes
+
+def __getArgs(names,t=0,*structs):
+    """
+    Returns the arguments in names at time t by searching through all structs.
+    
+    Raises a KeyError if any argument is not found.
+    """
+    thisargs = []
+    for v in names:
+        i = -1
+        found = False
+        while not found and i + 1 < len(structs):
+            i += 1            
+            found = v in structs[i].keys()
+        if not found:
+            raise ValueError("Argument %s is invalid! Must be in [%s]!" 
+            % (v,", ".join(util.flattenlist([s.keys() for s in structs]))))
+        if len(structs[i][v]) == 1:
+            thisargs.append(structs[i][v][0])
+        else:
+            thisargs.append(structs[i][v][t])
+    return thisargs
 
 def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
                   rk4=False,Delta=1,M=1):
