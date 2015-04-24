@@ -930,7 +930,7 @@ def safevertcat(args):
 
 
 def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
-                        abstol=1e-8,reltol=1e-8,wrap=True):
+                        abstol=1e-8,reltol=1e-8,wrap=True,scalar=True):
     """
     Gets a Casadi integrator for function f from 0 to Delta.
     
@@ -944,18 +944,26 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     if len(argsizes) < 1:
         raise IndexError("argsizes must have at least one element!")
     if argnames is None:
-        argnames = ["x_%d" for i in range(len(argsizes))]
+        argnames = ["x_%d" for i in range(len(argsizes))]    
+    
+    # Decide casadi SX vs MX.    
+    if scalar:
+        XSym = casadi.SX.sym
+        XFunction = casadi.SXFunction
+    else:
+        XSym = casadi.MX.sym
+        XFunction = casadi.MXFunction    
     
     # Create symbolic variables for integrator I(x0,p).
-    x0 = casadi.SX.sym(argnames[0],argsizes[0])
-    par = [casadi.SX.sym(argnames[i],argsizes[i]) for i
+    x0 = XSym(argnames[0],argsizes[0])
+    par = [XSym(argnames[i],argsizes[i]) for i
         in range(1,len(argsizes))]
     fode = safevertcat(f(x0,*par))   
     
     # Build ODE and integrator.
     invar = casadi.daeIn(x=x0,p=casadi.vertcat(par))
     outvar = casadi.daeOut(ode=fode)
-    ode = casadi.SXFunction(invar,outvar)
+    ode = XFunction(invar,outvar)
     
     integrator = casadi.Integrator("cvodes",ode)
     integrator.setOption("abstol",abstol)
