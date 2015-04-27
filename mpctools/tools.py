@@ -40,7 +40,7 @@ Functions for solving MPC problems using Casadi and Ipopt.
 def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     largs=None,sp={},p=None,uprev=None,verbosity=5,timelimit=60,Delta=None,
     runOptimization=True,scalar=True,funcargs={},extrapar={},e=None,ef=None,
-    periodic=False):
+    periodic=False,discretel=True):
     """
     Solves nonlinear MPC problem.
     
@@ -191,7 +191,7 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
         f=f,g=g,h=None,l=l,e=e,funcargs=funcargs,Delta=Delta,
         con=con,conlb=conlb,conub=conub,periodic=periodic,
         verbosity=verbosity,runOptimization=runOptimization,
-        deltaVars=deltaVars,scalar=scalar)
+        deltaVars=deltaVars,scalar=scalar,discretel=discretel)
 
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
@@ -366,7 +366,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     obj=None,f=None,g=None,h=None,l=None,e=None,funcargs={},Delta=1,
     con=None,conlb=None,conub=None,periodic=False,
     discretef=True,deltaVars=[],finalpoint=True,verbosity=5,
-    runOptimization=True,scalar=True):
+    runOptimization=True,scalar=True,discretel=True):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -425,7 +425,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,funcargs=funcargs,Ncolloc=N["c"],
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
-        finalpoint=finalpoint,e=e,Ne=N["e"])
+        finalpoint=finalpoint,e=e,Ne=N["e"],discretel=discretel)
     
     # Build up constraints.
     if con is None or conlb is None or conub is None:
@@ -450,8 +450,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
         else:
             obj = casadi.MX(0)
     if "cost" in constraints.keys():
-        for t in range(N["t"]):
-            obj += constraints["cost"][t]
+        obj = sum(util.flattenlist(constraints["cost"]),obj)
         
     # If we want an optimization, then do some post-processing. Otherwise, just
     # return the solver object.
@@ -482,7 +481,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
 
 def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     l=None,funcargs={},Ncolloc=0,Delta=1,discretef=True,deltaVars=[],
-    finalpoint=True,e=None,Ne=0):
+    finalpoint=True,e=None,Ne=0,discretel=True):
     """
     Creates general state evolution constraints for the following system:
     
@@ -534,7 +533,9 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     Note that the relevant fields will be missing if f, g, or h are set to
     None. Each entry in the return dictionary will be a list of lists, although
     for this class of constraint, each of those lists will have only one
-    element. The list of stage costs is in "cost". This one is just a list.
+    element. The list of stage costs is in "cost". This is also a list of
+    lists, but each sub-list only has one element unless you are using a
+    continuous objective function.
     """
     
     # Figure out what variables are supplied.
@@ -624,8 +625,10 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
             for a in args[k]:
                 if a in givenvarscolloc:
                     thisargs.append(collocvar[a][t][j])
+                elif len(var[a]) == 1:
+                    thisargs.append(var[a][0])     
                 else:
-                    thisargs.append(var[a][t])        
+                    thisargs.append(var[a][t])
             return thisargs
     
     # State evolution f.   
@@ -713,13 +716,23 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
         ub = lb.copy()
         returnDict["delta"] = dict(con=deltaconstraints,lb=lb,ub=ub)
           
-    # Stage costs.
+    # Stage costs. Either discrete sum or quadrature via collocation.
     if l is not None:
-        largs = getArgs("l",tintervals,var)
-        
         cost = []
-        for t in tintervals:
-            cost.append(l(largs[t])[0])
+        if discretel:
+            largs = getArgs("l",tintervals,var)
+            for t in tintervals:
+                cost.append([l(largs[t])[0]])
+        else:
+            if Ncolloc == 0:
+                raise ValueError("Must use collocation for continuous "
+                    "objective!")
+            for t in tintervals:
+                thiscost = []
+                for j in range(Ncolloc+2):
+                    thisargs = getCollocArgs("l",t,j)
+                    thiscost.append(Delta*q[j]*l(thisargs)[0])
+                cost.append(thiscost)
         returnDict["cost"] = cost
     
     # Nonlinear path constraints.
@@ -732,8 +745,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
             pathconstraints.append([e(eargs[t])[0]])
         lb = -np.inf*np.ones((len(pathconstraints),Ne))
         ub = np.zeros((len(pathconstraints),Ne))
-        returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)
-    #util.keyboard()    
+        returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)    
     return returnDict
 
 

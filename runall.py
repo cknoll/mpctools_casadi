@@ -47,4 +47,5 @@ for f in examplefiles:
     print "%s." % (status,)
     plt.close('all')
 
+plt.ion()
 logfile.close()        
