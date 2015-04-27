@@ -195,4 +195,54 @@ def _todict(matobj):
         else:
             d[strg] = elem
     return d
+
+
+# ========================
+# Some printing functions.
+# ========================
+
+def numberformat(n,nsig=3):
+    """
+    Formats a number as a string to the specified number of sig figs.
+    """
+    s = ("%%.%dg" % nsig) % (n,)
+    # Add trailing period for floats.        
+    if round(n) != n and s.find(".") == -1 and n < 10**(nsig+1):
+        s += "."
+    
+    # Check if there's scientific notation.
+    e = s.find("e")
+    if e >= 0:
+        head = s[0:e]
+    else:
+        head = s    
+    
+    # Make sure we show enough sig figs.    
+    if head.find(".") >= 0 and len(head) <= nsig:
+        addstr = "0"*(nsig - len(head) + 1)
+    else:
+        addstr = ""
+    
+    if e >= 0: # Need to handle scientific notation.
+        s = s.replace("e",addstr + r" \times 10^{")
+        for [f,r] in [["{+","{"],["{0","{"],["{-0","{-"]]:
+            for i in range(5):
+                s = s.replace(f,r)
+        s = s + "}"
+    else:
+        s += addstr
+    return s
+
+    
+def printmatrix(A,before="     ",nsig=3,latex=True):
+    """
+    Prints a matrix A to be pasted into LaTeX.
+    """
+    if latex:
+        print(r"\begin{pmatrix}")
+    for i in range(A.shape[0]):
+        print(before + " & ".join([numberformat(a,nsig) for a in 
+                                    np.array(A)[i,:].tolist()]) + r" \\") 
+    if latex:
+        print(r"\end{pmatrix}")
             

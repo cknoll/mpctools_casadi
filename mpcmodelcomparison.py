@@ -38,10 +38,12 @@ x0 = [10,10]
 Q = np.eye(Nx)
 R = np.eye(Nx)
 
-def lfunc(x,u): return mpc.mtimes(x.T,Q,x) + mpc.mtimes(u.T,R,u)
+def lfunc(x,u):
+    return mpc.mtimes(x.T,Q,x) + mpc.mtimes(u.T,R,u)
 l = mpc.getCasadiFunc(lfunc,[Nx,Nu],["x","u"],"l")
 
-def Pffunc(x): return mpc.mtimes(x.T,Q,x)
+def Pffunc(x):
+    return mpc.mtimes(x.T,Q,x)
 Pf = mpc.getCasadiFunc(Pffunc,[Nx],["x"],"Pf")
 
 # Solve problem with linear mpc and plot.
@@ -53,7 +55,8 @@ fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp.T,
 fig_lmpc.canvas.set_window_title("Linear MPC")
 
 # Discrete-time example
-def Fdiscrete(x,u): return mpc.mtimes(A,x) + mpc.mtimes(B,u)
+def Fdiscrete(x,u):
+    return mpc.mtimes(A,x) + mpc.mtimes(B,u)
 F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
 
 print "\n=Exact Discretization="
@@ -64,13 +67,16 @@ fig_dnmpc = mpc.plots.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
 
 # Continuous time interfaces in nmpc.
-def f(x,u): return mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u)
+def fcontinuous(x,u):
+    return mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u)
+f = mpc.getCasadiFunc(fcontinuous,[Nx,Nu],["x","u"],"f")
 
 Mrk4 = 5
 Mcolloc = 5
 
-def F_rk4(x,u): return mpc.util.rk4(f,x,[u],Delta=Delta,M=Mrk4)
-F_rk4 = mpc.getCasadiFunc(F_rk4,[Nx,Nu],["x","u"],"F_rk4")    
+def Fdiscrete_rk4(x,u):
+    return mpc.util.rk4(fcontinuous,x,[u],Delta=Delta,M=Mrk4)
+F_rk4 = mpc.getCasadiFunc(Fdiscrete_rk4,[Nx,Nu],["x","u"],"F_rk4")    
 
 print "\n=RK4 Discretization="
 opt_crk4nmpc = mpc.nmpc(F_rk4,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
@@ -81,7 +87,8 @@ fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
 print "\n=Collocation Discretization="
 Ncolloc = N.copy()
 Ncolloc["c"] = Mcolloc
-opt_ccollocnmpc = mpc.nmpc(F,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,Delta=Delta)
+opt_ccollocnmpc = mpc.nmpc(f,l,Ncolloc,x0,lb,ub,Pf=Pf,verbosity=verb,
+                           Delta=Delta)
 fig_ccollocnmpc = mpc.plots.mpcplot(opt_ccollocnmpc["x"],
                                     opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
 fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
@@ -89,7 +96,8 @@ fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
 # Discrete-time but with Casadi's integrators. This is slow, but it may be
 # necessary if your ODE is difficult to discretize.
 print "\n=Casadi Integrator Discretization="
-F_integrator = mpc.tools.getCasadiIntegrator(f,Delta,[Nx,Nu],["x","u"],"int_f")
+F_integrator = mpc.tools.getCasadiIntegrator(fcontinuous,Delta,[Nx,Nu],
+                                             ["x","u"],"int_f")
 opt_integrator = mpc.nmpc(F_integrator,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,
                           scalar=False)
 fig_integrator = mpc.plots.mpcplot(opt_integrator["x"],
