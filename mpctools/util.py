@@ -5,6 +5,7 @@ import casadi.tools as ctools
 import numpy as np
 import pdb
 import itertools
+import warnings
 
 # First, we grab a few things from the CasADi module.
 DMatrix = casadi.DMatrix
@@ -152,12 +153,76 @@ def c2d_augmented(A,B,Bp,f,Delta):
     return [Ad,Bd,Bpd,fd]
 
 
-def dlqr(A,B,Q,R):
+def c2dObjective(a,b,q,r,Delta):
+    """
+    Discretization with continuous objective.
+    
+    Formulas from Pannocchia, Rawlings, Mayne, and Mancuso (2014).
+    """
+    # Make sure everything is a matrix.
+    for m in [a,b,q,r]:
+        try:
+            if len(m.shape) != 2:
+                raise ValueError("All inputs must be 2D arrays!")
+        except AttributeError:
+            raise TypeError("All inputs must have a shape attribute!")
+            
+    # Get sizes.
+    Nx = a.shape[1]
+    Nu = b.shape[1]
+    for (m,s) in [(a,(Nx,Nx)), (b,(Nx,Nu)), (q,(Nx,Nx)), (r,(Nu,Nu))]:
+        if m.shape != s:
+            raise ValueError("Incorrect sizes for inputs!")
+    
+    # Now stack everybody up.
+    i = [slice(j*Nx,(j+1)*Nx) for j in range(3)] + [slice(3*Nx,3*Nx+Nu)]
+    c = np.zeros((3*Nx + Nu,)*2)
+    c[i[0],i[0]] = -a.T
+    c[i[1],i[1]] = -a.T
+    c[i[2],i[2]] = a
+    c[i[0],i[1]] = np.eye(Nx)
+    c[i[1],i[2]] = q
+    c[i[2],i[3]] = b
+    
+    # Now exponentiate and grab everybody.
+    C = scipy.linalg.expm(c*Delta);
+    F3 = C[i[2],i[2]]
+    G3 = C[i[2],i[3]]
+    G2 = C[i[1],i[2]]
+    H2 = C[i[1],i[3]]
+    K1 = C[i[0],i[3]]
+    
+    # Then, use formulas.
+    A = F3
+    B = G3
+    Q = F3.T.dot(G2)
+    M = F3.T.dot(H2)
+    R = r*Delta + b.T.dot(F3.T.dot(K1)) + (b.T.dot(F3.T.dot(K1))).T
+    
+    return [A,B,Q,R,M]
+
+
+def dlqr(A,B,Q,R,M=None):
     """
     Get the discrete-time LQR for the given system.
+    
+    Stage costs are
+    
+        x'Qx + 2*x'Mu + u'Qu
+        
+    with M = 0 if not provided.
     """
-    Pi = scipy.linalg.solve_discrete_are(A,B,Q,R)
-    K = -scipy.linalg.solve(B.T.dot(Pi).dot(B) + R, B.T.dot(Pi).dot(A))
+    # For M != 0, we can simply redefine A and Q to give a problem with M = 0.
+    if M is not None:
+        RinvMT = scipy.linalg.solve(R,M.T)
+        Atilde = A - B.dot(RinvMT)
+        Qtilde = Q - M.dot(RinvMT)
+    else:
+        Atilde = A
+        Qtilde = Q
+        M = np.zeros(B.shape)
+    Pi = scipy.linalg.solve_discrete_are(Atilde,B,Qtilde,R)
+    K = -scipy.linalg.solve(B.T.dot(Pi).dot(B) + R, B.T.dot(Pi).dot(A) + M.T)
     
     return [K, Pi]
 
@@ -172,13 +237,46 @@ def dlqe(A,C,Q,R):
     return [L, P]
 
     
-def mtimes(*args):
+def mtimes(*args,**kwargs):
     """
-    Convenience wrapper for casadi.tools.mul.
+    Smarter version casadi.tools.mul.
     
-    Matrix multiplies all of the given arguments and returns the result.
+    Matrix multiplies all of the given arguments and returns the result. If all
+    inputs are 2D, then passes straight through to casadi's mul. Otherwise,
+    uses a sequence of np.dot operations.
+    
+    Keyword arguments forceDot or forceMul can be set to True to pick one
+    behavior or another.
     """
-    return ctools.mul(args)
+    # Pick whether to use mul or dot.
+    useMul = kwargs.get("forceMul",None)
+    if useMul is None:
+        useMul = kwargs.get("forceDot",None)
+        if useMul is None:
+            useMul = True
+            for (i,a) in enumerate(args):
+                try:
+                    shape = a.shape
+                except AttributeError:
+                    try:
+                        shape = np.array(a).shape
+                    except:
+                        raise AttributeError("Unable to get shape of "
+                        "argument %d!" % (i,))
+                useMul &= len(shape) == 2
+        else:
+            useMul = not useMul
+    # Now actually do multiplication.
+    if useMul:
+        ans = ctools.mul(args)
+    else:
+        ans = args[0]
+        for (i,a) in enumerate(args[1:]):
+            try:
+                ans = np.dot(ans,a)
+            except ValueError:
+                raise ValueError("Wrong alignment for argument %d!" % (i + 1))
+    return ans
 
     
 def vcat(*args):

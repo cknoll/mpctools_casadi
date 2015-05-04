@@ -24,8 +24,8 @@ vdp = mpc.DiscreteSimulator(ode,
 
 #<<ENDCHUNK>>
 
-# Then get nonlinear casadi functions
-# and rk4 discretization.
+# Then get casadi function for rk4
+# discretization.
 ode_rk4_casadi = mpc.getCasadiFunc(ode,
     [Nx,Nu], ["x","u"], funcname="F",
     rk4=True,Delta=Delta,M=1)
@@ -47,7 +47,6 @@ Pf = mpc.getCasadiFunc(Pffunc,
 # Bounds on u.
 lb = {"u" : -.75*np.ones((Nt,Nu))}
 ub = {"u" : np.ones((Nt,Nu))}
-bounds = dict(uub=[1],ulb=[-.75])
 
 #<<ENDCHUNK>>
 

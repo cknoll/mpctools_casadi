@@ -8,7 +8,7 @@ Contains all of the plotting functions for mpc-tools-casadi.
 """
 
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
-            title=None,timefirst=True):
+            title=None,timefirst=True,legend=True,returnAxes=False):
     """
     Makes a plot of the state and control trajectories for an mpc problem.
     
@@ -54,6 +54,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     
     # u plots.
     u = np.hstack((u,u[:,-1:])) # Repeat last element for stairstep plot.
+    uax = []
     for i in range(len(uinds)):
         uind = uinds[i]
         a = fig.add_subplot(numrows,numcols,numcols*(i+1))
@@ -63,8 +64,10 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         zoomaxis(a,yscale=1.05)
         prettyaxesbox(a)
         prettyaxesbox(a,facecolor="white",front=False)
+        uax.append(a)
     
-    # x plots.    
+    # x plots.
+    xax = []    
     for i in range(len(xinds)):
         xind = xinds[i]
         a = fig.add_subplot(numrows,numcols,numcols*(i+1) - 1)
@@ -72,12 +75,14 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         a.plot(t,np.squeeze(x[xind,:]),xlspec,label="System")
         if plotxsp:
             a.plot(t,np.squeeze(xsp[xind,:]),"--r",label="Setpoint")
-            plt.legend(loc="best")
+            if legend:            
+                plt.legend(loc="best")
         a.set_xlabel("Time")
         a.set_ylabel("State %d" % (xind + 1))
         zoomaxis(a,yscale=1.05)
         prettyaxesbox(a)
         prettyaxesbox(a,facecolor="white",front=False)
+        xax.append(a)
     
     # Layout tightness.
     if not tightness is None:
@@ -85,7 +90,13 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     if title is not None:
         fig.canvas.set_window_title(title)       
     
-    return fig
+    # Decide what to return.
+    if returnAxes:
+        retVal = {"x" : xax, "u" : uax, "fig" : fig}
+    else:
+        retVal = fig
+    
+    return retVal
 
 
 def zoomaxis(axes=None,xscale=None,yscale=None):

@@ -21,7 +21,7 @@
     firstnumber=0,
     numberstyle=\scriptsize,
     escapechar=@,
-    morekeywords={as},
+    morekeywords={as,True,False},
 }
 \lstset{style=python}
 
@@ -82,7 +82,7 @@ To facilitate nonlinear simulations, we provide the \texttt{DiscreteSimulator} c
 To initialize, the syntax is
 %
 \begin{lstlisting}[frame=L]
-model = OneStepSimulator(ode,Delta,argsizes)
+model = DiscreteSimulator(ode,Delta,argsizes)
 \end{lstlisting}
 %
 where \texttt{ode} is a Python function that takes a fixed number of arguments whose lengths are given (in order) in the list \texttt{argsizes}.
@@ -163,6 +163,8 @@ For continuous-time problems, there are a few options.
 To use Runge-Kutta methods, you can convert your function ahead of time (e.g., with \texttt{util.rk4} as above).
 To use collocation, you can add an entry \lstinline|"c"| to the argument \texttt{N} to specify the number of collocation points on each time interval.
 This also requires specifying the sample time \texttt{Delta}.
+Note that if you want a continuous-time objective function (i.e., integral of $\ell(x(t),u(t))$ instead of a sum), then you can specify \lstinline@discretel=False@ as an argument.
+Note that this is only supported with collocation.
 
 Currently, there is no support for a continuous-time objective function (i.e., continuous-time integral of a cost function).
 We plan to add support for this feature in the future, but in principle you could augment your model with an integrator state to calculate the objective function.
@@ -262,7 +264,7 @@ By default, time values are offset by 1. This is done so that
 solver.solve()
 if solver.stats["status"] == "Solve_Succeeded":
     solver.saveguess()
-    solver.fixvar("x",0,sol["x"][1,:])
+    solver.fixvar("x",0,solver.var["x",1])
 \end{lstlisting}
 %
 prepares the solver for re-optimization at the next time point by using the final $N-1$ values of the previous trajectory as a guess for the first $N-1$ time periods in the next optimization.
