@@ -335,22 +335,14 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     else:
         N["g"] = None
     N["h"] = N["y"]
-    N["f"] = N["x"]
+    if "f" not in N.keys():
+        N["f"] = N["x"]
     
     # Make objective term.
     if phiargs is None and "phi" in funcargs.keys():
         phiargs = funcargs["phi"]
     if phi is not None and phiargs is not None:
-        args = __getArgs(phiargs, 0, varStruct, parStruct)        
-#        args = []
-#        for v in phiargs:
-#            if v in varStruct.keys():
-#                args.append(varStruct[v,0])
-#            elif v in parStruct.keys():
-#                args.append(parStruct[v,0])
-#            else:
-#                raise ValueError("Argument %s is invalid! Must be 'x', 'u', "
-#                    "'y', 'p' or present in extrapar!" % (v,))
+        args = __getArgs(phiargs, 0, varStruct, parStruct)
         obj = phi(args)[0]
     elif scalar:
         obj = casadi.SX(0)

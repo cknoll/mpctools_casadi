@@ -241,7 +241,13 @@ for i = 1: ntimes
     Tc = u(1,i) + Tcs;
     F  = u(2,i) + Fs;
     F0 = p(:,i) + Fs;
-    [tout, z] = ode15s(@massenbal, t, z0, options);
+    if exist('OCTAVE_VERSION','builtin')
+        z = lsode(@(x,t) massenbal(t,x), z0, t);
+        tout = t;
+    else
+        [tout, z] = ode15s(@massenbal, t, ...
+            z0, options);
+    end
     if sum(tout ~= t)
         warning('integrator failed!')
     end

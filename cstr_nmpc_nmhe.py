@@ -61,13 +61,11 @@ def ode(x,u,d):
     [F0] = d[0:Nd]
     return cstrmodel(c,T,h,Tc,F,F0)
 
-ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="rk4",
-                                   rk4=True,Delta=Delta,M=1)
-
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
 ode_rk4_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],
-                                   "ode_rk4",rk4=True,Delta=Delta,M=2)
+                                   "ode_rk4",rk4=True,Delta=Delta,M=1)
+ode_sstarg_casadi = mpc.getCasadiFunc(ode,[Nx+Nid,Nu,Nd],["xhat","u","d"],"ode")
 
 cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
@@ -82,15 +80,24 @@ ps = np.concatenate((ds,xs,us))
 
 # Define augmented model for state estimation. We put output disturbances on
 # c and h, and an input disturbance on F. Although h is an integrator, we can
-# put an output disturbance on h because of the input disturbance on F.    
-def ode_augmented(x,u,d=ds):
+# put an output disturbance on h because of the input disturbance on F.
+
+# We need to define two of these because Ipopt isn't smart enough to throw out
+# the 0 = 0 equality constraints. ode_disturbance only gives dx/dt for the
+# actual states, and ode_augmented appends the zeros so that dx/dt is given for
+# all of the states.    
+def ode_disturbance(x,u,d=ds):
     # Grab states, estimated disturbances, controls, and actual disturbance.
     [c, T, h] = x[0:Nx]
     dhat = x[Nx:Nx+Nid]
     [Tc, F] = u[0:Nu]
     [F0] = d[0:Nd]
     
-    dxdt = np.concatenate((cstrmodel(c,T,h,Tc,F+dhat[2],F0),np.zeros((Ny,))))
+    dxdt = cstrmodel(c,T,h,Tc,F+dhat[2],F0)
+    return dxdt
+def ode_augmented(x,u,d=ds):
+    # Need to add extra zeros for derivative of disturbance states.
+    dxdt = np.concatenate((ode_disturbance(x,u,d),np.zeros((Nid,))))
     return dxdt
 cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                 [Nx+Nid,Nu,Nd], ["xaug","u","d"])
@@ -101,6 +108,8 @@ def measurement(x,d=ds):
 ys = measurement(xaugs)
 
 # Turn into casadi functions.
+ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
+    [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_disturbance")
 ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
     [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
 ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
@@ -157,7 +166,8 @@ Qwinv = linalg.inv(Qw)
 Rvinv = linalg.inv(Rv)
 
 # Define stage costs for estimator.
-def lest(w,v): return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
+def lest(w,v):
+    return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
 lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
 # Don't use a prior.
@@ -286,7 +296,7 @@ Qss = np.zeros((Ny,Ny))
 Qss[contVars,contVars] = 1 # Only care about controlled variables.
 
 sstargargs = {
-    "f" : ode_augmented_casadi,
+    "f" : ode_disturbance_casadi,
     "h" : measurement_casadi,
     "lb" : {"u" : np.tile(us - ubounds, (1,1))},
     "ub" : {"u" : np.tile(us + ubounds, (1,1))},
@@ -296,7 +306,7 @@ sstargargs = {
         "y" : np.tile(xs, (1,1)),
     },
     "p" : np.tile(ds, (1,1)), # Parameters for system.
-    "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd},
+    "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
     "phi" : phi,
     "phiargs" : phiargs,
     "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},

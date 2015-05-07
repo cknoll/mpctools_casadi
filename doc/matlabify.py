@@ -10,9 +10,7 @@ def splitfiles(main,directory):
     
     startfunc = re.compile(r"^\s*function.*=\s*(\w+)\(")
     endfunc = re.compile(r"^\s*endfunction")
-
     
-
     keepgoing = True
     subfun = False
     subfunout = None
