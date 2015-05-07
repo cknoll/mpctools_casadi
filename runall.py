@@ -48,4 +48,5 @@ for f in examplefiles:
     plt.close('all')
 
 plt.ion()
-logfile.close()        
+logfile.close()
+        

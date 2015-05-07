@@ -92,7 +92,8 @@ def setvalue(var, desc):
         value = float(var.value)
         entrytext = desc + ' currently ' + str(value) + ', enter new value'
         value = askfloat(var.name, entrytext)
-        if value != None: var.value  = value*np.ones((1,1))
+#        if value != None: var.value  = value*np.ones((1,1))
+        if value != None: var.value  = value
 
     elif desc == 'SS Target':
 
@@ -458,6 +459,7 @@ class Trndplt:
         self.dvlines   = []
 
         self.cvlines   = []
+        self.cveslines = []
         self.cvsplines = []
         self.cvmxlines = []
         self.cvmnlines = []
@@ -647,6 +649,10 @@ class Trndplt:
             cvline, = cvaxis.plot(self.xvec, yvec, 'k')
             self.cvlines.append(cvline)
 
+            yvec    = cv.est*np.ones((self.N,1))
+            cvesline, = cvaxis.plot(self.xvec, yvec, 'b')
+            self.cveslines.append(cvesline)
+
             yvec    = cv.setpoint*np.ones((self.N,1))
             cvspline, = cvaxis.plot(self.xvec, yvec, 'g')
             self.cvsplines.append(cvspline)
@@ -825,6 +831,12 @@ class Trndplt:
             ydata  = np.roll(ydata,-1,0)
             ydata[self.Nm1] = cv.value
             cvline.set_ydata(ydata)
+
+            cvesline = self.cveslines[cvndx]
+            ydata  = cvesline.get_ydata()
+            ydata  = np.roll(ydata,-1,0)
+            ydata[self.Nm1] = cv.est
+            cvesline.set_ydata(ydata)
 
             cvspline = self.cvsplines[cvndx]
             ydata  = cvspline.get_ydata()
@@ -1019,6 +1031,7 @@ class CVobj:
         self.desc   = desc
         self.units  = units
         self.value  = value
+        self.est    = value
         self.sstarg = sstarg
         self.ssqval = ssqval
         self.setpoint = setpoint
@@ -1079,7 +1092,8 @@ class SimCon:
     def __init__(self, simname=[], 
                  mvlist=[], dvlist=[], cvlist=[], xvlist=[], N=[], 
                  refint=[], runsim=[], deltat=[], alg=[], proc=[],
-                 mod=[], F=[], l=[], Pf=[], xmk=[], gain=[]):
+                 mod=[], F=[], l=[], Pf=[], xmk=[], gain=[],
+                 ydata=[], udata=[]):
 
         self.simname = simname
         self.mvlist  = mvlist
@@ -1103,5 +1117,9 @@ class SimCon:
         self.Pf      = Pf
         self.xmk     = xmk
         self.gain    = gain
+        self.ydata   = ydata
+        self.udata   = udata
 
-if __name__ == '__main__': execfile('siso_mpc_example.py')
+
+
+if __name__ == '__main__': execfile('siso_mpc_mpcsim.py')

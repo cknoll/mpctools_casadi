@@ -212,10 +212,16 @@ def _todict(matobj):
 # Some printing functions.
 # ========================
 
-def numberformat(n,nsig=3):
+def numberformat(n,nsig=3,minval=-np.inf,mathmode=True):
     """
     Formats a number as a string to the specified number of sig figs.
     """
+    
+    # Check minimum value.
+    isSmall =  n < minval
+    if isSmall:
+        n = minval
+    
     s = ("%%.%dg" % nsig) % (n,)
     # Add trailing period for floats.        
     if round(n) != n and s.find(".") == -1 and n < 10**(nsig+1):
@@ -239,9 +245,15 @@ def numberformat(n,nsig=3):
         for [f,r] in [["{+","{"],["{0","{"],["{-0","{-"]]:
             for i in range(5):
                 s = s.replace(f,r)
+        if s.endswith("."):
+            s = s[:-1]
         s = s + "}"
     else:
         s += addstr
+    if isSmall:
+        s = "<" + s
+    if mathmode:
+        s = "$" + s + "$"
     return s
 
     
