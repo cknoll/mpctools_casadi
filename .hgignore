@@ -13,3 +13,4 @@ doc/*.snm
 doc/*.toc
 cstr-matlab/*
 runall.log
+__local__/*

@@ -29,7 +29,8 @@ Bcont = np.array([[1,0],[0,1],[1,1]])
 Ccont = np.array([[1,1,0],[0,1,1]])
 Gcont = Acont.dot(linalg.inv(linalg.expm(Acont*Delta) - np.eye(Nx)))
 
-def fcontinuous(x,u,w): return mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u) + mpc.mtimes(Gcont,w)
+def fcontinuous(x,u,w):
+    return mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u) + mpc.mtimes(Gcont,w)
 fcontinuous = mpc.getCasadiFunc(fcontinuous,[Nx,Nu,Nw],["x","u","w"],"f")
 
 (Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,Delta)
@@ -96,10 +97,13 @@ if doPlots:
     ax.legend()
     f.tight_layout(pad=.5)
 
-# Now we're ready to try some state estimation. First define stage cost and prior.
-def l(w,v): return mpc.mtimes(w.T,Qinv,w) + mpc.mtimes(v.T,Rinv,v)
+# Now we're ready to try some state estimation. First define stage cost and
+# prior.
+def l(w,v):
+    return mpc.mtimes(w.T,Qinv,w) + mpc.mtimes(v.T,Rinv,v)
 l = mpc.getCasadiFunc(l,[Nw,Nv],["w","v"],"l")
-def lx(x): return 10*mpc.mtimes(x.T,x)
+def lx(x):
+    return 10*mpc.mtimes(x.T,x)
 lx = mpc.getCasadiFunc(lx,[Nx],["x"],"lx")
 
 N = {"t" : Nt, "x" : Nx, "y" : Ny, "u" : Nu, "c" : Nc}
@@ -111,7 +115,8 @@ vest = out["v"]
 xest = out["x"]
 xerr = xest - x
 
-# Now we need to smush together all of the collocation points and actual points.
+# Now we need to smush together all of the collocation points and actual
+# points.
 [T,X,Tc,Xc] = mpc.util.smushColloc(out["t"],out["x"],out["tc"],out["xc"])
 
 # Plot estimation.
@@ -125,8 +130,10 @@ if doPlots:
     for i in range(Nx):
         c = colors[i % len(colors)]
         ax.plot(T,X[:,i],label=r"$\hat{x}_{%d}$" % (i,),color=c)
-        ax.plot(t,xest[:,i],"o",markeredgecolor=c,markerfacecolor=c,markersize=3.5)
-        ax.plot(Tc,Xc[:,i],"o",markeredgecolor=c,markerfacecolor="none",markersize=3.5)
+        ax.plot(t,xest[:,i],"o",markeredgecolor=c,markerfacecolor=c,
+                markersize=3.5)
+        ax.plot(Tc,Xc[:,i],"o",markeredgecolor=c,markerfacecolor="none",
+                markersize=3.5)
     ax.set_ylabel("$x$")
     ax.legend()
     

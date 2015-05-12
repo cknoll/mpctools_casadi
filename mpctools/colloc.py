@@ -32,7 +32,7 @@ def weights(n,include0=True,include1=True):
     
     alpha = 0
     beta = 0
-    [d1,d2,d3,r] = jacobi(n,alpha,beta,True,True)
+    [d1,d2,d3,r] = jacobi(n,alpha,beta,include0,include1)
     A = dfopr(n,d1,d2,d3,r,"first")
     B = dfopr(n,d1,d2,d3,r,"second")
     q = dfopr(n,d1,d2,d3,r,"weights")

@@ -5,6 +5,7 @@ import casadi.tools as ctools
 import scipy.linalg
 import colloc
 import warnings
+import sys
 
 # Other things from our package.
 import util
@@ -196,7 +197,7 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     verbosity=5,largs=["w","v"],timelimit=60,Delta=None,runOptimization=True,
-    scalar=True):
+    wAdditive=False,scalar=True):
     """
     Solves nonlinear MHE problem.
     
@@ -211,6 +212,12 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     lb and ub should be dictionaries of bounds for the various variables. Each
     entry should have time as the first index (i.e. lb["x"] should be a
     N["t"] + 1 by N["x"] array). guess should have the same structure.    
+    
+    Set wAddivitve=True to make the model
+
+        x^+ = f(x,u,p) + w
+        
+    Otherwise, the model must take a "w" argument.
     
     The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
     array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
@@ -274,9 +281,14 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     if lx is not None and x0bar is not None:
         obj += lx([varStruct["x",0] - x0bar])[0]
     
+    # Decide if w is inside the model or additive.
+    fErrorVars = []    
+    if wAdditive:
+        fErrorVars.append("w")
+    
     return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
          f=f,g=g,h=h,l=l,funcargs={"l":largs},Delta=Delta,verbosity=verbosity,
-         runOptimization=runOptimization,scalar=scalar)
+         runOptimization=runOptimization,scalar=scalar,fErrorVars=fErrorVars)
 
 
 def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
@@ -358,7 +370,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     obj=None,f=None,g=None,h=None,l=None,e=None,funcargs={},Delta=1,
     con=None,conlb=None,conub=None,periodic=False,
     discretef=True,deltaVars=[],finalpoint=True,verbosity=5,
-    runOptimization=True,scalar=True,discretel=True):
+    runOptimization=True,scalar=True,discretel=True,fErrorVars=None):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -413,11 +425,14 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     # Double-check some sizes and then get constraints.
     for (func,name) in [(f,"f"), (g,"g"), (h,"h"), (e,"e")]:
         if func is None:
-            N[name] = 0    
+            N[name] = 0
+    if fErrorVars is None:
+        fErrorVars = []
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,funcargs=funcargs,Ncolloc=N["c"],
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
-        finalpoint=finalpoint,e=e,Ne=N["e"],discretel=discretel)
+        finalpoint=finalpoint,e=e,Ne=N["e"],discretel=discretel,
+        fErrorVars=fErrorVars)
     
     # Build up constraints.
     if con is None or conlb is None or conub is None:
@@ -473,7 +488,7 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
 
 def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     l=None,funcargs={},Ncolloc=0,Delta=1,discretef=True,deltaVars=[],
-    finalpoint=True,e=None,Ne=0,discretel=True):
+    finalpoint=True,e=None,Ne=0,discretel=True,fErrorVars=[]):
     """
     Creates general state evolution constraints for the following system:
     
@@ -551,7 +566,7 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     
     # Now sort out defaults.
     defaultargs = {
-        "f" : ["x","z","u","w","p"],
+        "f" : filter(lambda k: k not in fErrorVars, ["x","z","u","w","p"]),
         "g" : ["x","z","w","p"],
         "h" : ["x","z","p"],
         "e" : ["x","z","u","p"],
@@ -605,9 +620,10 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
                 raise KeyError("Entry %sc not found in vars!" % (v,))
             collocvar[v] = []
             for k in range(Nt):
+                errorVar = __getArgs(fErrorVars,k,var)
                 collocvar[v].append([var[v][k]]
                     + [var[v+"c"][k][:,j] for j in range(Ncolloc)]
-                    + [var[v][k+1 % len(var[v])]])
+                    + [sum(errorVar,var[v][k+1 % len(var[v])])])
     
         def getCollocArgs(k,t,j):
             """
@@ -630,11 +646,13 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
         fargs = getArgs("f",tintervals,var)
         state = []
         for t in tintervals:
+            errorargs = __getArgs(fErrorVars,t,var)
             if Ncolloc == 0:
                 # Just use discrete-time equations.
                 thiscon = f(fargs[t])[0]
                 if "x" in givenvars and discretef:
                     thiscon -= var["x"][t+1 % len(var["x"])]
+                thiscon = sum(errorargs, thiscon)
                 thesecons = [thiscon] # Only one constraint per timestep.
             else:
                 # Need to do collocation stuff.
@@ -991,7 +1009,8 @@ def safevertcat(args):
 
 
 def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
-                        abstol=1e-8,reltol=1e-8,wrap=True,scalar=True):
+                        abstol=1e-8,reltol=1e-8,wrap=True,scalar=True,
+                        verbosity=1):
     """
     Gets a Casadi integrator for function f from 0 to Delta.
     
@@ -1031,6 +1050,8 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     integrator.setOption("reltol",reltol)
     integrator.setOption("tf",Delta)
     integrator.setOption("name",funcname)
+    integrator.setOption("disable_internal_warnings",verbosity <= 0)
+    integrator.setOption("verbose",verbosity >= 2)
     integrator.init()
     
     # Now do the subtle bit. Integrator has arguments x0 and p, but we need
@@ -1066,7 +1087,7 @@ class DiscreteSimulator(object):
     def args(self):
         return self.__argnames
         
-    def __init__(self,ode,Delta,argsizes,argnames=None):
+    def __init__(self,ode,Delta,argsizes,argnames=None,verbosity=1):
         """
         Initialize by specifying model and sizes of everything.
         """
@@ -1084,8 +1105,9 @@ class DiscreteSimulator(object):
         
         # Store names and Casadi Integrator object.
         self.__argnames = argnames
-        self.__integrator = getCasadiIntegrator(ode,Delta,
-                                                argsizes,argnames,wrap=False)
+        self.verbosity = verbosity
+        self.__integrator = getCasadiIntegrator(ode,Delta,argsizes,argnames,
+                                                wrap=False,verbosity=verbosity)
 
     def sim(self,*args):
         """
@@ -1099,12 +1121,13 @@ class DiscreteSimulator(object):
         if len(args) > 1:
             self.__integrator.setInput(casadi.vertcat(args[1:]),"p")
         
-        # Call integrator.        
+        # Call integrator.
         self.__integrator.evaluate()
         xf = self.__integrator.getOutput("xf")
         self.__integrator.reset()
         
         return np.array(xf).flatten()
+
 
 def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     """

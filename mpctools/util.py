@@ -6,6 +6,9 @@ import numpy as np
 import pdb
 import itertools
 import warnings
+import sys
+import os
+from contextlib import contextmanager
 
 # First, we grab a few things from the CasADi module.
 DMatrix = casadi.DMatrix
@@ -366,13 +369,24 @@ def smushColloc(t,x,tc,xc):
     (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
     Also return Tc and Xc which only contain the collocation points.         
     """
+    # Make copies.
+    if t is not None:
+        t = t.copy()
+    if tc is not None:
+        tc = tc.copy()
+    x = x.copy()
+    xc = xc.copy()
+    
     # Build t and tc if not given.
     if t is None or tc is None:
-        Nt = xc.shape[0]                
-        t = np.arange(0,Nt+1)
+        Nt = xc.shape[0]
+        if t is None:                
+            t = np.arange(0,Nt+1)
+        else:
+            t.shape = (t.size,)
         import colloc
         Nc = xc.shape[2]
-        [r, _, _, _] = colloc.weights(Nc)
+        [r, _, _, _] = colloc.weights(Nc, include0=False, include1=False)
         r.shape = (r.size,1)
         tc = (t[:-1] + r).T.copy()
     
@@ -399,5 +413,44 @@ def smushColloc(t,x,tc,xc):
     X = np.concatenate((X,x[-1:,:,0]))
     
     return [T,X,Tc,Xc]
+
+
+@contextmanager
+def stdout_redirected(to=os.devnull):
+    """
+    context to redirect all Python output, including C code.
     
+    Used in a with statement, e.g.,
+
+        import os
+        with stdout_redirected(to=filename):
+            print("from Python")
+            os.system("echo non-Python applications are also supported")    
     
+    Taken from stackoverflow:
+        http://stackoverflow.com/questions/5081657/
+            how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/
+    """
+    fd = sys.stdout.fileno()
+
+    def _redirect_stdout(to):
+        sys.stdout.close() # + implicit flush()
+        os.dup2(to.fileno(), fd) # fd writes to 'to' file
+        sys.stdout = os.fdopen(fd, 'w') # Python writes to fd
+
+    with os.fdopen(os.dup(fd), 'w') as old_stdout:
+        with open(to, 'w') as outputfile:
+            _redirect_stdout(to=outputfile)
+        try:
+            yield # allow code to be run with the redirected stdout
+        finally:
+            _redirect_stdout(to=old_stdout) # restore stdout.
+            sys.stdout.flush()
+
+   
+@contextmanager
+def dummy_context(*args):
+    """
+    Dummy context for a with statement.
+    """
+    yield    

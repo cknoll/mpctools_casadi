@@ -29,6 +29,7 @@ examplefiles = [
     "periodicmpcexample.py",
     "vdposcillator.py",
     "ballmaze.py",
+    "econmpc.py",
 ]
 
 for f in examplefiles:

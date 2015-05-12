@@ -58,7 +58,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     for i in range(len(uinds)):
         uind = uinds[i]
         a = fig.add_subplot(numrows,numcols,numcols*(i+1))
-        a.step(t,np.squeeze(u[uind,:]),ulspec)
+        a.step(t,np.squeeze(u[uind,:]),ulspec,where="post")
         a.set_xlabel("Time")
         a.set_ylabel("Control %d" % (uind + 1))
         zoomaxis(a,yscale=1.05)

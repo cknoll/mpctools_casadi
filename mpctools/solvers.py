@@ -1,5 +1,6 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
 import numpy as np
+import util
 import casadi
 import time
 
@@ -105,7 +106,7 @@ class ControlSolver(object):
         
     @verbosity.setter
     def verbosity(self,v):
-        self.__verbosity = min(min(max(v,0),12),_MAX_VERBOSITY)
+        self.__verbosity = min(min(max(v,-1),12),_MAX_VERBOSITY)
         
     def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
         parval=None,verbosity=5,timelimit=60,isQp=False,scalar=True):
@@ -157,7 +158,7 @@ class ControlSolver(object):
         
         nlp = XFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(**nlpOutputs))
         solver = casadi.NlpSolver("ipopt",nlp)
-        solver.setOption("print_level",self.verbosity)
+        solver.setOption("print_level",min(12,max(0,self.verbosity)))
         solver.setOption("print_time",self.verbosity > 2)  
         solver.setOption("max_cpu_time",self.timelimit)
         # Note that there is an option "check_derivatives_for_naninf" that in
@@ -189,7 +190,16 @@ class ControlSolver(object):
         if self.par is not None:
             solver.setInput(self.par,"p")
         
-        solver.evaluate()
+        # Need something special to prevent c code from printing; in
+        # particular, we want to suppress Ipopt's splash message if
+        # verbosity <= -1. Note that this redirection can have some weird
+        # side-effects, so that's why we don't do it for verbosity = 0.
+        if self.verbosity <= -1:
+            printcontext = util.stdout_redirected
+        else:
+            printcontext = util.dummy_context
+        with printcontext():
+            solver.evaluate()
         self.__varval = self.__var(solver.getOutput("x"))
         self.__objval = float(solver.getOutput("f"))
         endtime = time.clock()

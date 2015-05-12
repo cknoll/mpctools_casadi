@@ -1,26 +1,21 @@
 # mpcsim is a graphical user interface for the mpc-tools-casadi package
 #
-# version 1.0 Tom Badgwell April 2015
+# version 1.0 Tom Badgwell May 2015
 #
 # to do list:
 #
 # - implement a mask that allows choice of menu options for each example
-# - add state estimation - q , r tuning factors, q, r for process, q for dist
 # - implement a menu for the unmeasured disturbances - tun factors
 # - implement plots for the unmeasured disturbance variables
-# - implement a nonlinear mhe/control example
-# - implement options object (mismatch factors, dist models, etc.)
 # - implement option to disable open-loop forecasts when control is on.
 # - implement option to show process diagram
-# - fix bug caused by cv limit movement
 # - add reinitialize option to enable changing plot limits, and other params.
-# - expose the input target
-# - need to add mv roc limit and move penalty
 # - implement file open/closed options (quit the current window)
-# - implement re-initialize options
+# - implement re-initialize option
 # - disable menu items, as appropriate, for open/closed loop
 # - Set focus to OK button on entry dialog
 # - save option for data file (text and excel)
+# - implement plot zoom features
 #
 
 from   Tkinter import *
@@ -958,7 +953,7 @@ class MVobj:
     def __init__(self, name=' ', desc=' ', units= ' ',
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssrval=0.01,
-                 target=0.0, rvalue=0.01, svalue=0.10, 
+                 target=0.0, rvalue=0.001, svalue=0.001, 
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, dist=0.0, Nf=0):

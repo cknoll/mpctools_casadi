@@ -2,7 +2,7 @@
 #
 # Tom Badgwell May 5, 2015
 
-import mpcsim as sim
+from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg

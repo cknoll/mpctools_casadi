@@ -11,6 +11,10 @@ def ode(x,u):
     dxdt = [(1 - x[1]*x[1])*x[0] - x[1] + u, x[0]]
     return np.array(dxdt)
 
+# Define some stuff.
+us = np.array([0])
+Dumax = np.array([.5])
+
 # Create a simulator.
 vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
@@ -43,8 +47,9 @@ commonargs = dict(
     l=l,
     x0=x0,
     Pf=Pf,
-    lb={"u" : -.75*np.ones((Nsim,Nu))},
-    ub={"u" : np.ones((Nsim,Nu))},
+    lb={"u" : -.75*np.ones((Nsim,Nu)), "Du" : -np.tile(Dumax, (Nsim,1))},
+    ub={"u" : np.ones((Nsim,Nu)), "Du" : np.tile(Dumax, (Nsim,1))},
+    uprev=us,
     runOptimization=False,
 )
 solvers = {}
@@ -55,15 +60,19 @@ solvers["nmpc"] = mpc.nmpc(f=ode_rk4_casadi,**commonargs)
 times = Delta*Nsim*np.linspace(0,1,Nsim+1)
 x = {}
 u = {}
+Du = {}
 for method in solvers.keys():
     x[method] = np.zeros((Nsim+1,Nx))
     x[method][0,:] = x0
     u[method] = np.zeros((Nsim,Nu))
+    Du[method] = np.zeros((Nsim,Nu))
     for t in range(Nsim):
         solvers[method].fixvar("x",0,x[method][t,:])
         solvers[method].solve()
         print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
         u[method][t,:] = solvers[method].var["u",0,:]
+        Du[method][t,:] = solvers[method].var["Du",0,:]
+        solvers[method].par["u_prev",0,:] = u[method][t,:]
         x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
     fig = mpc.plots.mpcplot(x[method],u[method],times,
                             np.zeros(x[method].shape),title=method)

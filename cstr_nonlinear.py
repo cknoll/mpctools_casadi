@@ -5,7 +5,6 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import time
-import casadi
 
 # Decide whether to use casadi SX objects or MX. I would expect SX to be faster
 # (i.e. set useCasadiSX to True), but it seems MX does much better for this
@@ -60,9 +59,6 @@ def ode(x,u,d):
     [Tc, F] = u[0:Nu]
     [F0] = d[0:Nd]
     return cstrmodel(c,T,h,Tc,F,F0)
-
-#def ode_rk4(x,u,d):
-#    return mpc.util.rk4(ode,x,[u,d],Delta,2)
 
 # Turn into casadi function and simulator.
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")

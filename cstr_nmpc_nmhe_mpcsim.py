@@ -1,11 +1,8 @@
-# This is a CSTR LQG simulation based on Example 1.11 from Rawlings and Mayne.
+# This is a CSTR NMHE NMPC simulation based on Example 1.11 from 
+# Rawlings and Mayne.
 #
 
-# (1) The steady-state solution is wrong.  The uss for Tc goes straight
-#     to the high limit.  So this must be due to how the target optimization
-#     is defined.
-
-import mpcsim as sim
+from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg
@@ -14,7 +11,7 @@ useCasadiSX = True
 
 def runsim(k, simcon, opnclsd, options):
 
-    print "runsim: iteration %d " % k
+    print "runsim: iteration %d -----------------------------------" % k
 
     # unpack stuff from simulation container
 
@@ -112,7 +109,8 @@ def runsim(k, simcon, opnclsd, options):
         # Create casadi function and simulator.
 
         ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
-        cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+        cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"],
+                                     verbosity=0)
 
         # Set the steady-state values.
 
@@ -155,7 +153,8 @@ def runsim(k, simcon, opnclsd, options):
             return dxdt
  
         cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
-                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"])
+                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"],
+                                        verbosity=0)
 
         def measurement(x,d=ds):
             [c, T, h] = x[0:Nx]
@@ -275,8 +274,12 @@ def runsim(k, simcon, opnclsd, options):
         # appending a new element, but for these sizes, we can just use a list without
         # any noticable slowdown.
 
-        ydata = [ys]*Nmhe
-        udata = [us]*(Nmhe-1)
+        if (k == 0):
+            ydata = [ys]*Nmhe
+            udata = [us]*(Nmhe-1)
+        else:
+            ydata = simcon.ydata
+            udata = simcon.udata
 
         # Make steady-state target selector.
 
@@ -284,13 +287,6 @@ def runsim(k, simcon, opnclsd, options):
         Rss = np.zeros((Nu,Nu))
         Qss = np.zeros((Ny,Ny))
         Qss[contVars,contVars] = 1 # Only care about controlled variables.
-
-        print 'Qss = ', Qss
-        print 'Rss = ', Rss
-
-        print 'ys = ', ys
-        print 'us = ', us
-        print 'ds = ', ds
 
         def sstargobj(y,y_sp,u,u_sp,Q,R):
             dy = y - y_sp
@@ -302,13 +298,14 @@ def runsim(k, simcon, opnclsd, options):
 
         uub = [mvlist[0].maxlim, mvlist[1].maxlim]
         ulb = [mvlist[0].minlim, mvlist[1].minlim]
-        print 'lb = ', np.tile(ulb, (1,1))
-        print 'ub = ', np.tile(uub, (1,1))
+        yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
+        ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
+
         sstargargs = {
             "f" : ode_disturbance_casadi,
             "h" : measurement_casadi,
-            "lb" : {"u" : np.tile(ulb, (1,1))},
-            "ub" : {"u" : np.tile(uub, (1,1))},
+            "lb" : {"u" : np.tile(ulb, (1,1)), "y" : np.tile(ylb, (1,1))},
+            "ub" : {"u" : np.tile(uub, (1,1)), "y" : np.tile(yub, (1,1))},
             "guess" : {
                 "u" : np.tile(us, (1,1)),
                 "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
@@ -319,7 +316,7 @@ def runsim(k, simcon, opnclsd, options):
             "phi" : phi,
             "phiargs" : phiargs,
             "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},
-            "verbosity" : 5,
+            "verbosity" : 0,
             "discretef" : False,
             "runOptimization" : False,
             "scalar" : useCasadiSX,
@@ -330,9 +327,10 @@ def runsim(k, simcon, opnclsd, options):
 
         duub = [mvlist[0].roclim, mvlist[1].roclim]
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim]
-        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1))}
-        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
-
+        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
+              "y" : np.tile(ylb, (Nf,1))}
+        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1)),
+              "y" : np.tile(yub, (Nf,1))}
         N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nf}
         p = np.tile(ds, (Nf,1)) # Parameters for system.
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
@@ -358,23 +356,25 @@ def runsim(k, simcon, opnclsd, options):
         }
         controller = mpc.nmpc(**nmpcargs)
 
-        # Initialize variables
+        if (k == 0):
 
-        x_k      = np.zeros((Nx))
-        xhat_k   = np.zeros((Nx))
-        dhat_k   = np.zeros((Nid))
+            # Initialize variables
 
-        # Store initial values for variables
+            x_k      = np.zeros((Nx))
+            xhat_k   = np.zeros((Nx))
+            dhat_k   = np.zeros((Nid))
 
-        xvlist[0].value = xs[0]
-        xvlist[1].value = xs[1]
-        xvlist[2].value = xs[2]
-        xvlist[0].est   = xs[0]
-        xvlist[1].est   = xs[1]
-        xvlist[2].est   = xs[2]
-        mvlist[0].value = us[0]
-        mvlist[1].value = us[1]
-        dvlist[0].est   = dhat_k
+            # Store initial values for variables
+
+            xvlist[0].value = xs[0]
+            xvlist[1].value = xs[1]
+            xvlist[2].value = xs[2]
+            xvlist[0].est   = xs[0]
+            xvlist[1].est   = xs[1]
+            xvlist[2].est   = xs[2]
+            mvlist[0].value = us[0]
+            mvlist[1].value = us[1]
+            dvlist[0].est   = dhat_k
 
         # Store values in simulation container
 
@@ -447,7 +447,7 @@ def runsim(k, simcon, opnclsd, options):
     estimator.solve()
     estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
 
-    print "Estimator: %s" % (estimator.stats["status"])
+    print "runsim: estimator %s" % (estimator.stats["status"])
     xaughat_k = estsol["x"][-1,:]
     xhat_k = xaughat_k[:Nx]
     dhat_k = xaughat_k[Nx:]
@@ -456,10 +456,6 @@ def runsim(k, simcon, opnclsd, options):
     ydata.pop(0)
     udata.pop(0)    
     estimator.saveguess()        
-
-#    print ' xhat_k = ', xhat_k
-#    print ' dhat_k = ', dhat_k
-#    print ' yhat_k = ', yhat_k
 
     # Initialize the input
 
@@ -487,7 +483,7 @@ def runsim(k, simcon, opnclsd, options):
     cvlist[1].clpred[0] = cvlist[1].olpred[0]
     cvlist[2].clpred[0] = cvlist[2].olpred[0]
 
-    xof_km1 = xhat_k
+    xof_km1 = np.concatenate((xhat_k,dhat_k))
 
     # Need to be careful about this forecasting. Temporarily aggressive control
     # could cause the system to go unstable if continued indefinitely, and so
@@ -497,13 +493,14 @@ def runsim(k, simcon, opnclsd, options):
     for i in range(0,(Nf - 1)):
         if predictionOkay:
             try:
-                xof_k = cstr.sim(xof_km1, u_km1, d_km1)
+                xof_k = cstraug.sim(xof_km1, u_km1, ds)
             except RuntimeError: # Integrator failed.
                 predictionOkay = False
         if predictionOkay:
-            yof_k = measurement(np.concatenate((xof_k,np.zeros((Nid,)))))
+            yof_k = measurement(xof_k)
+#            yof_k = measurement(np.concatenate((xof_k,np.zeros((Nid,)))))
         else:
-            xof_k = np.NaN*np.ones((Nx,))
+            xof_k = np.NaN*np.ones((Nx+Nid,))
             yof_k = np.NaN*np.ones((Ny,))
         
         mvlist[0].olpred[i+1] = u_k[0]
@@ -538,15 +535,6 @@ def runsim(k, simcon, opnclsd, options):
         usp_k = [mvlist[0].target, mvlist[1].target]
         xtarget = np.concatenate((ysp_k,dhat_k))
 
-        print ' '
-        print 'dhat_k   = ', dhat_k
-        print 'ysp_k    = ', ysp_k
-        print 'usp_k    = ', usp_k
-        print 'xtarget  = ', xtarget
-        print 'd_km1    = ', d_km1
-        print 'u_km1    = ', u_km1
-        print ' '
-
         # Previously had targetfinder.par["p",0] = d_km1, but this shouldn't
         # be because the target finder should be using the same model as the
         # controller and doesn't get to know the real disturbance.
@@ -560,12 +548,7 @@ def runsim(k, simcon, opnclsd, options):
         xaugss = np.squeeze(targetfinder.var["x",0,:])
         uss = np.squeeze(targetfinder.var["u",0,:])
 
-        print ' '
-        print 'xaugss = ', xaugss
-        print 'uss    = ', uss
-        print ' '
-
-        print "Target: %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
+        print "runsim: target %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
         
         # Now use nonlinear MPC controller.
 
@@ -574,7 +557,7 @@ def runsim(k, simcon, opnclsd, options):
         controller.par["u_prev"] = [u_km1]
         controller.fixvar("x",0,xaughat_k)            
         controller.solve()
-        print "Controller: %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
+        print "runsim: controller %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
 
         controller.saveguess()
         u_k = np.squeeze(controller.var["u",0])
@@ -601,9 +584,11 @@ def runsim(k, simcon, opnclsd, options):
             xvlist[0].clpred[i+1] = sol["x"][0,i+1]
             xvlist[1].clpred[i+1] = sol["x"][1,i+1]
             xvlist[2].clpred[i+1] = sol["x"][2,i+1]
-            cvlist[0].clpred[i+1] = sol["x"][0,i+1]
-            cvlist[1].clpred[i+1] = sol["x"][1,i+1]
-            cvlist[2].clpred[i+1] = sol["x"][2,i+1]
+            xcl_k = sol["x"][:,i+1]
+            ycl_k = measurement(xcl_k)
+            cvlist[0].clpred[i+1] = ycl_k[0]
+            cvlist[1].clpred[i+1] = ycl_k[1]
+            cvlist[2].clpred[i+1] = ycl_k[2]
 
     # Store variable values
 
@@ -627,7 +612,7 @@ def runsim(k, simcon, opnclsd, options):
 
 # set up cstr mpc example
 
-simname = 'CSTR NMPC-NMHE Example'
+simname = 'CSTR NMHE-NMPC Example'
 
 # define variables
 
@@ -656,15 +641,17 @@ XV3 = sim.XVobj(name='h', desc='xv - level', units='(m)',
                value=0.659, Nf=60)
 
 CV1 = sim.XVobj(name='c', desc='cv - concentration A', units='(mol/L)', 
-               pltmin=0.87, pltmax=0.88, noise =.0001,
+               pltmin=0.87, pltmax=0.88, minlim=0.871, maxlim=0.879,
+               noise =.0001,
                value=0.877825, setpoint=0.877825, Nf=60)
 
 CV2 = sim.XVobj(name='T', desc='fv - temperature', units='(K)', 
                pltmin=324, pltmax=327, noise=.1,
-               value=324.496, setpoint=324.496, Nf=60)
+               value=324.496, setpoint=300.0, Nf=60)
 
 CV3 = sim.XVobj(name='h', desc='cv - level', units='(m)', 
-               pltmin=0.64, pltmax=0.74, noise=.01,
+               pltmin=0.64, pltmax=0.74, minlim=0.65, maxlim=0.73,
+               noise=.01,
                value=0.659, setpoint=0.659, Nf=60)
 
 # load up variable lists
