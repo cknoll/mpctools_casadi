@@ -352,7 +352,7 @@ def listcatfirstdim(l):
     return np.concatenate(newl)
 
 
-def smushColloc(t,x,tc,xc):
+def smushColloc(t,x,tc,xc,Delta=1):
     """
     Combines point x variables and interior collocation xc variables.
     
@@ -363,7 +363,8 @@ def smushColloc(t,x,tc,xc):
      - xc: (Nt,Nx,Nc)
     with Nt the number of time periods, Nx the number of states in x, and Nc
     the number of collocation points on the interior of each time period. Note
-    that if t or tc is None, then they are constructed using a timestep of 1.
+    that if t or tc is None, then they are constructed using a timestep of
+    Delta (with default value 1).
     
     Returns arrays T with size (Nt*(Nc+1) + 1,) and X with size 
     (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
@@ -388,7 +389,7 @@ def smushColloc(t,x,tc,xc):
         Nc = xc.shape[2]
         [r, _, _, _] = colloc.weights(Nc, include0=False, include1=False)
         r.shape = (r.size,1)
-        tc = (t[:-1] + r).T.copy()
+        tc = (t[:-1] + r*Delta).T.copy()
     
     # Add some dimensions to make sizes compatible.
     t.shape = (t.size,1)
