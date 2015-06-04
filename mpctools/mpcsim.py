@@ -1,21 +1,17 @@
 # mpcsim is a graphical user interface for the mpc-tools-casadi package
 #
-# version 1.0 Tom Badgwell May 2015
+# Tom Badgwell June 2015
+#
 #
 # to do list:
 #
-# - implement a mask that allows choice of menu options for each example
+# - implement option to disable open-loop predictions while closed loop
+# - implement file open/closed options (quit the current window)
+# - disable the menu options depending on mode
 # - implement a menu for the unmeasured disturbances - tun factors
 # - implement plots for the unmeasured disturbance variables
-# - implement option to disable open-loop forecasts when control is on.
 # - implement option to show process diagram
-# - add reinitialize option to enable changing plot limits, and other params.
-# - implement file open/closed options (quit the current window)
 # - implement re-initialize option
-# - disable menu items, as appropriate, for open/closed loop
-# - Set focus to OK button on entry dialog
-# - save option for data file (text and excel)
-# - implement plot zoom features
 #
 
 from   Tkinter import *
@@ -35,13 +31,11 @@ def makegui(simcon):
 
     root.title('MPC-Sim')
 
-    # create the options object
-
-    options = Options()
+    simcon.root = root
 
     # create the menus
 
-    menubar = makemenus(root, simcon, options)
+    menubar = makemenus(root, simcon)
 
     # create the run panel on the menubar
 
@@ -61,7 +55,7 @@ def makegui(simcon):
 
     # create the trend plots
 
-    mytrndplt = Trndplt(root, simcon, rpanel, cpanel, options)
+    mytrndplt = Trndplt(root, simcon, rpanel, cpanel)
 
     # start the main loop
 
@@ -75,9 +69,10 @@ def my_add_command(mymenu, var, desc):
     command=lambda: setvalue(var, desc), 
     underline=0)
 
-def openfile():
+def openfile(simcon):
 
     f = askopenfilename()
+    simcon.root.destroy()
     execfile(f)
 
 def setvalue(var, desc):
@@ -193,14 +188,14 @@ def setvalue(var, desc):
 
         value = float(var.pltmax)
         entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=mv.pltmin)
+        value = askfloat(var.name, entrytext, minvalue=var.pltmin)
         if value != None: var.pltmax = value
 
     elif desc == 'Plot Low Limit':
 
         value = float(var.pltmin)
         entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, maxvalue=mv.pltmax)
+        value = askfloat(var.name, entrytext, maxvalue=var.pltmax)
         if value != None: var.pltmin = value
 
     elif desc == 'Process Noise':
@@ -235,10 +230,19 @@ def setvalue(var, desc):
 
     elif desc == 'Noise Factor':
 
-        value = float(var.fnoise)
+        value = float(var.value)
         entrytext = desc + ' currently ' + str(value) + ', enter new value'
         value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: var.fnoise = value
+        if value != None: var.value = value
+
+    elif desc == 'A Value':
+
+        value = float(var.value)
+        entrytext = desc + ' currently ' + str(value) + ', enter new value'
+        value = askfloat(var.name, entrytext, minvalue=-10.0, maxvalue=10.0)
+        if value != None: 
+            var.value = value
+            var.chflag = 1
 
     elif desc == 'Gain Mismatch Factor':
 
@@ -251,11 +255,47 @@ def setvalue(var, desc):
 
     elif desc == 'Disturbance Model':
 
-        value = float(var.dmod)
+        value = float(var.value)
         entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0, maxvalue=1.0)
+        value = askfloat(var.name, entrytext, minvalue=1.0, maxvalue=5.0)
         if value != None: 
-            var.dmod   = value
+            var.value   = value
+            var.chflag = 1
+
+    elif desc == 'Control Gain':
+
+        value = float(var.value)
+        entrytext = desc + ' currently ' + str(value) + ', enter new value'
+        value = askfloat(var.name, entrytext, minvalue=-10.0, maxvalue=10.0)
+        if value != None: 
+            var.value   = value
+            var.chflag = 1
+
+    elif desc == 'Reset Time':
+
+        value = float(var.value)
+        entrytext = desc + ' currently ' + str(value) + ', enter new value'
+        value = askfloat(var.name, entrytext, minvalue=0, maxvalue=10000.0)
+        if value != None: 
+            var.value   = value
+            var.chflag = 1
+
+    elif desc == 'Derivative Time':
+
+        value = float(var.value)
+        entrytext = desc + ' currently ' + str(value) + ', enter new value'
+        value = askfloat(var.name, entrytext, minvalue=0.0, maxvalue=100.0)
+        if value != None: 
+            var.value   = value
+            var.chflag = 1
+
+    elif desc == 'Heat Of Reaction':
+
+        value = float(var.value)
+        entrytext = desc + ' currently ' + str(value) + ', enter new value'
+        value = askfloat(var.name, entrytext, minvalue=-1e6, maxvalue=1e6)
+        if value != None: 
+            var.value   = value
             var.chflag = 1
 
     else:
@@ -263,15 +303,16 @@ def setvalue(var, desc):
         notdone()
 
 def showhelp():
-    showinfo('About MPCsim 1.0','MPC-Sim 1.0 is a GUI for the '
-    + 'mpc-tools-casadi package (Tom Badgwell, April, 2015)')
+    showinfo('About MPC-Sim','MPC-Sim is a GUI for the '
+    + 'mpc-tools-casadi package (Tom Badgwell)')
 
-def makemenus(win, simcon, options):
+def makemenus(win, simcon):
 
     mvlist = simcon.mvlist
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
+    oplist = simcon.oplist
 
     menubar = Frame(win)
     menubar.config(bd=2, relief=GROOVE)
@@ -282,7 +323,7 @@ def makemenus(win, simcon, options):
     fbutton = Menubutton(menubar, text='File', underline=0)
     fbutton.pack(side=LEFT)
     filemenu = Menu(fbutton, tearoff=0)
-#    filemenu.add_command(label='Open',  command=openfile,  underline=0)
+#    filemenu.add_command(label='Open',  command=lambda: openfile(simcon),  underline=0)
 #    filemenu.add_command(label='Close', command=notdone,  underline=0)
     filemenu.add_command(label='Exit',  command=win.quit, underline=0)
     fbutton.config(menu=filemenu)
@@ -297,19 +338,19 @@ def makemenus(win, simcon, options):
     for mv in mvlist:
 
         mvmenu = Menu(mvsmenu, tearoff=False)
-        my_add_command(mvmenu, mv, 'Value')
-#        my_add_command(mvmenu, mv, 'SS Target') 
-#        my_add_command(mvmenu, mv, 'SS R Weight') 
-        my_add_command(mvmenu, mv, 'Target') 
-        my_add_command(mvmenu, mv, 'R Weight') 
-        my_add_command(mvmenu, mv, 'S Weight') 
-        my_add_command(mvmenu, mv, 'Max Limit') 
-        my_add_command(mvmenu, mv, 'Min Limit') 
-        my_add_command(mvmenu, mv, 'ROC Limit') 
-#        my_add_command(mvmenu, mv, 'Plot High Limit') 
-#        my_add_command(mvmenu, mv, 'Plot Low Limit') 
-#        my_add_command(mvmenu, mv, 'Noise') 
-        my_add_command(mvmenu, mv, 'Step Disturbance') 
+        if ("value"  in mv.menu): my_add_command(mvmenu, mv, 'Value')
+        if ("sstarg" in mv.menu): my_add_command(mvmenu, mv, 'SS Target') 
+        if ("ssrval" in mv.menu): my_add_command(mvmenu, mv, 'SS R Weight') 
+        if ("target" in mv.menu): my_add_command(mvmenu, mv, 'Target') 
+        if ("rvalue" in mv.menu): my_add_command(mvmenu, mv, 'R Weight') 
+        if ("svalue" in mv.menu): my_add_command(mvmenu, mv, 'S Weight') 
+        if ("maxlim" in mv.menu): my_add_command(mvmenu, mv, 'Max Limit') 
+        if ("minlim" in mv.menu): my_add_command(mvmenu, mv, 'Min Limit') 
+        if ("roclim" in mv.menu): my_add_command(mvmenu, mv, 'ROC Limit') 
+        if ("pltmax" in mv.menu): my_add_command(mvmenu, mv, 'Plot High Limit') 
+        if ("pltmin" in mv.menu): my_add_command(mvmenu, mv, 'Plot Low Limit') 
+        if ("noise"  in mv.menu): my_add_command(mvmenu, mv, 'Noise') 
+        if ("dist"   in mv.menu): my_add_command(mvmenu, mv, 'Step Disturbance') 
         mvsmenu.add_cascade(label=mv.name, menu=mvmenu, underline = 0)
 
     # build the DV menu if there are DVs
@@ -324,10 +365,10 @@ def makemenus(win, simcon, options):
         for dv in dvlist:
 
             dvmenu = Menu(dvsmenu, tearoff=False)
-            my_add_command(dvmenu, dv, 'Value')
-#            my_add_command(dvmenu, dv, 'Plot High Limit') 
-#            my_add_command(dvmenu, dv, 'Plot Low Limit') 
-            my_add_command(dvmenu, dv, 'Process Noise') 
+            if ("value"  in dv.menu): my_add_command(dvmenu, dv, 'Value')
+            if ("pltmax" in dv.menu): my_add_command(dvmenu, dv, 'Plot High Limit') 
+            if ("pltmin" in dv.menu): my_add_command(dvmenu, dv, 'Plot Low Limit') 
+            if ("noise"  in dv.menu): my_add_command(dvmenu, dv, 'Process Noise') 
             dvsmenu.add_cascade(label=dv.name, menu=dvmenu, underline = 0)
 
     # build the XV menu if there are XVs
@@ -342,18 +383,18 @@ def makemenus(win, simcon, options):
         for xv in xvlist:
 
             xvmenu = Menu(xvsmenu, tearoff=False)
-#            my_add_command(xvmenu, xv, 'Value')
-#            my_add_command(xvmenu, xv, 'SS Target') 
-#            my_add_command(xvmenu, xv, 'SS Q Weight') 
-#            my_add_command(xvmenu, xv, 'Setpoint') 
-#            my_add_command(xvmenu, xv, 'Q Weight') 
-#            my_add_command(xvmenu, xv, 'Max Limit') 
-#            my_add_command(xvmenu, xv, 'Min Limit') 
-#            my_add_command(xvmenu, xv, 'Plot High') 
-#            my_add_command(xvmenu, xv, 'Plot Low') 
-            my_add_command(xvmenu, xv, 'Model Noise') 
-            my_add_command(xvmenu, xv, 'Process Noise') 
-            my_add_command(xvmenu, xv, 'Process Step Dist.') 
+            if ("value"    in xv.menu): my_add_command(xvmenu, xv, 'Value')
+            if ("sstarg"   in xv.menu): my_add_command(xvmenu, xv, 'SS Target') 
+            if ("ssqval"   in xv.menu): my_add_command(xvmenu, xv, 'SS Q Weight') 
+            if ("setpoint" in xv.menu): my_add_command(xvmenu, xv, 'Setpoint') 
+            if ("qvalue"   in xv.menu): my_add_command(xvmenu, xv, 'Q Weight') 
+            if ("maxlim"   in xv.menu): my_add_command(xvmenu, xv, 'Max Limit') 
+            if ("minlim"   in xv.menu): my_add_command(xvmenu, xv, 'Min Limit') 
+            if ("pltmax"   in xv.menu): my_add_command(xvmenu, xv, 'Plot High Limit') 
+            if ("pltmin"   in xv.menu): my_add_command(xvmenu, xv, 'Plot Low Limit') 
+            if ("mnoise"   in xv.menu): my_add_command(xvmenu, xv, 'Model Noise') 
+            if ("noise"    in xv.menu): my_add_command(xvmenu, xv, 'Process Noise') 
+            if ("dist"     in xv.menu): my_add_command(xvmenu, xv, 'Process Step Dist.') 
             xvsmenu.add_cascade(label=xv.name, menu=xvmenu, underline = 0)
 
     # build the CV menu
@@ -366,29 +407,32 @@ def makemenus(win, simcon, options):
     for cv in cvlist:
 
         cvmenu = Menu(cvsmenu, tearoff=False)
-#        my_add_command(cvmenu, cv, 'Value')
-#        my_add_command(cvmenu, cv, 'SS Target') 
-#        my_add_command(cvmenu, cv, 'SS Q Weight') 
-        my_add_command(cvmenu, cv, 'Setpoint') 
-        my_add_command(cvmenu, cv, 'Q Weight') 
-        my_add_command(cvmenu, cv, 'Max Limit') 
-        my_add_command(cvmenu, cv, 'Min Limit') 
-#        my_add_command(cvmenu, cv, 'Plot High') 
-#        my_add_command(cvmenu, cv, 'Plot Low') 
-        my_add_command(cvmenu, cv, 'Model Noise') 
-        my_add_command(cvmenu, cv, 'Process Noise') 
-        my_add_command(cvmenu, cv, 'Process Step Dist.') 
+        if ("value"    in cv.menu): my_add_command(cvmenu, cv, 'Value')
+        if ("sstarg"   in cv.menu): my_add_command(cvmenu, cv, 'SS Target') 
+        if ("ssqval"   in cv.menu): my_add_command(cvmenu, cv, 'SS Q Weight') 
+        if ("setpoint" in cv.menu): my_add_command(cvmenu, cv, 'Setpoint') 
+        if ("qvalue"   in cv.menu): my_add_command(cvmenu, cv, 'Q Weight') 
+        if ("maxlim"   in cv.menu): my_add_command(cvmenu, cv, 'Max Limit') 
+        if ("minlim"   in cv.menu): my_add_command(cvmenu, cv, 'Min Limit') 
+        if ("pltmax"   in cv.menu): my_add_command(cvmenu, cv, 'Plot High Limit') 
+        if ("pltmin"   in cv.menu): my_add_command(cvmenu, cv, 'Plot Low Limit') 
+        if ("mnoise"   in cv.menu): my_add_command(cvmenu, cv, 'Model Noise') 
+        if ("noise"    in cv.menu): my_add_command(cvmenu, cv, 'Process Noise') 
+        if ("dist"     in cv.menu): my_add_command(cvmenu, cv, 'Process Step Dist.') 
         cvsmenu.add_cascade(label=cv.name, menu=cvmenu, underline = 0)
 
     # build the options menu
 
     obutton = Menubutton(menubar, text='Options', underline=0)
     obutton.pack(side=LEFT)
-    optionsmenu = Menu(obutton, tearoff=0)
-    my_add_command(optionsmenu, options, 'Noise Factor') 
-    my_add_command(optionsmenu, options, 'Gain Mismatch Factor') 
-    my_add_command(optionsmenu, options, 'Disturbance Model') 
-    obutton.config(menu=optionsmenu)
+    opsmenu = Menu(obutton, tearoff=0)
+    obutton.config(menu=opsmenu)
+
+    for op in oplist:
+
+        opmenu = Menu(opsmenu, tearoff=False)
+        my_add_command(opmenu, op, op.desc) 
+        opsmenu.add_cascade(label=op.name, menu=opmenu, underline = 0)
 
     # build the help menu
 
@@ -403,7 +447,7 @@ def makemenus(win, simcon, options):
 class Trndplt:
 
     def __init__(self, parent, simcon, runpause, 
-                 opnclsd, options):
+                 opnclsd):
 
         # store inputs
 
@@ -415,11 +459,11 @@ class Trndplt:
         self.dvlist   = simcon.dvlist
         self.cvlist   = simcon.cvlist
         self.xvlist   = simcon.xvlist
+        self.oplist   = simcon.oplist
         self.runpause = runpause
         self.opnclsd  = opnclsd
         self.refint   = simcon.refint
         self.runsim   = simcon.runsim
-        self.options  = options
         self.k        = 0
         self.xvec     = np.arange(-simcon.N,0)
 
@@ -571,7 +615,7 @@ class Trndplt:
             fmvmnline, = mvaxis.plot(xvec, yvec, 'r', ls='--')
             self.fmvmnlines.append(fmvmnline)
 
-            mvaxis.plot((0,0),(mv.pltmin,mv.pltmax), 'r')
+            mvaxis.plot((0,0),(-1e6,1e6), 'r')
 
         for dv in self.dvlist:
 
@@ -587,7 +631,7 @@ class Trndplt:
             fdvline, = dvaxis.plot(xvec, yvec, 'b')
             self.fdvlines.append(fdvline)
 
-            dvaxis.plot((0,0),(dv.pltmin,dv.pltmax), 'r')
+            dvaxis.plot((0,0),(-1e6,1e6), 'r')
 
         for xv in self.xvlist:
 
@@ -633,7 +677,7 @@ class Trndplt:
 #            fxvmnline, = xvaxis.plot(xvec, yvec, 'r', ls='--')
 #            self.fxvmnlines.append(fxvmnline)
 
-            xvaxis.plot((0,0),(xv.pltmin,xv.pltmax), 'r')
+            xvaxis.plot((0,0),(-1e6,1e6), 'r')
 
         for cv in self.cvlist:
 
@@ -679,7 +723,7 @@ class Trndplt:
             fcvmnline, = cvaxis.plot(xvec, yvec, 'r', ls='--')
             self.fcvmnlines.append(fcvmnline)
 
-            cvaxis.plot((0,0),(cv.pltmin,cv.pltmax), 'r')
+            cvaxis.plot((0,0),(-1e6,1e6), 'r')
 
         # attach figure to parent and start animation
 
@@ -694,7 +738,7 @@ class Trndplt:
 
             k = self.k
 
-            self.simcon.runsim(k, self.simcon, self.opnclsd, self.options)
+            self.simcon.runsim(k, self.simcon, self.opnclsd)
 
             # update the trends
 
@@ -712,6 +756,9 @@ class Trndplt:
 
             mvndx = self.mvlist.index(mv)
             mvaxis = self.mvaxes[mvndx]
+
+            mvaxis.set_ylim([mv.pltmin, mv.pltmax])
+#            mvaxis.plot((0,0),(mv.pltmin,mv.pltmax), 'r')
 
             mvline = self.mvlines[mvndx]
             ydata  = mvline.get_ydata()
@@ -751,6 +798,10 @@ class Trndplt:
 
             dvndx = self.dvlist.index(dv)
             dvaxis = self.dvaxes[dvndx]
+
+            dvaxis.set_ylim([dv.pltmin, dv.pltmax])
+#            dvaxis.plot((0,0),(dv.pltmin,dv.pltmax), 'r')
+
             dvline = self.dvlines[dvndx]
             ydata  = dvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
@@ -767,6 +818,10 @@ class Trndplt:
 
             xvndx = self.xvlist.index(xv)
             xvaxis = self.xvaxes[xvndx]
+
+            xvaxis.set_ylim([xv.pltmin, xv.pltmax])
+#            xvaxis.plot((0,0),(xv.pltmin,xv.pltmax), 'r')
+
             xvline = self.xvlines[xvndx]
             ydata  = xvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
@@ -821,6 +876,10 @@ class Trndplt:
 
             cvndx = self.cvlist.index(cv)
             cvaxis = self.cvaxes[cvndx]
+
+            cvaxis.set_ylim([cv.pltmin, cv.pltmax])
+#            cvaxis.plot((0,0),(cv.pltmin,cv.pltmax), 'r')
+
             cvline = self.cvlines[cvndx]
             ydata  = cvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
@@ -921,15 +980,14 @@ class ConPanel:
         if (self.status.get() == 1):
             self.cframe.config(bg='green')
 
-class Options:
+class Option:
 
-    def __init__(self):
+    def __init__(self, name=' ', desc=' ', value=0.0):
 
-        self.name = 'Options'
-        self.fnoise  = 0.0
-        self.gfac    = 1.0
-        self.dmod    = 1.0
-        self.chflag  = 0
+        self.name   = name
+        self.desc   = desc
+        self.value  = value
+        self.chflag = 0
 
 def makename(parent, simname):
 
@@ -956,7 +1014,10 @@ class MVobj:
                  target=0.0, rvalue=0.001, svalue=0.001, 
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
-                 noise=0.0, dist=0.0, Nf=0):
+                 noise=0.0, dist=0.0, Nf=0,
+                 menu=["value","sstarg","ssrval","target","rvalue","svalue",
+                       "maxlim","minlim","roclim","pltmax","pltmin","noise",
+                       "dist"]):
         
         MVobj.nmvs += 1
 
@@ -982,6 +1043,7 @@ class MVobj:
         self.Nf     = Nf
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
+        self.menu   = menu
 
 class DVobj:
 
@@ -990,7 +1052,8 @@ class DVobj:
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  pltmax=100.0, pltmin=0.0,
-                 noise=0.0, Nf=0):
+                 noise=0.0, Nf=0,
+                 menu=["value","pltmax","pltmin","noise"]):
         
         DVobj.ndvs += 1
 
@@ -1007,6 +1070,7 @@ class DVobj:
         self.Nf     = Nf
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
+        self.menu   = menu
 
 class CVobj:
 
@@ -1018,7 +1082,10 @@ class CVobj:
                  setpoint=0.0, qvalue=1.0,
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
-                 noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0):
+                 noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
+                 menu=["value","sstarg","ssqval","setpoint","qvalue",
+                       "maxlim","minlim","pltmax","pltmin","mnoise",
+                       "noise","dist"]):
         
         CVobj.ncvs += 1
 
@@ -1044,6 +1111,7 @@ class CVobj:
         self.bias   = bias
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
+        self.menu   = menu
 
 class XVobj:
 
@@ -1055,7 +1123,10 @@ class XVobj:
                  setpoint=0.0, qvalue=1.0,
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
-                 noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0):
+                 noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
+                 menu=["value","sstarg","ssqval","setpoint","qvalue",
+                       "maxlim","minlim","pltmax","pltmin","mnoise",
+                       "noise","dist"]):
         
         XVobj.nxvs += 1
 
@@ -1081,20 +1152,22 @@ class XVobj:
         self.bias   = bias
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
+        self.menu   = menu
 
 class SimCon:
 
     def __init__(self, simname=[], 
-                 mvlist=[], dvlist=[], cvlist=[], xvlist=[], N=[], 
-                 refint=[], runsim=[], deltat=[], alg=[], proc=[],
+                 mvlist=[], dvlist=[], cvlist=[], xvlist=[], oplist=[],
+                 N=[], refint=[], runsim=[], deltat=[], alg=[], proc=[],
                  mod=[], F=[], l=[], Pf=[], xmk=[], gain=[],
-                 ydata=[], udata=[]):
+                 ydata=[], udata=[], root=[]):
 
         self.simname = simname
         self.mvlist  = mvlist
         self.dvlist  = dvlist
         self.cvlist  = cvlist
         self.xvlist  = xvlist
+        self.oplist  = oplist
         self.nmvs    = len(mvlist)
         self.ndvs    = len(dvlist)
         self.ncvs    = len(cvlist)
@@ -1114,7 +1187,8 @@ class SimCon:
         self.gain    = gain
         self.ydata   = ydata
         self.udata   = udata
+        self.root    = root
 
 
 
-if __name__ == '__main__': execfile('siso_mpc_mpcsim.py')
+if __name__ == '__main__': execfile('siso_lmpc_mpcsim.py')
