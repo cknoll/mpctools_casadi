@@ -2,7 +2,6 @@
 #
 # Tom Badgwell June 2015
 #
-#
 # to do list:
 #
 # - implement option to disable open-loop predictions while closed loop
@@ -936,7 +935,7 @@ class RunPanel:
         self.rframe = Frame(parent)
         self.rframe.config(bd=2, relief=GROOVE)
         self.rframe.pack(side=LEFT)
-        msg = Label(self.rframe, text='Run Status')
+        msg = Label(self.rframe, text='Sim Status')
         msg.pack(side=TOP)
         pauseb = Radiobutton(self.rframe, text='Pause', command=self.setbg, 
                              variable=self.status, value=0)
