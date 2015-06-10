@@ -48,7 +48,7 @@
 \newcommand{\smallurl}[2][\footnotesize]{\texttt{#1 #2}}
 
 \title{MPC with Casadi/Python}
-\date{March 18, 2015}
+\date{June 10, 2015}
 \author{Michael Risbeck}
 
 \usepackage{graphicx}
@@ -64,15 +64,15 @@
 
 
 \begin{frame}{Windows Installation}
-    
     A Windows Python distribution.
     \begin{itemize}
+        \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
         \item E.g., Python(x,y): \smallurl{https://code.google.com/p/pythonxy/}
     \end{itemize}
     
     \medskip
     
-    CasADi:
+    CasADi 2.2.0:
     \begin{itemize}
         \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/BinaryInstallationWindows}
         \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
@@ -81,40 +81,103 @@
     
     \medskip
     
-    Our python modules
+    Our Python package
     \begin{itemize}
         \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
         \item Download \texttt{.zip} file on the left.
     \end{itemize}
-    
 \end{frame}
 
-
-
 \begin{frame}[fragile]{Ubuntu/Debian Installation}
-    
-    Python, NumPy, Matplotlib
+    Python, NumPy, SciPy, matplotlib
     \begin{itemize}
-        \item E.g., with Spyder (an IDE): \lstinline[style=shell]@$ sudo apt-get install spyder@
+        \item E.g., with Spyder (an IDE): \lstinline[style=shell]@sudo apt-get install spyder@
     \end{itemize}
     
     \medskip
     
-    CasADi:
+    CasADi 2.2.0:
     \begin{itemize}
         \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/Binaryinstallationlinux}
         \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
-        \item Install: \lstinline[style=shell]@$ dpkg -i <filename>.deb@
+        \item Install: \lstinline[style=shell]@dpkg -i <filename>.deb@
     \end{itemize}
     
     \medskip
     
     Our python modules
     \begin{itemize}
-        \item Clone Mercurial repo: \lstinline[style=shell]!$ hg clone https://hg.cae.wisc.edu/hg/mpc-tools-casadi!
+        \item Clone Mercurial repo: \lstinline[style=shell]!hg clone https://hg.cae.wisc.edu/hg/mpc-tools-casadi!
         \item Or, download a copy from \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
     \end{itemize}
+\end{frame}
+
+\begin{frame}{Mac Installation (Difficult)}
+    Python, NumPy, SciPy, matplotlib
+    \begin{itemize}
+        \item E.g., via Homebrew: \lstinline[style=shell]!brew install python!
+        \item Packages via \texttt{pip}: \lstinline[style=shell]!pip install ipython matplotlib numpy scipy
+        !
+    \end{itemize}
     
+    \medskip
+    
+    CasADi 2.2.0
+    \begin{itemize}
+        \item You'll have to build from sources.
+        \item See \smallurl{https://github.com/casadi/casadi/wiki/InstallationMac} for details.
+        \item We can only provide minimal support for this option.
+    \end{itemize}
+    
+    \medskip
+    
+    Our Python package
+    \begin{itemize}
+        \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
+        \item Download \texttt{.zip} file on the left.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{What's in \texttt{mpc-tools-casadi}?}
+    A Python package: \texttt{mpctools}.
+    \begin{itemize}
+        \item You should put the \texttt{mpctools} folder somewhere on your Python path.
+        \item In Python, use \lstinline[style=python]!import sys; print sys.path! to see what folders are on your path.
+    \end{itemize}
+    
+    \medskip
+    
+    A cheatsheet (in the \texttt{doc} folder).
+    \begin{itemize}
+        \item Should get you started writing your own code.
+        \item Compares plain CasADi vs. CasADi + \texttt{mpctools}.
+    \end{itemize}
+    
+    \medskip
+    
+    A bunch of example files.
+    \begin{itemize}
+        \item \texttt{nmpcexample.py}: Example of linear vs. nonlinear MPC.
+        \item \texttt{cstr\_startup.py}: startup and a setpoint change (with no disturbances) for the CSTR system from Example 1.11.
+        \item \texttt{nmheexample.py}: NMHE (with EKF to update prior) for a batch reactor (See Example 4.27 in the textbook).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Making Sure Everything Works}
+    To check that everything works, try to run the examples in \texttt{mpc-tools-casadi}.
+    \begin{itemize}
+        \item \texttt{runall.py} will run everything and tell you if there are errors.
+        \item You won't see any output, however.
+    \end{itemize}
+    
+    \medskip
+    
+    If this fails, open a Python interpreter and try \texttt{import casadi}.
+    \begin{itemize}
+        \item If this doesn't work, then CasADi must have installed to the wrong Python distribution.
+        \item If you have multiple Python distributions on your machine, don't (or at least make sure you're using the one you think you are).
+        \item Make sure you are using Python 2.7 (not 3.x).
+    \end{itemize}
 \end{frame}
 
 
@@ -140,35 +203,7 @@
 %\end{frame}
 
 
-
-\begin{frame}{What's in \texttt{mpc-tools-casadi}?}
-
-\begin{itemize}
-    \item A Python package \texttt{mpctools}.
-    \begin{itemize}
-        \item Also a sub-package \texttt{mpctools.legacy} that contains old versions.
-        \item You should never need this.
-    \end{itemize}
-    \item A cheatsheet (in the \texttt{doc} folder).
-    \begin{itemize}
-        \item Should get you started writing your own code.
-        \item Includes the most important functions you will need to use.
-    \end{itemize}
-    \item A bunch of example files.
-    \begin{itemize}
-        \item \texttt{cstr.py}: Example 1.11 (nonlinear CSTR) from Rawlings and Mayne, but in Python.
-        \item \texttt{cstr\_startup.py}: startup and a setpoint change (with no disturbances) for the CSTR system from Example 1.11.
-        \item \texttt{nmpcexample.py}: Comparison of linear vs. nonlinear MPC for a nonlinear system.
-        \item \texttt{nmheexample.py}: Full-information estimation and MHE for  Example 4.27 (nonlinear batch reactor) from Rawlings and Mayne.
-        \item \texttt{example4-27.py}: A CasADi-only version of Example 4.27.
-        \item \texttt{cstr\_nonlinear.py}: Example 1.11 using nonlinear MPC and MHE. 
-    \end{itemize}
-\end{itemize}
-
-\end{frame}
-
-
-\begin{frame}{Why did we need to write this code?}
+\begin{frame}{Why did we write this code?}
 
 \begin{itemize}
     \item We plan to solve nonlinear MPC problems.
@@ -521,9 +556,8 @@ ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 lin = mpc.util.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
 
 # Also discretize using RK4.
-def ode_rk4(x,u):
-    return mpc.util.rk4(ode, x, [u], Delta=Delta, M=1)
-ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F")
+ode_rk4_casadi = mpc.getCasadiFunc(ode_rk4, [Nx,Nu], ["x","u"], funcname="F",
+                                   rk4=True, Delta=Delta, M=1)
 
 # Define stage cost and terminal weight.
 def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
@@ -625,21 +659,15 @@ Using \texttt{mpc-tools-casadi}, we can replace the LQR and KF from Example 1.11
     \begin{itemize}
         \item True continuous-time formulation
         \begin{itemize}
-            \item Time-varying functions
-            \item Quadrature for objective function
-            \item DAE systems
+            \item Time-varying functions not supported
+            \item Quadrature for objective function is available via Collocation
+            \item DAE systems are possible in principle
         \end{itemize}
         \item Quality guess generation
         \begin{itemize}
             \item Solve sequence of smaller problems
             \item Use as initial guess for large problem
             \item Must do ``by hand''
-        \end{itemize}
-        \item General nonlinear state constraints
-        \begin{itemize}
-            \item Available in principle: augment model
-            \item However, would need slack guess
-            \item Better support soon
         \end{itemize}
     \end{itemize}
 \end{frame}

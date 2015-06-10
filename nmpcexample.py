@@ -13,14 +13,14 @@ Nu = 2
 def ode(x,u):
     return np.array([-x[0] - (1+u[0])*x[1], (1+u[0])*x[0] + x[1] + u[1]])
 
-# Create a simulator. Need vector=True because ode is vectorized with np.array.
+# Create a simulator.
 model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
 # Then get nonlinear casadi functions and the linearization.
 ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 xss = np.zeros((Nx,)) # Define steady-state solution.
 uss = np.zeros((Nu,))
-lin = mpc.util.getLinearization(ode_casadi,xss,uss,Delta=Delta)
+lin = mpc.util.linearizeModel(ode_casadi,[xss,uss],["A","B"],Delta=Delta)
 
 # Define stage cost and terminal weight.
 def lfunc(x,u):

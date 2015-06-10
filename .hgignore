@@ -11,6 +11,8 @@ doc/*.aux
 doc/*.synctex.gz
 doc/*.snm
 doc/*.toc
+doc/*.bbl
+doc/*.blg
 cstr-matlab/*
 runall.log
 __local__/*
