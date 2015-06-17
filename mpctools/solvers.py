@@ -106,7 +106,7 @@ class ControlSolver(object):
         
     @verbosity.setter
     def verbosity(self,v):
-        self.__verbosity = min(min(max(v,-1),12),_MAX_VERBOSITY)
+        self.__verbosity = min(min(max(v,0),12),_MAX_VERBOSITY)
         
     def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
         parval=None,verbosity=5,timelimit=60,isQp=False,scalar=True):

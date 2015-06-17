@@ -5,7 +5,6 @@ import casadi.tools as ctools
 import numpy as np
 import pdb
 import itertools
-import warnings
 import sys
 import os
 from contextlib import contextmanager
@@ -454,4 +453,5 @@ def dummy_context(*args):
     """
     Dummy context for a with statement.
     """
+    # We need this in solvers.py.
     yield    
