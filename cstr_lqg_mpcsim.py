@@ -1,15 +1,15 @@
-# This is a CSTR LQG simulation based on Example 1.11 from Rawlings and Mayne.
+# This is a CSTR LQG simulation based on Example 1.11 from 
+# Rawlings and Mayne.
 #
-# Tom Badgwell May 5, 2015
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg
 
-def runsim(k, simcon, opnclsd, options):
+def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d " % k
+    print "runsim: iteration %d -----------------------------------" % k
 
     # unpack stuff from simulation container
 
@@ -17,27 +17,22 @@ def runsim(k, simcon, opnclsd, options):
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
+    oplist = simcon.oplist
     deltat = simcon.deltat
+    vrlist = [mvlist[0], mvlist[1], dvlist[0], xvlist[0], xvlist[1],
+              xvlist[2], cvlist[0], cvlist[1], cvlist[2], oplist[0],
+              oplist[1]]
+    nf     = oplist[0]
+    dm     = oplist[1]
 
     # check for changes
 
     chsum = 0
-    for mv in mvlist:
-        chsum += mv.chflag
-        mv.chflag = 0
-    for dv in dvlist:
-        chsum += dv.chflag
-        dv.chflag = 0
-    for cv in cvlist:
-        chsum += cv.chflag
-        cv.chflag = 0
-    for xv in xvlist:
-        chsum += xv.chflag
-        xv.chflag = 0
 
-    chsum += options.chflag
-    options.chflag = 0
-
+    for var in vrlist:
+        chsum += var.chflag
+        var.chflag = 0
+        
     # initialize values on first execution or when something changes
 
     if (k == 0 or chsum > 0):
@@ -131,59 +126,75 @@ def runsim(k, simcon, opnclsd, options):
         Q = np.diag([cvlist[0].qvalue, 0.0, cvlist[2].qvalue])
         R = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
 
-        # Apply gain mismatch factor
-
-        B = options.gfac*B
-
         # Calculate lqr control
 
         [K, Pi] = mpc.util.dlqr(A,B,Q,R)
 
         # Specify which disturbance model to use.
 
-#        useGoodDisturbanceModel = True # Can be false to pick the bad one with offset.
+        # 1 - output disturbances on c and h
+        # 2 - output disturbances on c, T, h
+        # 3 - output disturbance on c, input disturbance on F
+        # 4 - output disturbances on c, h, and input disturbance on F
+        # 5 - output disturbances on c, T, and input disturbance on F
 
-        # Set the disturbance model
-
-#        if useGoodDisturbanceModel:
-
-        if (options.dmod == 1.0):
-            Nid = Ny # Number of integrating disturbances.
-        else:
-            Nid = Nu 
+        if (dm.value == 1.0): Nid = Nu
+        if (dm.value == 2.0): Nid = Ny
+        if (dm.value == 3.0): Nid = Nu
+        if (dm.value == 4.0): Nid = Ny 
+        if (dm.value == 5.0): Nid = Ny 
 
         Bd = np.zeros((Nx,Nid))  
         Cd = np.zeros((Ny,Nid))
 
-#        if useGoodDisturbanceModel:
+        if (dm.value == 1.0):
+            Cd[0,0] = 1
+            Cd[2,1] = 1
 
-        if (options.dmod == 1.0):
+        if (dm.value == 2.0):
+            Cd[0,0] = 1
+            Cd[1,1] = 1
+            Cd[2,2] = 1
+
+        if (dm.value == 3.0):
+            Cd[0,0] = 1
+            Bd[:,1] = B[:,1] 
+
+        if (dm.value == 4.0):
             Cd[0,0] = 1
             Cd[2,1] = 1
-            Bd[:,2] = B[:,1] # or Bp[:,0]
-        else:
+            Bd[:,2] = B[:,1] 
+
+        if (dm.value == 5.0):
             Cd[0,0] = 1
-            Cd[2,1] = 1
+            Cd[1,1] = 1
+            Bd[:,2] = B[:,1] 
 
         # Check rank condition for augmented system.
 
         svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A, -Bd],[C,Cd]]))
+#        print 'svds = ', svds
         rank = sum(svds > 1e-10)
+
+        print 'A    = ',A
+        print 'C    = ',C
+        print 'Bd   = ',Bd
+        print 'Cd   = ',Cd
+        print 'rank = ',rank
+
         if rank < Nx + Nid:
             print "***Warning: augmented system is not detectable!"
 
         # Build augmented system.
 
-#        Qw = eps*np.eye(Nx + Nid)
-#        Qw[-1,-1] = 1
-#        Rv = eps*np.diag(xs**2)
-
         if (Nid == 2):
             Qw = np.diag([xvlist[0].mnoise, xvlist[1].mnoise, xvlist[2].mnoise,
-                    eps, 1])
+                    1, 1])
+#                    eps, 1])
         if (Nid == 3):
             Qw = np.diag([xvlist[0].mnoise, xvlist[1].mnoise, xvlist[2].mnoise,
-                    eps, eps, 1])
+                    1, 1, 1])
+#                    eps, eps, 1])
         Rv = np.diag([cvlist[0].mnoise, eps, cvlist[2].mnoise])
 
         Aaug = np.bmat([[A,Bd],[np.zeros((Nid,Nx)),np.eye(Nid)]]).A 
@@ -279,11 +290,11 @@ def runsim(k, simcon, opnclsd, options):
 
     # Add noise to the outputs
 
-    if (options.fnoise > 0.0):
+    if (nf.value > 0.0):
 
-        y_k[0] += options.fnoise*np.random.normal(0.0, cvlist[0].noise)
-        y_k[1] += options.fnoise*np.random.normal(0.0, cvlist[1].noise)
-        y_k[2] += options.fnoise*np.random.normal(0.0, cvlist[2].noise)
+        y_k[0] += nf.value*np.random.normal(0.0, cvlist[0].noise)
+        y_k[1] += nf.value*np.random.normal(0.0, cvlist[1].noise)
+        y_k[2] += nf.value*np.random.normal(0.0, cvlist[2].noise)
     
     # Estimate the state.
 
@@ -427,41 +438,52 @@ simname = 'CSTR LQG Example'
 
 # define variables
 
+MVmenu=["value","rvalue","maxlim","minlim","pltmax","pltmin"]
+DVmenu=["value","pltmax","pltmin"]
+XVmenu=["mnoise","noise","pltmax","pltmin"]
+CVmenu=["setpoint","qvalue","mnoise","noise","pltmax","pltmin"]
+FVmenu=["mnoise","noise","pltmax","pltmin"]
+
 MV1 = sim.MVobj(name='Tc', desc='mv - coolant temp.', units='(K)', 
                pltmin=299.0, pltmax=301.0, minlim=299.2, maxlim=300.8,
-               value=300.0, Nf=60)
+               value=300.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='F', desc='mv - outlet flow', units='(kL/min)', 
                pltmin=0.090, pltmax=0.125, minlim=0.095, maxlim=0.120,
-               value=0.1, Nf=60)
+               value=0.1, Nf=60, menu=MVmenu)
 
 DV1 = sim.MVobj(name='F0', desc='dv - inlet flow', units='(kL/min)', 
                pltmin=0.090, pltmax=0.125, minlim=0.0, maxlim=1.0,
-               value=0.1, Nf=60)
+               value=0.1, Nf=60, menu=DVmenu)
 
 XV1 = sim.XVobj(name='c', desc='xv - concentration A', units='(mol/L)', 
-               pltmin=0.87, pltmax=0.88, 
-               value=0.877825, Nf=60)
+               pltmin=0.870, pltmax=0.885, 
+               value=0.877825, Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='T', desc='xv - temperature', units='(K)', 
-               pltmin=324, pltmax=327, 
-               value=324.496, Nf=60)
+               pltmin=322.0, pltmax=327.0, 
+               value=324.496, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='h', desc='xv - level', units='(m)', 
-               pltmin=0.64, pltmax=0.74, 
-               value=0.659, Nf=60)
+               pltmin=0.58, pltmax=0.74, 
+               value=0.659, Nf=60, menu=XVmenu)
 
 CV1 = sim.XVobj(name='c', desc='cv - concentration A', units='(mol/L)', 
-               pltmin=0.87, pltmax=0.88, noise =.0001,
-               value=0.877825, setpoint=0.877825, Nf=60)
+               pltmin=0.870, pltmax=0.885, noise =.0001,
+               value=0.877825, setpoint=0.877825, Nf=60, menu=CVmenu)
 
 CV2 = sim.XVobj(name='T', desc='fv - temperature', units='(K)', 
-               pltmin=324, pltmax=327, noise = 0.1,
-               value=324.496, Nf=60)
+               pltmin=322.0, pltmax=327.0, noise = 0.1,
+               value=324.496, Nf=60, menu=FVmenu)
 
 CV3 = sim.XVobj(name='h', desc='cv - level', units='(m)', 
-               pltmin=0.64, pltmax=0.74, noise=.01,
-               value=0.659, setpoint=0.659, Nf=60)
+               pltmin=0.58, pltmax=0.74, noise=.01,
+               value=0.659, setpoint=0.659, Nf=60, menu=CVmenu)
+
+# define options
+
+NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
+DM = sim.Option(name='DM', desc='Disturbance Model', value=1.0)
 
 # load up variable lists
 
@@ -469,12 +491,13 @@ MVlist = [MV1,MV2]
 DVlist = [DV1]
 XVlist = [XV1,XV2,XV3]
 CVlist = [CV1,CV2,CV3]
+OPlist = [NF,DM]
 DeltaT = 1
 N      = 120
 refint = 10.0
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
-                    N=N, refint=refint, runsim=runsim, deltat=DeltaT)
+                    oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # build the GUI and start it up
 

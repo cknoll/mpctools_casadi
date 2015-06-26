@@ -9,7 +9,7 @@ from scipy import linalg
 
 useCasadiSX = True
 
-def runsim(k, simcon, opnclsd, options):
+def runsim(k, simcon, opnclsd):
 
     print "runsim: iteration %d -----------------------------------" % k
 
@@ -19,27 +19,22 @@ def runsim(k, simcon, opnclsd, options):
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
+    oplist = simcon.oplist
     deltat = simcon.deltat
+    vrlist = [mvlist[0], mvlist[1], dvlist[0], xvlist[0], xvlist[1],
+              xvlist[2], cvlist[0], cvlist[1], cvlist[2], oplist[0],
+              oplist[1]]
+    nf     = oplist[0]
+    dh     = oplist[1]
 
     # check for changes
 
     chsum = 0
-    for mv in mvlist:
-        chsum += mv.chflag
-        mv.chflag = 0
-    for dv in dvlist:
-        chsum += dv.chflag
-        dv.chflag = 0
-    for cv in cvlist:
-        chsum += cv.chflag
-        cv.chflag = 0
-    for xv in xvlist:
-        chsum += xv.chflag
-        xv.chflag = 0
 
-    chsum += options.chflag
-    options.chflag = 0
-
+    for var in vrlist:
+        chsum += var.chflag
+        var.chflag = 0
+        
     # initialize values on first execution or when something changes
 
     if (k == 0 or chsum > 0):
@@ -53,10 +48,11 @@ def runsim(k, simcon, opnclsd, options):
         Nd   = 1            # number of unmeasured disturbances
         Ny   = Nx           # number of outputs
         Nid  = Ny           # number of integrating disturbances
+
         Nw   = Nx + Nid     # number of augmented states
         Nv   = Ny           # number of output measurements
         Nf   = xvlist[0].Nf # length of NMPC future horizon
-        Nmhe = 5            # length of MHE past horizon
+        Nmhe = 60           # length of MHE past horizon
 
         psize = [Nx,Nu,Nd,Ny,Nid,Nw,Nv,Nf,Nmhe]
 
@@ -78,7 +74,7 @@ def runsim(k, simcon, opnclsd, options):
         U = 54.94
         rho = 1000
         Cp = .239
-        dH = -5e4
+        dH = dh.value
 
         # Define the cstr model
 
@@ -109,8 +105,7 @@ def runsim(k, simcon, opnclsd, options):
         # Create casadi function and simulator.
 
         ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
-        cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"],
-                                     verbosity=0)
+        cstr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
         # Set the steady-state values.
 
@@ -153,8 +148,7 @@ def runsim(k, simcon, opnclsd, options):
             return dxdt
  
         cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
-                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"],
-                                        verbosity=0)
+                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 
         def measurement(x,d=ds):
             [c, T, h] = x[0:Nx]
@@ -174,8 +168,15 @@ def runsim(k, simcon, opnclsd, options):
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
             return ode_augmented_rk4_casadi([x,u,d])[0] + w
 
+        def ode_estimator(x,u,w=np.zeros((Nx+Nid,)),d=ds):
+            return ode_augmented_casadi([x,u,d])[0] + w
+
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
                                    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
+
+        ode_estimator_casadi = mpc.getCasadiFunc(ode_estimator,
+                                   [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
+
         measurement_casadi = mpc.getCasadiFunc(measurement,
                              [Nx+Nid,Nd],["xaug","d"],"measurement")
 
@@ -219,15 +220,27 @@ def runsim(k, simcon, opnclsd, options):
         # Build augmented estimator matrices.
 
         Qw = np.diag([xvlist[0].mnoise, xvlist[1].mnoise, xvlist[2].mnoise,
-                    eps, eps, 1])
+                    1, 1, 1])
         Rv = np.diag([cvlist[0].mnoise, cvlist[1].mnoise, cvlist[2].mnoise])
         Qwinv = linalg.inv(Qw)
         Rvinv = linalg.inv(Rv)
+
+        # Build augmented estimator matrices.
+#        Qw = eps*np.eye(Nx + Nid)
+#         Qw[-1,-1] = 1
+#        Rv = eps*eps*np.diag(xs**2)
+#        Qwinv = linalg.inv(Qw)
+#        Rvinv = linalg.inv(Rv)
 
         # Define stage costs for estimator.
 
         def lest(w,v):
             return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
+#        def lest(w,v):
+#            d = np.array([w[3], w[4], w[5]])
+#            Qd = np.eye(3)
+            return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) +  mpc.mtimes(d.T,Qd,d)
+                      
         lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
         # Don't use a prior.
@@ -253,6 +266,7 @@ def runsim(k, simcon, opnclsd, options):
         yguess = np.tile(ys,(Nmhe+1,1))
         nmheargs = {
             "f" : ode_estimator_rk4_casadi,
+#            "f" : ode_estimator_casadi,
             "h" : measurement_casadi,
             "u" : uguess,
             "y" : yguess,
@@ -263,7 +277,8 @@ def runsim(k, simcon, opnclsd, options):
             "p" : np.tile(ds,(Nmhe+1,1)),
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
-            "timelimit" : 5,
+#            "wAdditive" : True,
+            "timelimit" : 60,
             "scalar" : useCasadiSX,
             "runOptimization" : False,                        
         }
@@ -433,10 +448,10 @@ def runsim(k, simcon, opnclsd, options):
 
     y_k = measurement(np.concatenate((x_k,np.zeros((Nid,)))))
 
-    if (options.fnoise > 0.0):
+    if (nf.value > 0.0):
 
         for i in range(0, Ny):
-            y_k[i] += options.fnoise*np.random.normal(0.0, cvlist[i].noise)
+            y_k[i] += nf.value*np.random.normal(0.0, cvlist[i].noise)
     
     # Do Nonlinear MHE.
 
@@ -447,7 +462,7 @@ def runsim(k, simcon, opnclsd, options):
     estimator.solve()
     estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
 
-    print "runsim: estimator %s" % (estimator.stats["status"])
+    print "runsim: estimator status - %s" % (estimator.stats["status"])
     xaughat_k = estsol["x"][-1,:]
     xhat_k = xaughat_k[:Nx]
     dhat_k = xaughat_k[Nx:]
@@ -548,7 +563,7 @@ def runsim(k, simcon, opnclsd, options):
         xaugss = np.squeeze(targetfinder.var["x",0,:])
         uss = np.squeeze(targetfinder.var["u",0,:])
 
-        print "runsim: target %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
+        print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
         
         # Now use nonlinear MPC controller.
 
@@ -557,7 +572,7 @@ def runsim(k, simcon, opnclsd, options):
         controller.par["u_prev"] = [u_km1]
         controller.fixvar("x",0,xaughat_k)            
         controller.solve()
-        print "runsim: controller %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
+        print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
 
         controller.saveguess()
         u_k = np.squeeze(controller.var["u",0])
@@ -590,6 +605,13 @@ def runsim(k, simcon, opnclsd, options):
             cvlist[1].clpred[i+1] = ycl_k[1]
             cvlist[2].clpred[i+1] = ycl_k[2]
 
+    else:
+
+        # track the cv setpoints if the control is not on
+
+        cvlist[0].setpoint = y_k[0]
+        cvlist[2].setpoint = y_k[2]
+
     # Store variable values
 
     mvlist[0].value = u_k[0]
@@ -612,47 +634,58 @@ def runsim(k, simcon, opnclsd, options):
 
 # set up cstr mpc example
 
-simname = 'CSTR NMHE-NMPC Example'
+simname = 'CSTR NMPC Example'
 
 # define variables
 
+MVmenu=["value","rvalue","svalue","maxlim","minlim","roclim","pltmax","pltmin"]
+DVmenu=["value","pltmax","pltmin"]
+XVmenu=["mnoise","noise","pltmax","pltmin"]
+CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"]
+FVmenu=["mnoise","noise","pltmax","pltmin"]
+
 MV1 = sim.MVobj(name='Tc', desc='mv - coolant temp.', units='(K)', 
-               pltmin=299.0, pltmax=301.0, minlim=299.2, maxlim=300.8,
-               value=300.0, target=300.0, Nf=60)
+               pltmin=250.0, pltmax=350.0, minlim=255.0, maxlim=345.0,
+               value=300.0, target=300.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='F', desc='mv - outlet flow', units='(kL/min)', 
-               pltmin=0.090, pltmax=0.125, minlim=0.095, maxlim=0.120,
-               value=0.1, target=0.1, Nf=60)
+               pltmin=0.0, pltmax=0.3, minlim=0.01, maxlim=0.29,
+               value=0.1, target=0.1, Nf=60, menu=MVmenu)
 
 DV1 = sim.MVobj(name='F0', desc='dv - inlet flow', units='(kL/min)', 
-               pltmin=0.090, pltmax=0.125, minlim=0.0, maxlim=1.0,
-               value=0.1, Nf=60)
+               pltmin=0.0, pltmax=0.3,
+               value=0.1, Nf=60, menu=DVmenu)
 
 XV1 = sim.XVobj(name='c', desc='xv - concentration A', units='(mol/L)', 
-               pltmin=0.87, pltmax=0.88, 
-               value=0.877825, Nf=60)
+               pltmin=0.0, pltmax=1.4, 
+               value=0.877825, Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='T', desc='xv - temperature', units='(K)', 
-               pltmin=324, pltmax=327, 
-               value=324.496, Nf=60)
+               pltmin=250.0, pltmax=500.0, 
+               value=324.496, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='h', desc='xv - level', units='(m)', 
-               pltmin=0.64, pltmax=0.74, 
-               value=0.659, Nf=60)
+               pltmin=0.0, pltmax=1.0, 
+               value=0.659, Nf=60, menu=XVmenu)
 
 CV1 = sim.XVobj(name='c', desc='cv - concentration A', units='(mol/L)', 
-               pltmin=0.87, pltmax=0.88, minlim=0.871, maxlim=0.879,
+               pltmin=0.0, pltmax=1.4, minlim=0.05, maxlim=1.35,
                noise =.0001,
-               value=0.877825, setpoint=0.877825, Nf=60)
+               value=0.877825, setpoint=0.877825, Nf=60, menu=CVmenu)
 
 CV2 = sim.XVobj(name='T', desc='fv - temperature', units='(K)', 
-               pltmin=324, pltmax=327, noise=.1,
-               value=324.496, setpoint=300.0, Nf=60)
+               pltmin=250.0, pltmax=500.0, noise=.1,
+               value=324.496, setpoint=100.0, Nf=60, menu=FVmenu)
 
 CV3 = sim.XVobj(name='h', desc='cv - level', units='(m)', 
-               pltmin=0.64, pltmax=0.74, minlim=0.65, maxlim=0.73,
+               pltmin=0.0, pltmax=1.0, minlim=0.05, maxlim=0.95,
                noise=.01,
-               value=0.659, setpoint=0.659, Nf=60)
+               value=0.659, setpoint=0.659, Nf=60, menu=CVmenu)
+
+# define options
+
+NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
+DH = sim.Option(name='DH', desc='Heat Of Reaction', value=-5e4)
 
 # load up variable lists
 
@@ -660,12 +693,13 @@ MVlist = [MV1,MV2]
 DVlist = [DV1]
 XVlist = [XV1,XV2,XV3]
 CVlist = [CV1,CV2,CV3]
-DeltaT = 1
+OPlist = [NF,DH]
+DeltaT = 0.5
 N      = 120
-refint = 1.0
+refint = 100.0
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
-                    N=N, refint=refint, runsim=runsim, deltat=DeltaT)
+                    oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # build the GUI and start it up
 
