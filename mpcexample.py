@@ -41,4 +41,4 @@ u = solution["u"]
 fig = mpc.plots.mpcplot(x,u,t,np.zeros(x.shape),xinds=[0],timefirst=False)
 fig.show()
 fig.tight_layout(pad=.5)
-fig.savefig("mpcexample.pdf",bbox_inches="tight",pad_inches=0)
+mpc.plots.showandsave(fig,"mpcexample.pdf",bbox_inches="tight",pad_inches=0)

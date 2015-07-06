@@ -252,4 +252,4 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
         fig.canvas.set_window_title(title)
     return fig
 fig = cstrplot(x,u,ysp=None,contVars=[],title=None) 
-fig.savefig("cstr_python.pdf",facecolor="none")
+mpc.plots.showandsave(fig,"cstr_python.pdf",facecolor="none")

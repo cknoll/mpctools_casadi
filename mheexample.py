@@ -41,7 +41,8 @@ A = mpc.util.DMatrix(Adisc) # Cast to Casadi matrix type.
 B = mpc.util.DMatrix(Bdisc)
 C = mpc.util.DMatrix(Cdisc)
 
-def Fdiscrete(x,u,w): return mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u) + w
+def Fdiscrete(x,u,w):
+    return mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u) + w
 Fdiscrete = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu,Nw],["x","u","w"],"F")
 
 def H(x): return mpc.mtimes(Cdisc,x)

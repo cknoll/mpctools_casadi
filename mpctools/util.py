@@ -103,8 +103,10 @@ def linearizeModel(f,args,names=None,Delta=None):
     """
     Returns linear (affine) state-space model for f at the point point.
     
-    This is just a rewrite of getLinearization to take an arbitrary number
-    of arguments.
+    names should be a list of strings to specify the dictionary entry for each
+    element. E.g., for args = [xs, us] to linearize a model in (x,u), you
+    might choose names = ["A", "B"]. These entries can then be accessed from
+    the returned dictionary to get the linearized state-space model.
     """
     # Decide names.
     if names is None:

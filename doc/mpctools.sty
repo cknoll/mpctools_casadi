@@ -1,0 +1,55 @@
+% Provides some convenient latex commands.
+\usepackage{listings,booktabs,textcomp}
+\providecommand{\lstinline}{} % This makes my IDE happy.
+
+\lstdefinestyle{makefile}{
+    language={[gnu]make},
+    numbers=left,
+    frame=lines,
+    basicstyle=\ttfamily,
+    keywordstyle=\color{Blue}\ttfamily,
+    stringstyle=\color{Purple}\ttfamily,
+    commentstyle=\color{ForestGreen}\ttfamily,
+    escapechar=@,
+    upquote=true,
+}
+
+\lstdefinestyle{shell}{
+    language=bash,
+    basicstyle=\ttfamily\footnotesize,
+    upquote=true,
+}
+
+\lstdefinestyle{python}{
+    language=Python,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{Blue},
+    stringstyle=\color{Purple},
+    commentstyle=\color{ForestGreen},
+    escapechar=@,
+    upquote=true,
+}
+
+\lstdefinestyle{matlab}{
+    language=Matlab,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{Blue},
+    stringstyle=\color{Purple},
+    commentstyle=\color{ForestGreen},
+    escapechar=!,
+    upquote=true,
+}
+
+\newcommand{\codeemph}[1]{\textcolor{NavyBlue}{\small\bfseries #1}}
+
+\newcommand{\smallurl}[2][\footnotesize]{\texttt{#1 #2}}
+
+\usepackage{graphicx}
+\graphicspath{{./}{../}}
+
+\usepackage{lmodern}
+
+\usepackage{tikz}
+\usetikzlibrary{trees}
+
+\newcommand{\casadi}{CasADi}

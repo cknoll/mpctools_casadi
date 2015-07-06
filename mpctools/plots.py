@@ -2,10 +2,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 import scipy.io as sio
+import sys
 
 """
 Contains all of the plotting functions for mpc-tools-casadi.
 """
+
+SHOW_FIGURE_WINDOWS = True # Global setting about whether to show figures.
+SAVE_FIGURE_PDFS = True # Global setting to save figure pdfs.
+SHOWANDSAVE_DEFAULT_CHOICE = "prompt"
+
+# Override some things if user passes an --ioff flag.
+if "--ioff" in sys.argv:
+    plt.ioff()
+    SHOW_FIGURE_WINDOWS = False
+    SHOWANDSAVE_DEFAULT_CHOICE = "y"
 
 def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
             title=None,timefirst=True,legend=True,returnAxes=False):
@@ -160,6 +171,23 @@ def prettyaxesbox(ax=None,linewidth=None,edgecolor="k",facecolor="none",front=Tr
     plt.draw()
     
     return prettybox            
+
+
+def showandsave(fig,filename="fig.pdf",choice=None,**kwargs):
+    """
+    Shows a figure in the interactive window and prompts user to save.
+    """
+    if choice is None:
+        choice = SHOWANDSAVE_DEFAULT_CHOICE
+    if SHOW_FIGURE_WINDOWS:    
+        fig.show()
+        if not SAVE_FIGURE_PDFS:
+            raw_input("Press [Enter] to continue....")
+    if SAVE_FIGURE_PDFS:
+        if choice == "prompt":
+            choice = raw_input("Save figure as '%s' [y/n]? " % (filename,))
+        if choice == "y":
+            fig.savefig(filename,**kwargs)
 
 
 # =============================================

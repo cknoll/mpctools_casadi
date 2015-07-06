@@ -1,10 +1,12 @@
 # Runs all of the example files.
 import sys, os, traceback
 import matplotlib.pyplot as plt
-import mpctools.solvers, mpctools.legacy.solvers
+import mpctools.solvers, mpctools.legacy.solvers, mpctools.plots
 
 mpctools.solvers.setMaxVerbosity(0)
 mpctools.legacy.solvers.setMaxVerbosity(0)
+mpctools.plots.SHOW_FIGURE_WINDOWS = False
+mpctools.plots.SHOWANDSAVE_DEFAULT_CHOICE = "y" # Save figures without prompting.
 
 stdout = sys.__stdout__
 devnull = open(os.devnull,"w")

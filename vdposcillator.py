@@ -76,6 +76,6 @@ for method in solvers.keys():
         x[method][t+1,:] = vdp.sim(x[method][t,:],u[method][t,:])
     fig = mpc.plots.mpcplot(x[method],u[method],times,
                             np.zeros(x[method].shape),title=method)
-    fig.savefig("vdposcillator_%s.pdf" % (method,),facecolor="none")
+    mpc.plots.showandsave(fig,"vdposcillator_%s.pdf" % (method,),facecolor="none")
         
         

@@ -129,4 +129,4 @@ phaseax.legend(loc="upper right")
 for ax in timexax + timeuax:
     mpc.plots.zoomaxis(ax,yscale=1.1)
 fig.tight_layout(pad=.5)        
-fig.savefig("nmpc_exercise_full.pdf")        
+mpc.plots.showandsave(fig,"nmpc_exercise_full.pdf")        

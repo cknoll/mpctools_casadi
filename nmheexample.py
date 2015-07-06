@@ -157,4 +157,4 @@ for i in range(Nx):
     ax.plot(tplot[:-1],xhat[:,i],"o",color=colors[i],markeredgecolor="none",
             markersize=3)
 mpc.plots.zoomaxis(ax, xscale=1.05,yscale=1.05)
-fig.savefig("nmhe_exercise.pdf")
+mpc.plots.showandsave(fig,"nmhe_exercise.pdf")

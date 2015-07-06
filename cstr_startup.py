@@ -287,4 +287,4 @@ markers = {"lmpc":"s", "nmpc":"o", "uncont":"^"}
 plotbounds = dict([(k,bounds[k][0]) for k in ["ulb","uub"]])
 fig = cstrplot(xcl, ucl, ysp, colors=colors, contVars=contVars, labels=labels,
                keys=keys, markers={}, bounds=plotbounds, ilegend=2)
-fig.savefig("cstr_startup.pdf",facecolor="none")
+mpc.plots.showandsave(fig,"cstr_startup.pdf",facecolor="none")

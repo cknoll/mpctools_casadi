@@ -415,4 +415,4 @@ for linear in [True,False]:
        
     fig = cstrplot(x,u,ysp=None,contVars=[],
                    title="Linear" if linear else "Nonlinear")
-fig.savefig("cstr_nonlinear.pdf")
+mpc.plots.showandsave(fig,"cstr_nonlinear.pdf")

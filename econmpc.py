@@ -90,7 +90,7 @@ ax.set_xlabel("$Q$ (L/min)")
 ax.set_ylabel("Lagrangian (Slice in $Q$ with $c = c_{ss}$)")
 ax.legend(loc="upper center")
 fig.tight_layout(pad=.5)
-fig.savefig("duality.pdf")
+mpc.plots.showandsave(fig,"duality.pdf")
 
 # Build controller.
 contargs = dict(
@@ -202,4 +202,4 @@ for eq in equations:
     costax.set_ylabel("Economic Cost")
     costax.set_title("Objective %s" % (eq,))
     fig.tight_layout(pad=.5)
-    fig.savefig("econmpc%s.pdf" % (eq,))
+    mpc.plots.showandsave(fig,"econmpc%s.pdf" % (eq,))
