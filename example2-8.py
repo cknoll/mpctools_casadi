@@ -6,6 +6,7 @@ usePf = False
 # Imports.
 import numpy as np
 import mpctools.legacy.tools as mpc
+import mpctools.plots as mpcplots
 import matplotlib.pyplot as plt
 
 N = 3
@@ -73,6 +74,7 @@ uopt = {}
 phiopt = {}
 figure = plt.figure(figsize=(6,8))
 guessmethod = 0
+print "\n-----------------\nGuess Method (run)\n-----------------"
 for guessmethod in range(Nguessmethods):
     guess = {}
     opt = {}
@@ -113,4 +115,4 @@ for guessmethod in range(Nguessmethods):
     elif guessmethod == Nguessmethods - 1:
         ax.set_xlabel(r"$\theta/\pi$")
 plt.tight_layout(pad=.5)
-plt.savefig("example2-8%s.pdf" % ("Pf" if usePf else "",))
+mpcplots.showandsave(plt.gcf(),"example2-8%s.pdf" % ("Pf" if usePf else "",))

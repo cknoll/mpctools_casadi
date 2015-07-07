@@ -4,6 +4,7 @@
 import numpy as np
 import scipy.signal as spsignal
 import mpctools.legacy as mpc
+import mpctools.plots as mpcplots
 
 # Define optimal periodic solution.
 T = 1
@@ -46,4 +47,4 @@ u = solution["u"]
 
 # Plot things.
 fig = mpc.plots.mpcplot(x,u,t,f(t[np.newaxis,:]),timefirst=False)
-fig.show()
+mpcplots.showandsave(fig,"periodicmpcexample.pdf")

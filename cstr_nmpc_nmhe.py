@@ -435,4 +435,7 @@ def cstrplot(x,u,ysp=None,contVars=[],title=None):
 
 
 estfig = cstrplot(xhatm[:,:Nx],u[:-1,:],ysp=None,contVars=[],title="Estimated")
+mpc.plots.showandsave(estfig,"cstr_estimated.pdf")
 actfig = cstrplot(x,u[:-1,:],ysp=ysp,contVars=contVars,title="Actual")
+mpc.plots.showandsave(actfig,"cstr_actual.pdf")
+

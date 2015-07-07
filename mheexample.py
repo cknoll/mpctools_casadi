@@ -146,3 +146,4 @@ if doPlots:
     ax.set_xlabel("Time")
     ax.legend()
     f.tight_layout(pad=.5)
+    mpc.plots.showandsave(f,"mpcexample.pdf")

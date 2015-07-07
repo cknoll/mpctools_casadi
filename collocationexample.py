@@ -1,6 +1,7 @@
 import mpctools.legacy.tools as mpc
 import mpctools.legacy.solvers as solvers
 import mpctools.util as mpcutil
+import mpctools.plots as mpcplots
 import numpy as np
 import casadi
 from mpctools import colloc
@@ -68,5 +69,4 @@ for i in range(2):
     ax.set_ylabel("$x_{%d}$" % (i,))    
     ax.legend(loc="upper right")
 ax.set_xlabel("Time")
-
-
+mpcplots.showandsave(f,"collocationexample.pdf")

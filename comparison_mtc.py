@@ -88,4 +88,6 @@ for t in range(Nsim):
 #<<ENDCHUNK>>
     
 # Plots.
-mpc.plots.mpcplot(x,u,times)
+fig = mpc.plots.mpcplot(x,u,times)
+mpc.plots.showandsave(fig,"comparison_mtc.pdf")
+

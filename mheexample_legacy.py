@@ -6,6 +6,7 @@ from numpy import random
 from scipy import linalg
 import mpctools.legacy.tools as mpc
 import mpctools.util as mpcutil
+import mpctools.plots as mpcplots
 import matplotlib.pyplot as plt
 
 random.seed(927) # Seed random number generator.
@@ -127,3 +128,4 @@ if doPlots:
     ax.set_xlabel("Time")
     ax.legend()
     f.tight_layout(pad=.5)
+    mpcplots.showandsave(f,"mheexample_legacy.pdf")

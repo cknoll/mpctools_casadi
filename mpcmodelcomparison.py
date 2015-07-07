@@ -53,6 +53,7 @@ opt_lmpc = mpc_old.linear.lmpc([A],[B],x0,Nt,[Q],[R],bounds=bounds,
 fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp.T,
                              xinds=[0,1],timefirst=False)
 fig_lmpc.canvas.set_window_title("Linear MPC")
+mpc.plots.showandsave(fig_lmpc,"mpcmodelcomparison_linear.pdf")
 
 # Discrete-time example
 def Fdiscrete(x,u):
@@ -65,6 +66,7 @@ opt_dnmpc = mpc.nmpc(F,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
 fig_dnmpc = mpc.plots.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,
                               xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
+mpc.plots.showandsave(fig_dnmpc,"mpcmodelcomparison_discretized.pdf")
 
 # Continuous time interfaces in nmpc.
 def fcontinuous(x,u):
@@ -83,6 +85,7 @@ opt_crk4nmpc = mpc.nmpc(F_rk4,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
 fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,
                                  xsp,xinds=[0,1])
 fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
+mpc.plots.showandsave(fig_crk4nmpc,"mpcmodelcomparison_rk4.pdf")
 
 print "\n=Collocation Discretization="
 Ncolloc = N.copy()
@@ -92,6 +95,7 @@ opt_ccollocnmpc = mpc.nmpc(f,l,Ncolloc,x0,lb,ub,Pf=Pf,verbosity=verb,
 fig_ccollocnmpc = mpc.plots.mpcplot(opt_ccollocnmpc["x"],
                                     opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
 fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
+mpc.plots.showandsave(fig_ccollocnmpc,"mpcmodelcomparison_collocation.pdf")
 
 # Discrete-time but with Casadi's integrators. This is slow, but it may be
 # necessary if your ODE is difficult to discretize.
@@ -103,4 +107,5 @@ opt_integrator = mpc.nmpc(F_integrator,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,
 fig_integrator = mpc.plots.mpcplot(opt_integrator["x"],
                                    opt_integrator["u"],t,xsp,xinds=[0,1])
 fig_integrator.canvas.set_window_title("NMPC with Casadi Integrators")
+mpc.plots.showandsave(fig_integrator,"mpcmodelcomparison_casadiintegrator.pdf")
 

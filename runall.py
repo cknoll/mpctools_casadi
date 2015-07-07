@@ -16,7 +16,6 @@ logfile = open("runall.log","w")
 examplefiles = [
     "cstr.py",
     "cstr_startup.py",
-    "cstr_nonlinear.py",
     "cstr_nmpc_nmhe.py",
     "collocationexample.py",
     "comparison_casadi.py",

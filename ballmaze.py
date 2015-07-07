@@ -128,5 +128,7 @@ def plotsol(x,holes,xmax,cushion=1):
     ax.set_ylabel("$x_2$")
     ax.set_xlim((-cushion,xmax+cushion))
     ax.set_ylim((-cushion,xmax+cushion))
+    return f
     
-plotsol(x,holes,xmax,cushion)
+fig = plotsol(x,holes,xmax,cushion)
+mpc.plots.showandsave(fig, "ballmaze.pdf")

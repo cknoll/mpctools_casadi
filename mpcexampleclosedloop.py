@@ -3,6 +3,7 @@
 # Imports.
 import numpy as np
 import mpctools.legacy as mpc
+import mpctools.plots as mpcplots
 
 # Define continuous time model.
 Acont = np.array([[0,1],[0,-1]])
@@ -49,4 +50,4 @@ xcl[:,nsim] = x0 # Store final state.
 # timefirst = False.
 fig = mpc.plots.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0],
                         timefirst=False)
-fig.show()
+mpcplots.showandsave(fig,"mpcexampleclosedloop.pdf")

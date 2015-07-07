@@ -107,6 +107,7 @@ for method in ["nmpc","lmpc","solver","solver_SX"]:
     fig = mpc.plots.mpcplot(xcl[method],ucl[method],t,np.zeros(
         xcl[method].shape),xinds=[0],timefirst=False)
     fig.canvas.set_window_title(method)
+    mpc.plots.showandsave(fig,"mpcoopexample_%s.pdf" % (method,))
 
 for m in tottimes.keys():
     print "%15s: %10.5g s total time, %10.5g s avg. sol. time" % (m,

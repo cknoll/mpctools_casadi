@@ -178,3 +178,5 @@ for i in range(Nx):
     ax.set_ylabel("State %d" % (i + 1))
 
 fig.tight_layout(pad=.5)
+import mpctools.plots # Need to grab one function to show plot.
+mpctools.plots.showandsave(fig,"comparison_casadi.pdf")

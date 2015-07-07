@@ -77,5 +77,3 @@ for method in solvers.keys():
     fig = mpc.plots.mpcplot(x[method],u[method],times,
                             np.zeros(x[method].shape),title=method)
     mpc.plots.showandsave(fig,"vdposcillator_%s.pdf" % (method,),facecolor="none")
-        
-        
