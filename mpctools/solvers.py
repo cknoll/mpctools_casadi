@@ -158,9 +158,7 @@ class ControlSolver(object):
         
         nlp = XFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(**nlpOutputs))
         solver = casadi.NlpSolver("ipopt",nlp)
-        solver.setOption("print_level",min(12,max(0,self.verbosity)))
-        solver.setOption("print_time",self.verbosity > 2)  
-        solver.setOption("max_cpu_time",self.timelimit)
+        
         # Note that there is an option "check_derivatives_for_naninf" that in
         # theory would error out if NaNs or Infs are encountered, but it seems
         # to just crash Python whenever anything bad happens.
@@ -182,6 +180,13 @@ class ControlSolver(object):
         starttime = time.clock()
         solver = self.__solver
 
+        # Specify print and time limit options.
+        solver.setOption("print_level",min(12,max(0,self.verbosity)))
+        solver.setOption("print_time",self.verbosity > 2)  
+        solver.setOption("max_cpu_time",self.timelimit)
+        solver.init()
+        
+        # Now set guess and bounds.
         solver.setInput(self.guess,"x0")
         solver.setInput(self.lb,"lbx")
         solver.setInput(self.ub,"ubx")
@@ -212,7 +217,7 @@ class ControlSolver(object):
                 print("***Warning: NaN or Inf encountered during function "
                     "evaluation.")
         if self.verbosity > 1:
-            print("Took %g s." % (endtime - starttime))
+            print("Took %g s." % (endtime - starttime,))
         self.stats["status"] = status
         self.stats["time"] = endtime - starttime
          

@@ -439,7 +439,6 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
         con = []
         conlb = np.array([])
         conub = np.array([])
-    #util.keyboard()
     if periodic and "x" in struct.keys():
         con.append(struct["x"][0] - struct["x"][-1])
         conlb = np.concatenate([conlb,np.zeros((N["x"],))])
@@ -538,11 +537,11 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     
     Returns a dictionary with entries "state", "algebra", and "measurement".
     Note that the relevant fields will be missing if f, g, or h are set to
-    None. Each entry in the return dictionary will be a list of lists, although
-    for this class of constraint, each of those lists will have only one
-    element. The list of stage costs is in "cost". This is also a list of
-    lists, but each sub-list only has one element unless you are using a
-    continuous objective function.
+    None. Each entry in the return dictionary will be a list of lists, with
+    each sublist corresponding to a single time segment worth of constraints.
+    The list of stage costs is in "cost". This is also a list of lists, but
+    each sub-list only has one element unless you are using a continuous
+    objective function.
     """
     
     # Figure out what variables are supplied.

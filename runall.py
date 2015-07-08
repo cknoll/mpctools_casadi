@@ -31,6 +31,7 @@ examplefiles = [
     "vdposcillator.py",
     "ballmaze.py",
     "econmpc.py",
+    "airplane.py",
 ]
 
 for f in examplefiles:
