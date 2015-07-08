@@ -1,9 +1,9 @@
 \documentclass[xcolor=dvipsnames]{beamer}
 
 \usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
 
 \usepackage{mpctools}
-\usepackage{standalone}
 
 \title{MPC with Casadi/Python}
 \date{June 10, 2015}
@@ -13,85 +13,8 @@
 
 \frame{\titlepage}
 
-%\begin{frame}{Windows Installation}
-%    A Windows Python distribution.
-%    \begin{itemize}
-%        \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
-%        \item E.g., Python(x,y): \smallurl{https://code.google.com/p/pythonxy/}
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    CasADi 2.2.0:
-%    \begin{itemize}
-%        \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/BinaryInstallationWindows}
-%        \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
-%        \item Install as you would normal Windows programs
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    Our Python package
-%    \begin{itemize}
-%        \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
-%        \item Download \texttt{.zip} file on the left.
-%    \end{itemize}
-%\end{frame}
-%
-%\begin{frame}[fragile]{Ubuntu/Debian Installation}
-%    Python, NumPy, SciPy, matplotlib
-%    \begin{itemize}
-%        \item E.g., with Spyder (an IDE): \lstinline[style=shell]@sudo apt-get install spyder@
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    CasADi 2.2.0:
-%    \begin{itemize}
-%        \item Check dependencies from \smallurl{https://github.com/casadi/casadi/wiki/Binaryinstallationlinux}
-%        \item Download from \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
-%        \item Install: \lstinline[style=shell]@dpkg -i <filename>.deb@
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    Our python modules
-%    \begin{itemize}
-%        \item Clone Mercurial repo: \lstinline[style=shell]!hg clone https://hg.cae.wisc.edu/hg/mpc-tools-casadi!
-%        \item Or, download a copy from \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
-%    \end{itemize}
-%\end{frame}
-%
-%\begin{frame}{Mac Installation (Difficult)}
-%    Python, NumPy, SciPy, matplotlib
-%    \begin{itemize}
-%        \item E.g., via Homebrew: \lstinline[style=shell]!brew install python!
-%        \item Packages via \texttt{pip}: \lstinline[style=shell]!pip install ipython matplotlib numpy scipy
-%        !
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    CasADi 2.2.0
-%    \begin{itemize}
-%        \item You'll have to build from sources.
-%        \item See \smallurl{https://github.com/casadi/casadi/wiki/InstallationMac} for details.
-%        \item We can only provide minimal support for this option.
-%    \end{itemize}
-%    
-%    \medskip
-%    
-%    Our Python package
-%    \begin{itemize}
-%        \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
-%        \item Download \texttt{.zip} file on the left.
-%    \end{itemize}
-%\end{frame}
-
-\input{install.tex}
-
 \begin{frame}{What's in \texttt{mpc-tools-casadi}?}
-    A Python package: \texttt{mpctools}.
+    A Python package: \texttt{mpctools}\footnote{See \smallurl{install.pdf} for detailed installation instructions.}
     \begin{itemize}
         \item You should put the \texttt{mpctools} folder somewhere on your Python path.
         \item In Python, use \lstinline[style=python]!import sys; print sys.path! to see what folders are on your path.
@@ -107,28 +30,10 @@
     
     \medskip
     
-    A bunch of example files.
+    A bunch of example files, e.g.,
     \begin{itemize}
         \item \texttt{nmpcexample.py}: Example of linear vs. nonlinear MPC.
         \item \texttt{cstr\_startup.py}: startup and a setpoint change (with no disturbances) for the CSTR system from Example 1.11.
-        \item \texttt{nmheexample.py}: NMHE (with EKF to update prior) for a batch reactor (See Example 4.27 in the textbook).
-    \end{itemize}
-\end{frame}
-
-\begin{frame}{Making Sure Everything Works}
-    To check that everything works, try to run the examples in \texttt{mpc-tools-casadi}.
-    \begin{itemize}
-        \item \texttt{runall.py} will run everything and tell you if there are errors.
-        \item You won't see any output, however.
-    \end{itemize}
-    
-    \medskip
-    
-    If this fails, open a Python interpreter and try \texttt{import casadi}.
-    \begin{itemize}
-        \item If this doesn't work, then CasADi must have installed to the wrong Python distribution.
-        \item If you have multiple Python distributions on your machine, don't (or at least make sure you're using the one you think you are).
-        \item Make sure you are using Python 2.7 (not 3.x).
     \end{itemize}
 \end{frame}
 
@@ -592,7 +497,7 @@ Using \texttt{mpc-tools-casadi}, we can replace the LQR and KF from Example 1.11
 
 \begin{itemize}
     \item \texttt{cstr\_startup.py} shows basic structure and a setpoint change.
-    \item \texttt{cstr\_nonlinear.py} shows steady-state target finding and NMHE.
+    \item \texttt{cstr\_nmpc\_nmhe.py} shows steady-state target finding and NMHE.
     \item See the cheatsheet for important functions and syntax.
 \end{itemize}
 
@@ -611,8 +516,8 @@ Using \texttt{mpc-tools-casadi}, we can replace the LQR and KF from Example 1.11
     \begin{itemize}
         \item True continuous-time formulation
         \begin{itemize}
-            \item Time-varying functions not supported
-            \item Quadrature for objective function is available via Collocation
+            \item Continuous-time models with explicit time dependence are not supported
+            \item Quadrature for continuous-time objective function is available via collocation
             \item DAE systems are possible in principle
         \end{itemize}
         \item Quality guess generation

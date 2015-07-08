@@ -33,7 +33,7 @@
     
     \medskip
     
-    To CasADi and \texttt{mpctools} to your Python path
+    Add CasADi and \texttt{mpctools} to your Python path
     \begin{itemize}
         \item Open a Python interpreter (run \lstinline[style=shell]!python! from a terminal/command prompt)
         \item Run the commands \lstinline[style=python]!import site; print site.getsitepackages()! to see where your site packages are stored
@@ -68,44 +68,20 @@
 \end{frame}
 
 \begin{frame}{Making Sure Everything Works}
-    First, open a Python interpreter and run \lstinline[style=python]!import casadi, mpctools!.
+    First, open a Python interpreter\footnote{Open a command prompt/terminal in the \smallurl{mpc-tools-casadi} folder and enter \lstinline[style=shell]!python!. You may also be able to right-click and choose ``Open a Python console''.} and run \lstinline[style=python]!import casadi, mpctools!.
     \begin{itemize}
         \item If this doesn't work, make sure your CasADi folder shows up in \lstinline[style=python]!import sys; print sys.path!.
         \item If you have multiple Python distributions on your machine, don't (or at least make sure you're using the one you think you are).
         \item Make sure you are using Python 2.7 (not 3.x).
     \end{itemize}
         
-    Then, try to run the examples in \texttt{mpc-tools-casadi}.
+    Then, try to run the examples in \smallurl{mpc-tools-casadi}.
     \begin{itemize}
-        \item \texttt{runall.py} will run everything and tell you if there are errors.
-        \item You won't see any output, however.
+        \item In the Python interpreter, use \lstinline[style=python]!execfile("filename.py")!.
+        \item \smallurl{runall.py} will run everything and tell you if there are errors, but you won't see any plots.
     \end{itemize}
 \end{frame}
 
-\begin{frame}{What's in \texttt{mpc-tools-casadi}?}
-    A Python package: \texttt{mpctools}.
-    \begin{itemize}
-        \item We recommend putting \texttt{mpctools} with CasADi, but it can be anywhere on your Python path.
-        \item In Python, use \lstinline[style=python]!import sys; print sys.path! to see what folders are on your path.
-    \end{itemize}
-    
-    \medskip
-    
-    A cheatsheet (in the \texttt{doc} folder).
-    \begin{itemize}
-        \item Should get you started writing your own code.
-        \item Compares plain CasADi vs. CasADi + \texttt{mpctools}.
-    \end{itemize}
-    
-    \medskip
-    
-    A bunch of example files.
-    \begin{itemize}
-        \item \texttt{nmpcexample.py}: Example of linear vs. nonlinear MPC.
-        \item \texttt{cstr\_startup.py}: startup and a setpoint change (with no disturbances) for the CSTR system from Example 1.11.
-        \item \texttt{nmheexample.py}: NMHE (with EKF to update prior) for a batch reactor (See Example 4.27 in the textbook).
-    \end{itemize}
-\end{frame}
 
 \begin{frame}{Software Relationships}
     \centering
@@ -117,7 +93,7 @@
             clib/.style={code,draw=Red,text=Red},
             fortran/.style={code,draw=Blue,text=Blue},
             backend/.style={code,draw=orange,text=orange},
-            level 1/.style={level distance=2cm,sibling distance=3.75cm},
+            level 1/.style={level distance=2.5cm,sibling distance=3.75cm},
             level 2/.style={level distance=2.25cm,sibling distance=3cm},
             level 3/.style={level distance=2.5cm,sibling distance=1.5cm},
             level 4/.style={level distance=2.5cm,sibling distance=1cm},
@@ -125,7 +101,7 @@
             arw/.style={->,thick},
             scale=.9,
         ]
-        \draw (0,0) node[python] {main.py}
+        \draw (0,0) node[python] {example.py}
         child
         {
             node[python] {Python\\Standard\\Library}
