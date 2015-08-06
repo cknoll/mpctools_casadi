@@ -2,6 +2,7 @@ from __future__ import print_function, division # Grab some handy Python3 stuff.
 import scipy.linalg
 import casadi
 import casadi.tools as ctools
+import collections
 import numpy as np
 import pdb
 import itertools
@@ -456,4 +457,42 @@ def dummy_context(*args):
     Dummy context for a with statement.
     """
     # We need this in solvers.py.
-    yield    
+    yield
+
+
+class ArrayDict(collections.MutableMapping):
+    """
+    Python dictionary of numpy arrays.
+
+    When instantiating or when setting an item, calls np.array to convert
+    everything.
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Creates a dictionary and then wraps everything in np.array.
+        """
+        self.__arraydict__ = dict() # This is where we actually store things.
+        self.update(dict(*args, **kwargs)) # We get this method for free.      
+    
+    def __setitem__(self, k, v):
+        """
+        Wraps v with np.array before setting.
+        """
+        self.__arraydict__[k] = np.array(v)
+    
+    # The rest of the methods just perform the corresponding dict action.
+    def __getitem__(self, k):
+        return self.__arraydict__[k]
+    
+    def __len__(self):
+        return len(self.__arraydict__)
+    
+    def __iter__(self):
+        return iter(self.__arraydict__)
+        
+    def __delitem__(self, k):
+        del self.__arraydict__[k]
+        
+    def __repr__(self):
+        return repr(self.__arraydict__)
+    

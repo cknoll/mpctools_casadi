@@ -5,7 +5,6 @@ import casadi.tools as ctools
 import scipy.linalg
 import colloc
 import warnings
-import sys
 
 # Other things from our package.
 import util
@@ -87,6 +86,15 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     N = N.copy()
     guess = guess.copy()
     funcargs = funcargs.copy()
+    
+    # Also, make sure certain inputs are dictionaries of numpy arrays. This
+    # also forces a copy, so we don't have to worry about modifying the user's
+    # dictionaries.    
+    lb = util.ArrayDict(lb)
+    ub = util.ArrayDict(ub)
+    guess = util.ArrayDict(guess)
+    sp = util.ArrayDict(sp)
+    extrapar = util.ArrayDict(extrapar)
    
     # Check specified sizes.
     try:
@@ -223,10 +231,14 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
     predictor step.
     """
-    
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
     guess = guess.copy()    
+    
+    # Also make sure some things are arrays of numpy dicts.
+    lb = util.ArrayDict(lb)
+    ub = util.ArrayDict(ub)
+    guess = util.ArrayDict(guess)    
     
     # Check specified sizes.
     try:
@@ -307,6 +319,12 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
     guess = guess.copy()    
+    
+    # Make sure certain dictionaries have numpy arrays.
+    lb = util.ArrayDict(lb)
+    ub = util.ArrayDict(ub)
+    guess = util.ArrayDict(guess)
+    extrapar = util.ArrayDict(extrapar)       
     
     # Check specified sizes.
     try:
