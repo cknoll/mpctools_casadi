@@ -139,12 +139,19 @@ class ControlSolver(object):
         # Now initialize the solver object.
         self.initializeSolver(isQp=isQp,scalar=scalar)        
         
-    def initializeSolver(self,isQp=False,scalar=True):
+    def initializeSolver(self,isQp=False,scalar=True,options={}):
         """
         Recreates the solver object completely.
         
-        You shouldn't really ever need to do this manually because it is called
-        automatically when the object is first created.
+        You shouldn't need to do this manually unless you are changing internal
+        ipopt options (via the options dictionary).
+        
+        For a complete list of ipopt options, see
+        
+            http://www.coin-or.org/Ipopt/documentation/node39.html
+        
+        Note that all of these are either strings or floats, and any boolean
+        values will likely cause errors.
         """
         nlpInputs = {"x" : self.__var}
         if self.__par is not None:
@@ -167,6 +174,8 @@ class ControlSolver(object):
             solver.setOption("hessian_constant","yes")
             solver.setOption("jac_c_constant","yes")
             solver.setOption("jac_d_constant","yes")
+        for (k,v) in options.iteritems():
+            solver.setOption(k,v)
         solver.init()
         
         # Finally, save the solver.

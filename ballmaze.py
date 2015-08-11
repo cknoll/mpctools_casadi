@@ -96,14 +96,17 @@ if terminalWeight:
 else:
     Pf = None
 
-# Build controller.
+# Build controller and adjust some ipopt options.
 N = {"x":Nx, "u":Nu, "e":Ne, "t":Nt}
 controller = mpc.nmpc(f, l, N, x0, lb, ub, funcargs=funcargs, e=e, Pf=Pf,
-                      ef=ef, verbosity=0, runOptimization=False)
+                      ef=ef, verbosity=(0 if movingHorizon else 4),
+                      runOptimization=False)
+controller.initializeSolver(options={"max_iter" : 5000})
+
+# Now ready for simulation.
 x = np.zeros((Nsim+1,Nx))
 x[0,:] = x0
 u = np.zeros((Nsim,Nu))
-
 for t in range(Nsim):
     controller.fixvar("x",0,x[t,:])
     controller.solve()
