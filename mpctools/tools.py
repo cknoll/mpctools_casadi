@@ -103,8 +103,8 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
                 N[i] = 1
         if e is not None and N["e"] <= 0:
             N["e"] = 1
-    except KeyError:
-        raise KeyError("Invalid or missing entries in N dictionary!")
+    except KeyError as err: 
+        raise KeyError("Missing entries in N dictionary: %s" % (err.message,))
     
     # Make sure these elements aren't present.
     for i in ["y","v"]:
@@ -984,16 +984,13 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
     
     # Now evaluate function and make a Casadi object.  
     fval = [safevertcat(f(*args))]
-    fcasadi = XFunction(args,fval)
-    fcasadi.setOption("name",funcname)
-    fcasadi.init()    
+    fcasadi = XFunction(funcname, args, fval)   
     
     if rk4:
         def wrappedf(*args):
             return fcasadi(args)[0]
         frk4 = util.rk4(wrappedf, args[0], args[1:], Delta, M)
-        fcasadi = XFunction(args,[frk4])
-        fcasadi.init()
+        fcasadi = XFunction(funcname, args, [frk4])
     
     return fcasadi
 
@@ -1060,16 +1057,17 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     # Build ODE and integrator.
     invar = casadi.daeIn(x=x0,p=casadi.vertcat(par))
     outvar = casadi.daeOut(ode=fode)
-    ode = XFunction(invar,outvar)
+    ode = XFunction("ode", invar, outvar)
     
-    integrator = casadi.Integrator("cvodes",ode)
-    integrator.setOption("abstol",abstol)
-    integrator.setOption("reltol",reltol)
-    integrator.setOption("tf",Delta)
-    integrator.setOption("name",funcname)
-    integrator.setOption("disable_internal_warnings",verbosity <= 0)
-    integrator.setOption("verbose",verbosity >= 2)
-    integrator.init()
+    # Need to package up all options first for V2.4.
+    options = {
+        "abstol" : abstol,
+        "reltol" : reltol,
+        "tf" : Delta,
+        "disable_internal_warnings" : verbosity <= 0,
+        "verbose" : verbosity >= 2,
+    }
+    integrator = casadi.Integrator(funcname, "cvodes", ode, options)
     
     # Now do the subtle bit. Integrator has arguments x0 and p, but we need
     # arguments as given by the user. First we need MX arguments.
@@ -1079,13 +1077,8 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
             in range(1,len(argsizes))]    
         
         wrappedIntegrator = integrator(x0=X0,p=casadi.vertcat(PAR))
-        F = casadi.MXFunction([X0] + PAR,wrappedIntegrator)
-        F.setOption("name",funcname)
-        F.init()
-        
-        return F
-    else:
-        return integrator
+        integrator = casadi.MXFunction(funcname, [X0] + PAR, wrappedIntegrator)
+    return integrator
 
 class DiscreteSimulator(object):
     """

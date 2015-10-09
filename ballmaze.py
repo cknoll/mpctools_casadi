@@ -5,6 +5,7 @@ import itertools
 
 # Rolling ball game example. Linear model but nonlinear constraints.
 
+# Some global options and parameters.
 movingHorizon = False
 terminalConstraint = True
 terminalWeight = False
@@ -99,9 +100,9 @@ else:
 # Build controller and adjust some ipopt options.
 N = {"x":Nx, "u":Nu, "e":Ne, "t":Nt}
 controller = mpc.nmpc(f, l, N, x0, lb, ub, funcargs=funcargs, e=e, Pf=Pf,
-                      ef=ef, verbosity=(0 if movingHorizon else 4),
-                      runOptimization=False)
-controller.initializeSolver(options={"max_iter" : 5000})
+                      ef=ef, verbosity=(0 if movingHorizon else 5),
+                      runOptimization=False, scalar=False)
+controller.initializeSolver(max_iter=5000)
 
 # Now ready for simulation.
 x = np.zeros((Nsim+1,Nx))

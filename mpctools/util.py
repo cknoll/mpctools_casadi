@@ -87,7 +87,6 @@ def getLinearization(f,xs,us=None,ds=None,Delta=None):
     
     # Get Jacobian.
     jacobian = f.fullJacobian()
-    jacobian.init()
     Js = np.array(jacobian(args)[0])        
     
     A = Js[:,:N["x"]]

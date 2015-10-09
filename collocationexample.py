@@ -7,12 +7,16 @@ import casadi
 from mpctools import colloc
 import matplotlib.pyplot as plt
 
+raise NotImplementedError("Needs to be updated viz. removal of legacy code!")
+
 # Build model.
 k00 = -2
 k11 = -.5
 k10 = 1
 
-f = lambda x, u: [k00*x[0], k11*x[1] + k10*x[0]]
+def f(x,u):
+    """Model function"""
+    return [k00*x[0], k11*x[1] + k10*x[0]]
 Nx = 2
 Nu = 1
 Nd = 0

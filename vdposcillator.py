@@ -27,14 +27,17 @@ ode_rk4_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="F",
                                    rk4=True,Delta=Delta,M=1)
 
 # Define stage cost and terminal weight.
-def lfunc(x,u): return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
+def lfunc(x,u):
+    return mpc.mtimes(x.T,x) + mpc.mtimes(u.T,u)
 l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
 
-def Pffunc(x): return 10*mpc.mtimes(x.T,x)
+def Pffunc(x):
+    return 10*mpc.mtimes(x.T,x)
 Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 # Create linear discrete-time model for comparison.
-def Ffunc(x,u): return (mpc.mtimes(mpc.util.DMatrix(lin["A"]),x) +
+def Ffunc(x,u):
+    return (mpc.mtimes(mpc.util.DMatrix(lin["A"]),x) +
     mpc.mtimes(mpc.util.DMatrix(lin["B"]),u))
 F = mpc.getCasadiFunc(Ffunc, [Nx,Nu], ["x","u"], funcname="F")
 

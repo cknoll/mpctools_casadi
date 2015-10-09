@@ -102,14 +102,40 @@ class ControlSolver(object):
     
     @property
     def verbosity(self):
-        return self.__verbosity
+        return self.__settings["verbosity"]
         
     @verbosity.setter
-    def verbosity(self,v):
-        self.__verbosity = min(min(max(v,0),12),_MAX_VERBOSITY)
+    def verbosity(self, v):
+        v = min(min(max(v,0),12), _MAX_VERBOSITY)
+        self.__changesettings(verbosity=v)
+    
+    @property
+    def name(self):
+        return self.__settings["name"]
         
-    def __init__(self,var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
-        parval=None,verbosity=5,timelimit=60,isQp=False,scalar=True):
+    @name.setter
+    def name(self, n):
+        self.__changesettings(name=n)
+        
+    @property
+    def timelimit(self):
+        return self.__settings["timelimit"]
+        
+    @timelimit.setter
+    def timelimit(self, t):
+        self.__changesettings(timelimit=t)
+    
+    def __changesetting(self, **settings):
+        """
+        Changes fields of the settings dictionary and sets update flag.
+        """
+        self.__settings.update(settings)
+        self.__changed = True
+    
+    
+    def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
+                 par=None, parval=None, verbosity=5, timelimit=60, isQp=False,
+                 scalar=True, name="ControlSolver", ipoptoptions={}):
         """
         Initialize the solver object.
         
@@ -132,68 +158,108 @@ class ControlSolver(object):
         self.__parval = parval
         
         self.__stats = {}
-        
-        self.verbosity = verbosity
-        self.timelimit = timelimit
+        self.__settings = {} # Need to initialize this.
+        self.__changesetting(scalar=scalar, isQp=isQp, name=name,
+                               verbosity=verbosity, timelimit=timelimit)
         
         # Now initialize the solver object.
-        self.initializeSolver(isQp=isQp,scalar=scalar)        
+        self.initializeSolver(**ipoptoptions)        
         
-    def initializeSolver(self,isQp=False,scalar=True,options={}):
+    def initializeSolver(self, name=None, **options):
         """
         Recreates the solver object completely.
         
         You shouldn't need to do this manually unless you are changing internal
-        ipopt options (via the options dictionary).
+        ipopt options (via keyword arguments).
         
-        For a complete list of ipopt options, see
-        
-            http://www.coin-or.org/Ipopt/documentation/node39.html
-        
-        Note that all of these are either strings or floats, and any boolean
-        values will likely cause errors.
+        For a complete list of ipopt options, use availableIpoptOptions. Note
+        that all of these are either strings or floats, and any boolean values
+        will likely cause errors.
         """
-        nlpInputs = {"x" : self.__var}
-        if self.__par is not None:
-            nlpInputs["p"] = self.__par
-        nlpOutputs = {"f" : self.__obj, "g" : self.__con}
-    
-        if scalar:
+        if name is not None:
+            self.name = name
+        
+        if self.__settings["scalar"]:
             XFunction = casadi.SXFunction
         else:
             XFunction = casadi.MXFunction
         
-        nlp = XFunction(casadi.nlpIn(**nlpInputs),casadi.nlpOut(**nlpOutputs))
-        solver = casadi.NlpSolver("ipopt",nlp)
+        nlpInputs = {"x" : self.__var}
+        if self.__par is not None:
+            nlpInputs["p"] = self.__par
+        nlpOutputs = {"f" : self.__obj, "g" : self.__con}
+        
+        nlp = XFunction(self.name + "_nlp", casadi.nlpIn(**nlpInputs),
+                        casadi.nlpOut(**nlpOutputs))
+
+        # Because of Casadi changes in Version 2.4, we have to build up all the
+        # options and pass them to the constructor. We build up a list of
+        # defaults first, and then add any user options.
+        
+        # Print ant time limit options.
+        options["print_level"] =  min(12, max(0, self.verbosity))
+        options["print_time"] = self.verbosity > 2  
+        options["max_cpu_time"] = self.timelimit        
         
         # Note that there is an option "check_derivatives_for_naninf" that in
         # theory would error out if NaNs or Infs are encountered, but it seems
         # to just crash Python whenever anything bad happens.
-        solver.setOption("eval_errors_fatal",True)
-        if isQp:
-            solver.setOption("hessian_constant","yes")
-            solver.setOption("jac_c_constant","yes")
-            solver.setOption("jac_d_constant","yes")
-        for (k,v) in options.iteritems():
-            solver.setOption(k,v)
-        solver.init()
+        options["eval_errors_fatal"] = True
+                
+        # Options if problem is a QP.
+        if self.__settings["isQp"]:
+            options["hessian_constant"] = "yes"
+            options["jac_c_constant"] = "yes"
+            options["jac_d_constant"] = "yes"
+
+        # Finally, create the solver object.
+        solver = casadi.NlpSolver(self.name, "ipopt", nlp, options)
+#        for (k,v) in kwargs.iteritems():
+#            try:
+#                solver.setOption(k,v)
+#            except RuntimeError as err:
+#                msg = [m.replace("printOptions",
+#                                 "ControlSolver.availableIpoptOptions")
+#                                 for m in err.message.split("\n")[1:]]
+#                raise RuntimeError("\n".join(msg))
+#        solver.init()
         
-        # Finally, save the solver.
+        # Finally, save the solver and unset the changed flag.
         self.__solver = solver
+        self.__changed = False
+    
+    def availableIpoptOptions(self, display=True):
+        """
+        Returns a dictionary of ipopt options and prints web link.
         
+        Dictionary entry "__web__" includes the link to the online ipopt
+        documentation, which may be better. Set display to False to suppress
+        printing.
+        """
+        names = self.__solver.getOptionNames()
+        options = {}
+        for n in names:
+            o = self.__solver.getOptionDescription(n)
+            o = o.replace("(see IPOPT documentation)","").strip()
+            options[n] = o
+        options["__web__"] = ("http://www.coin-or.org/"
+            "Ipopt/documentation/node39.html")
+        if display:
+            print("See\n\n    %s\n\nfor details about IPOPT options."
+                % (options["__web__"],)) 
+            print("\nOptions can be set using keyword arguments to"
+                " ControlSolver.initializeSolver.\n")
+        return options
+    
     def solve(self):
         """
         Solve the current solver object.
         """
         # Solve the problem and get optimal variables.
         starttime = time.clock()
+        if self.__changed:
+            self.initializeSolver()
         solver = self.__solver
-
-        # Specify print and time limit options.
-        solver.setOption("print_level",min(12,max(0,self.verbosity)))
-        solver.setOption("print_time",self.verbosity > 2)  
-        solver.setOption("max_cpu_time",self.timelimit)
-        solver.init()
         
         # Now set guess and bounds.
         solver.setInput(self.guess,"x0")
