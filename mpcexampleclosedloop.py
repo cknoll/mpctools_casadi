@@ -2,7 +2,7 @@
 
 # Imports.
 import numpy as np
-import mpctools.legacy as mpc
+import mpctools as mpc
 import mpctools.plots as mpcplots
 
 # Define continuous time model.
@@ -13,41 +13,46 @@ m = Bcont.shape[1] # Number of control elements
 
 # Discretize.
 dt = .025
-N = 20
-(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
-A = [Adisc]
-B = [Bdisc]
+Nt = 20
+(A, B) = mpc.util.c2d(Acont,Bcont,dt)
+def ffunc(x,u):
+    """Linear discrete-time model."""
+    return mpc.mtimes(A, x) + mpc.mtimes(B, u)
+f = mpc.getCasadiFunc(ffunc, [n, m], ["x", "u"], "f")
 
 # Bounds on u.
 umax = 1
-ulb = [np.array([-umax])]
-uub = [np.array([umax])]
-bounds = dict(uub=uub,ulb=ulb)
+lb = dict(u=[-umax])
+ub = dict(u=[umax])
 
-# Define Q and R matrices and q penalty for periodic solution.
-Q = [np.diag([1,0])]
-q = [np.zeros((n,1))]
-R = [np.eye(m)]
+# Define Q and R matrices.
+Q = np.diag([1,0])
+R = np.eye(m)
+def lfunc(x,u):
+    """Quadratic stage cost."""
+    return mpc.mtimes(x.T, Q, x) + mpc.mtimes(u.T, R, u)
+l = mpc.getCasadiFunc(lfunc, [n,m], ["x","u"], "l")
 
-# Initial condition.
+# Initial condition and sizes.
 x0 = np.array([10,0])
+N = {"x" : n, "u" : m, "t" : Nt}
 
+# Now simulate.
 nsim = 100
 t = np.arange(nsim+1)*dt
 xcl = np.zeros((n,nsim+1))
 xcl[:,0] = x0
 ucl = np.zeros((m,nsim))
 for k in range(nsim):
-    # Solve linear MPC problem.
-    sol = mpc.linear.lmpc(A,B,x0,N,Q,R,q=q,bounds=bounds,verbosity=0)
+    sol = mpc.nmpc(f, l, N, x0, lb, ub, verbosity=0)   
     print "Iteration %d Status: %s" % (k,sol["status"])
-    xcl[:,k] = sol["x"][:,0]
-    ucl[:,k] = sol["u"][:,0]
-    x0 = np.dot(A[0],x0) + np.dot(B[0],sol["u"][:,0])
+    xcl[:,k] = sol["x"][0,:]
+    ucl[:,k] = sol["u"][0,:]
+    x0 = ffunc(x0, ucl[:,k]) # Update x0.
 xcl[:,nsim] = x0 # Store final state.
 
 # Plot things. Since time is along the second dimension, we must specify
 # timefirst = False.
 fig = mpc.plots.mpcplot(xcl,ucl,t,np.zeros(xcl.shape),xinds=[0],
                         timefirst=False)
-mpcplots.showandsave(fig,"mpcexampleclosedloop.pdf")
+mpcplots.showandsave(fig, "mpcexampleclosedloop.pdf")

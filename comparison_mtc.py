@@ -28,7 +28,7 @@ vdp = mpc.DiscreteSimulator(ode,
 # discretization.
 ode_rk4_casadi = mpc.getCasadiFunc(ode,
     [Nx,Nu], ["x","u"], funcname="F",
-    rk4=True,Delta=Delta,M=1)
+    rk4=True, Delta=Delta, M=1)
 
 #<<ENDCHUNK>>
 
@@ -45,8 +45,8 @@ Pf = mpc.getCasadiFunc(Pffunc,
 #<<ENDCHUNK>>
 
 # Bounds on u.
-lb = {"u" : -.75*np.ones((Nt,Nu))}
-ub = {"u" : np.ones((Nt,Nu))}
+lb = {"u" : -.75*np.ones((Nu,))}
+ub = {"u" : np.ones((Nu,))}
 
 #<<ENDCHUNK>>
 

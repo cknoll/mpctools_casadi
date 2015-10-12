@@ -125,6 +125,12 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
         if "x" not in d.keys():
             d["x"] = v*np.ones((N["t"]+1,N["x"]))
     if x0 is not None:
+        # First, need to check if time-varying bounds were supplied. If not,
+        # we need to make them time-varying.
+        for d in [lb, ub, guess]:
+            x = np.squeeze(d["x"])
+            if x.shape == (N["x"],):
+                d["x"] = np.tile(x[np.newaxis,:], (N["t"]+1, 1))
         lb["x"][0,...] = x0
         ub["x"][0,...] = x0
         guess["x"][0,...] = x0
@@ -151,8 +157,7 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
         uprev.shape = (1,uprev.size)
         guess["u_prev"] = uprev
     for v in extrapar.keys():
-        thispar = np.array(extrapar[v])
-        thispar.shape = (1,) + thispar.shape
+        thispar = np.array(extrapar[v])[np.newaxis,...]
         guess[v] = thispar
     
     # Need to decide about algebraic constraints.
@@ -384,11 +389,11 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
          finalpoint=False,runOptimization=runOptimization,scalar=scalar)
 
 
-def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
-    obj=None,f=None,g=None,h=None,l=None,e=None,funcargs={},Delta=1,
-    con=None,conlb=None,conub=None,periodic=False,
-    discretef=True,deltaVars=[],finalpoint=True,verbosity=5,
-    runOptimization=True,scalar=True,discretel=True,fErrorVars=None):
+def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
+        obj=None, f=None, g=None, h=None, l=None, e=None, funcargs={},
+        Delta=None, con=None, conlb=None, conub=None, periodic=False,
+        discretef=True, deltaVars=[], finalpoint=True, verbosity=5,
+        runOptimization=True, scalar=True, discretel=True, fErrorVars=None):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -421,16 +426,34 @@ def __optimalControlProblem(N,var,par=None,lb={},ub={},guess={},
     # Sort out bounds and parameters.
     for (data,structure,name) in dataAndStructure:
         for v in set(data.keys()).intersection(structure.keys()):
-            # Check sizes.            
-            if len(structure[v]) < data[v].shape[0]:
-                warnings.warn("Extra time points in %s['%s']. "
-                    "Ignoring." % (name,v))
-            elif len(structure[v]) > data[v].shape[0]:
-                raise IndexError("Too few time points in %s['%s']!" % (name,v))
-            
+            # Check sizes. We have to decide if the user supplied time-varying
+            # bounds or not (as determined by the shape of data).
+            vs = structure[v]
+            d = data[v]
+            tryshapes = set()
+            if len(vs) > 0:
+                s = vs[0].shape
+                tryshapes.add(s)
+                for n in [1,2]:
+                    if s[-n:] == (1,)*n:
+                        tryshapes.add(s[:-n])
+            if d.shape in tryshapes:
+                # d does not have a time dimension, so add one.
+                d = d[np.newaxis,...]
+                o = 0 # Offset multiplier.
+            else:
+                # d does have a time dimension, so check.           
+                if len(vs) < d.shape[0]:
+                    warnings.warn("Extra time points in %s['%s']. "
+                        "Ignoring." % (name,v))
+                elif len(vs) > d.shape[0]:
+                    util.keyboard()
+                    raise IndexError("Too few time points in %s['%s']!" % (name,v))
+                o = 1 # Offset multiplier.
+                
             # Grab data.            
             for t in range(len(structure[v])):
-                structure[v,t] = data[v][t,...]
+                structure[v,t] = d[o*t,...]
     
     # Smush together variables and parameters to get the constraints.
     struct = {}
@@ -895,25 +918,54 @@ def __casadiSymStruct(allVars,theseVars=None,scalar=True):
         struct = ctools.struct_symMX
     return struct([structArgs])
 
-def __getShapes(vals,mindims=1):
+def __getShapes(vals, mindims=1, extra="prepend"):
     """
     Gets shapes for each entry of the dictionary vals.
     
-    Each entry of vals must be castable to a numpy array so that its shape can
-    be determined. Any entry with fewer than ndims dimensions will have
-    ones prepended to the resulting shape.
+    Each entry of vals must either have a shape attribute or be castable to a
+    numpy array so that its shape can be determined. Any entry with fewer than
+    ndims dimensions will have ones added depending on the value of extra as
+    follows:
+    
+        "prepend" : add dimensions to the front
+        "append" : add dimensions to the back
+        "squeeze" : squeeze out all singletons
     """
+    extras = {
+        "prepend" : lambda s, s1 : s1 + s,
+        "append" : lambda s, s1 : s + s1,
+        "squeeze" : lambda s, s1 : __squeezeShape(s),
+    }
+    try:
+        fixfunc = extras[extra]
+    except KeyError:
+        raise ValueError("Invalid choices for extr!")
     shapes = {}
-    for k in vals.keys():
-        try:
-            s = np.array(vals[k],dtype=float).shape
-        except ValueError:
-            raise ValueError("Entry '%s' cannot be converted to a numpy array!"
-                % (k,))
-        if len(s) < mindims:
-            s = (1,)*(mindims - len(s)) + s
-        shapes[k] = s
+    for (k, v) in vals.iteritems():
+        s = getattr(v, "shape", None)
+        if s is None:
+            try:
+                s = np.array(v, dtype=float).shape
+            except ValueError:
+                raise ValueError("Entry '%s' does not have a shape andcannot "
+                    "be converted to a numpy array!" % (k,))
+        shapes[k] = fixfunc(s, (1,)*(mindims - len(s)))
     return shapes
+
+
+def __squeezeShape(s, endonly=False):
+    """
+    Takes a shape tuple and squeezes out singleton dimensions.
+    
+    If endonly=True, only trailing dimensions are removed.
+    """
+    if endonly:
+        while len(s) > 0 and s[-1] == 1:
+            s = s[:-1]
+    else:
+        s = tuple([i for i in s if i != 1])
+    return s
+
 
 def __getArgs(names,t=0,*structs):
     """
@@ -1075,9 +1127,8 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
         X0 = casadi.MX.sym(argnames[0],argsizes[0])
         PAR = [casadi.MX.sym(argnames[i],argsizes[i]) for i
             in range(1,len(argsizes))]    
-        
-        wrappedIntegrator = integrator(x0=X0,p=casadi.vertcat(PAR))
-        integrator = casadi.MXFunction(funcname, [X0] + PAR, wrappedIntegrator)
+        wrappedIntegrator = integrator(x0=X0, p=casadi.vertcat(PAR))["xf"]
+        integrator = casadi.MXFunction(funcname, [X0] + PAR, [wrappedIntegrator])
     return integrator
 
 class DiscreteSimulator(object):
@@ -1165,13 +1216,10 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     # Check jacobians.
     if f_jacx is None:
         f_jacx = f.jacobian(0)
-        f_jacx.init()
     if f_jacw is None:
         f_jacw = f.jacobian(2)
-        f_jacw.init()
     if h_jacx is None:
         h_jacx = h.jacobian(0)
-        h_jacx.init()
         
     # Get linearization of measurement.
     C = np.array(h_jacx([x])[0])

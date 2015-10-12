@@ -3,7 +3,6 @@
 # Imports.
 import numpy as np
 import mpctools as mpc
-import mpctools.legacy as mpc_old
 
 verb = 2
 
@@ -18,7 +17,7 @@ Nd = 0
 
 xsp = np.zeros((Nt+1,Nx))
 
-# We're going to solve the same problem using linear mpc, nonlinear mpc
+# We're going to solve the same problem using multiple methods:
 # starting with an exact discrete-time model, and nonlinear mpc starting from
 # a continuous-time model. In theory, the results should be identical.
 
@@ -45,15 +44,6 @@ l = mpc.getCasadiFunc(lfunc,[Nx,Nu],["x","u"],"l")
 def Pffunc(x):
     return mpc.mtimes(x.T,Q,x)
 Pf = mpc.getCasadiFunc(Pffunc,[Nx],["x"],"Pf")
-
-# Solve problem with linear mpc and plot.
-print "=Linear="
-opt_lmpc = mpc_old.linear.lmpc([A],[B],x0,Nt,[Q],[R],bounds=bounds,
-                               verbosity=verb)
-fig_lmpc = mpc.plots.mpcplot(opt_lmpc["x"],opt_lmpc["u"],t,xsp.T,
-                             xinds=[0,1],timefirst=False)
-fig_lmpc.canvas.set_window_title("Linear MPC")
-mpc.plots.showandsave(fig_lmpc,"mpcmodelcomparison_linear.pdf")
 
 # Discrete-time example
 def Fdiscrete(x,u):
@@ -108,4 +98,3 @@ fig_integrator = mpc.plots.mpcplot(opt_integrator["x"],
                                    opt_integrator["u"],t,xsp,xinds=[0,1])
 fig_integrator.canvas.set_window_title("NMPC with Casadi Integrators")
 mpc.plots.showandsave(fig_integrator,"mpcmodelcomparison_casadiintegrator.pdf")
-

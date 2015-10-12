@@ -206,19 +206,19 @@ d = np.zeros((Nsim,Nd))
 d[:,0] = (t >= 10)*(t <= 30)*.1*F0s
 d += ds
 
-ysp = np.tile(xs, (Nsim,1))
+ysp = np.tile(xs, (Nsim,1)) # Specify setpoint.
 contVars = [0,2] # Concentration and height.
 
 # Make NMPC solver.
 Nt = 5
 ubounds = np.array([.05*Tcs, .5*Fs])
 Dubounds = .05*ubounds
-lb = {"u" : np.tile(us - ubounds, (Nt,1)), "Du" : np.tile(-Dubounds, (Nt,1))}
-ub = {"u" : np.tile(us + ubounds, (Nt,1)), "Du" : np.tile(Dubounds, (Nt,1))}
+lb = {"u" : us - ubounds, "Du" : -Dubounds}
+ub = {"u" : us + ubounds, "Du" : Dubounds}
 
-N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nt}
-p = np.tile(ds, (Nt,1)) # Parameters for system.
-sp = {"x" : np.tile(xaugs, (Nt+1,1)), "u" : np.tile(us, (Nt,1))}
+N = {"x" : Nx+Nid, "u" : Nu, "p" : Nd, "t" : Nt}
+p = ds
+sp = {"x" : xaugs, "u" : us}
 guess = sp.copy()
 x0 = xs
 xaug0 = xaugs
@@ -244,22 +244,19 @@ controller = mpc.nmpc(**nmpcargs)
 
 # Make NMHE solver.
 Nmhe = 5
-uguess = np.tile(us,(Nmhe,1))
-xguess = np.tile(xaugs,(Nmhe+1,1))
-yguess = np.tile(ys,(Nmhe+1,1))
 nmheargs = {
     "f" : ode_augmented_rk4_casadi,
     "wAdditive" : True,
     "h" : measurement_casadi,
-    "u" : uguess,
-    "y" : yguess,
+    "u" : us,
+    "y" : ys,
     "l" : lest,
-    "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":Nmhe},
+    "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "t" : Nmhe},
     "lx" : lxest,
     "x0bar" : x0bar,
-    "p" : np.tile(ds,(Nmhe+1,1)),
+    "p" : ds,
     "verbosity" : 0,
-    "guess" : {"x":xguess, "y":yguess, "u":uguess},
+    "guess" : {"x" : xaugs, "y" : ys, "u" : us},
     "timelimit" : 5,
     "scalar" : useCasadiSX,
     "runOptimization" : False,                        
@@ -293,14 +290,14 @@ Qss[contVars,contVars] = 1 # Only care about controlled variables.
 sstargargs = {
     "f" : ode_disturbance_casadi,
     "h" : measurement_casadi,
-    "lb" : {"u" : np.tile(us - ubounds, (1,1))},
-    "ub" : {"u" : np.tile(us + ubounds, (1,1))},
+    "lb" : {"u" : us - ubounds},
+    "ub" : {"u" : us + ubounds},
     "guess" : {
-        "u" : np.tile(us, (1,1)),
-        "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
-        "y" : np.tile(xs, (1,1)),
+        "u" : us,
+        "x" : np.concatenate((xs, np.zeros((Nid,)))),
+        "y" : xs,
     },
-    "p" : np.tile(ds, (1,1)), # Parameters for system.
+    "p" : ds, # Parameters for system.
     "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
     "phi" : phi,
     "phiargs" : phiargs,
@@ -379,7 +376,8 @@ for n in range(1,Nsim):
 
     print "Target: %s, " % (targetfinder.stats["status"],), 
     if targetfinder.stats["status"] != "Solve_Succeeded":
-        import pdb; pdb.set_trace()
+        print "*** Optimization failed. Enter debug mode. ***"        
+        mpc.keyboard()
         break
 
     # Now use nonlinear MPC controller.

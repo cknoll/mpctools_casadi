@@ -119,7 +119,6 @@ def linearizeModel(f,args,names=None,Delta=None):
     jacobians = []
     for i in range(len(args)):
         jac = f.jacobian(i,0) # df/d(args[i]).
-        jac.init()
         jacobians.append(np.array(jac(args)[0]))
     
     # Decide whether or not to discretize.
@@ -353,7 +352,7 @@ def listcatfirstdim(l):
     return np.concatenate(newl)
 
 
-def smushColloc(t,x,tc,xc,Delta=1):
+def smushColloc(t, x, tc, xc, Delta=1, asdict=False):
     """
     Combines point x variables and interior collocation xc variables.
     
@@ -369,7 +368,12 @@ def smushColloc(t,x,tc,xc,Delta=1):
     
     Returns arrays T with size (Nt*(Nc+1) + 1,) and X with size 
     (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
-    Also return Tc and Xc which only contain the collocation points.         
+    Also return Tc and Xc which only contain the collocation points.
+
+    If asdict=True, then results are returned in a dictionary. This contains
+    fields "t" and "x" with interior collocation and edge points together,
+    "tc" and "xc" with just the inter collocation points, and "tp" and "xp"
+    which are only the edge points.         
     """
     # Make copies.
     if t is not None:
@@ -383,7 +387,7 @@ def smushColloc(t,x,tc,xc,Delta=1):
     if t is None or tc is None:
         Nt = xc.shape[0]
         if t is None:                
-            t = np.arange(0,Nt+1)
+            t = np.arange(0, Nt+1)*Delta
         else:
             t.shape = (t.size,)
         import colloc
@@ -414,7 +418,11 @@ def smushColloc(t,x,tc,xc,Delta=1):
     T = np.concatenate((T,t[-1:,0]))
     X = np.concatenate((X,x[-1:,:,0]))
     
-    return [T,X,Tc,Xc]
+    if asdict:
+        ret = dict(t=T, x=X, tc=Tc, xc=Xc, tp=np.squeeze(t), xp=np.squeeze(x))
+    else:
+        ret = [T, X, Tc, Xc]
+    return ret
 
 
 @contextmanager

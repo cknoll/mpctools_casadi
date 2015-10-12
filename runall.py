@@ -1,10 +1,9 @@
 # Runs all of the example files.
 import sys, os, traceback
 import matplotlib.pyplot as plt
-import mpctools.solvers, mpctools.legacy.solvers, mpctools.plots
+import mpctools.solvers, mpctools.plots
 
 mpctools.solvers.setMaxVerbosity(0)
-mpctools.legacy.solvers.setMaxVerbosity(0)
 mpctools.plots.SHOW_FIGURE_WINDOWS = False
 mpctools.plots.SHOWANDSAVE_DEFAULT_CHOICE = "y" # Save figures without prompting.
 
@@ -15,19 +14,18 @@ logfile = open("runall.log","w")
 # List of files. We hard-code these so that we explicitly pick everything.
 # Note: The commented-out files have yet to be updated viz. removal of legacy.
 examplefiles = [
-#    "cstr.py",
-#    "cstr_startup.py",
-#    "cstr_nmpc_nmhe.py",
-#    "collocationexample.py",
-#    "comparison_casadi.py",
-#    "comparison_mtc.py",
-#    "mheexample.py",
-#    "mheexample_legacy.py",
-#    "mpcexampleclosedloop.py",
-#    "mpcmodelcomparison.py",
-#    "mpcoopexample.py",
-#    "nmheexample.py",
-#    "nmpcexample.py",
+    "cstr.py",
+    "cstr_startup.py",
+    "cstr_nmpc_nmhe.py",
+    "collocationexample.py",
+    "comparison_casadi.py",
+    "comparison_mtc.py",
+    "example2-8.py",
+    "mheexample.py",
+    "mpcexampleclosedloop.py",
+    "mpcmodelcomparison.py",
+    "nmheexample.py",
+    "nmpcexample.py",
     "periodicmpcexample.py",
     "vdposcillator.py",
     "ballmaze.py",

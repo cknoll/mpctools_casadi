@@ -26,41 +26,41 @@ u = casadi.SX.sym("u",Nu)
 
 # Make integrator object.
 ode_integrator = casadi.SXFunction(
+    "ode",
     casadi.daeIn(x=x,p=u),
-    casadi.daeOut(ode=casadi.vertcat(ode(x,u))))
-vdp = casadi.Integrator("cvodes",ode_integrator)
-vdp.setOption("abstol",1e-8)
-vdp.setOption("reltol",1e-8)
-vdp.setOption("tf",Delta)
-vdp.init()
+    casadi.daeOut(ode=ode(x,u)))
+intoptions = {
+    "abstol" : 1e-8,
+    "reltol" : 1e-8,
+    "tf" : Delta,
+}
+vdp = casadi.Integrator("int_ode",
+    "cvodes", ode_integrator, intoptions)
 
 #<<ENDCHUNK>>
 
 # Then get nonlinear casadi functions
 # and rk4 discretization.
 ode_casadi = casadi.SXFunction(
-    [x,u],[casadi.vertcat(ode(x,u))])
-ode_casadi.init()
+    "ode",[x,u],[ode(x,u)])
 
 [k1] = ode_casadi([x,u])
 [k2] = ode_casadi([x + Delta/2*k1,u])
 [k3] = ode_casadi([x + Delta/2*k2,u])
 [k4] = ode_casadi([x + Delta*k3,u])
 xrk4 = x + Delta/6*(k1 + 2*k2 + 2*k3 + k4)    
-ode_rk4_casadi = casadi.SXFunction([x,u],[xrk4])
-ode_rk4_casadi.init()
+ode_rk4_casadi = casadi.SXFunction(
+    "ode_rk4", [x,u], [xrk4])
 
 #<<ENDCHUNK>>
 
 # Define stage cost and terminal weight.
 lfunc = (casadi.mul([x.T,x])
     + casadi.mul([u.T,u]))
-l = casadi.SXFunction([x,u],[lfunc])
-l.init()
+l = casadi.SXFunction("l", [x,u], [lfunc])
 
 Pffunc = casadi.mul([x.T,x])
-Pf = casadi.SXFunction([x],[Pffunc])
-Pf.init()
+Pf = casadi.SXFunction("Pf", [x], [Pffunc])
 
 #<<ENDCHUNK>>
 
@@ -101,13 +101,17 @@ con = casadi.vertcat(con)
 conlb = np.zeros((Nx*Nt,))
 conub = np.zeros((Nx*Nt,))
 
-nlp = casadi.SXFunction(casadi.nlpIn(x=var),
+nlp = casadi.SXFunction(
+    "nlp",
+    casadi.nlpIn(x=var),
     casadi.nlpOut(f=obj,g=con))
-solver = casadi.NlpSolver("ipopt",nlp)
-solver.setOption("print_level",0)
-solver.setOption("print_time",False)  
-solver.setOption("max_cpu_time",60)
-solver.init()
+nlpoptions = {
+    "print_level" : 0,
+    "print_time" : False,
+    "max_cpu_time" : 60,
+}
+solver = casadi.NlpSolver("solver",
+    "ipopt", nlp, nlpoptions)
 
 solver.setInput(conlb,"lbg")
 solver.setInput(conub,"ubg")

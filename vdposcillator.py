@@ -50,8 +50,8 @@ commonargs = dict(
     l=l,
     x0=x0,
     Pf=Pf,
-    lb={"u" : -.75*np.ones((Nsim,Nu)), "Du" : -np.tile(Dumax, (Nsim,1))},
-    ub={"u" : np.ones((Nsim,Nu)), "Du" : np.tile(Dumax, (Nsim,1))},
+    lb={"u" : -.75*np.ones((Nu,)), "Du" : -Dumax},
+    ub={"u" : np.ones((Nu,)), "Du" : Dumax},
     uprev=us,
     runOptimization=False,
 )
