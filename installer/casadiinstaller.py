@@ -108,22 +108,22 @@ setup(name="CasADi",
     license="LGPL",
 )
 '''.format(packagename="casadi", files=files, version=version)
-with open("setup.py", "w") as setupfile:
+with open("casadisetup.py", "w") as setupfile:
     setupfile.write(setup)
 
 # Finally, tell the user how to actually install things.
 instructions = """
 To install casadi for just the current user,
 
-    python setup.py install --user
+    python casadisetup.py install --user
 
 Alternatively, to install systemwied, use
 
-    sudo python setup.py install
+    sudo python casadisetup.py install
 
 For more flexibility, use
 
-    python setup.py install --help
+    python casadisetup.py install --help
 
 to get a list of additional options.
 """

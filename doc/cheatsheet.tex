@@ -36,9 +36,6 @@
 
 \begin{document}
 
-%\pagestyle{empty}
-%\thispagestyle{empty}
-
 \begin{center}
     \LARGE \texttt{mpc-tools-casadi} Cheat Sheet
 \end{center}
@@ -54,7 +51,7 @@ These descriptions are not intended to be complete, and you should consult the d
 
 The latest files can be found on \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}.
 You will see a link on the left to download all of the files in a compressed archive.
-No specific installation is required beyond Python and \casadi{}.
+No specific installation is required beyond Python and \casadi{}, but note that \casadi{} must be at least Version 2.4.
 
 \paragraph*{Getting Started.}
 
@@ -64,14 +61,6 @@ Typically, everything you need can be found in the main level, e.g.,
 \begin{lstlisting}[frame=L]
 import mpctools as mpc
 \end{lstlisting}
-%
-To access older versions of functions, you can use
-%
-\begin{lstlisting}[frame=L]
-import mpctools.legacy as mpc_old
-\end{lstlisting}
-%
-The legacy functions are used in some of the example files, but they are being phased out because they are slower and less general.
 
 Many functions have optional arguments or default values that aren't listed below.
 Consult the docstrings throughout \texttt{mpc-tools-casadi} to see what options are available.
@@ -145,6 +134,7 @@ Additional optional arguments are given below.
     \item \texttt{Pf}: a single \casadi{} function of $x$ to use as a terminal cost.
     \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries with entries \lstinline@"x"@ and/or \lstinline@"u"@, to define box constraints or an initial guess for the optimal values of $x$ and $u$.
     Entries for $x$ should be a numpy array of size \lstinline@N["t"]+1@ by \lstinline@N["x"]@, and for $u$, entries should be \lstinline@N["t"]@ by \lstinline@N["u"]@.
+    Note that the time dimensions can be omitted if the bounds are not time-varying.
     \item \texttt{uprev}: Value of the previous control input.
     If provided, variables $\Delta u$ will be added to the control problem.
     Bounds for $\Delta u$ can be specified as \lstinline|"Du"| entries in \texttt{lb} and \texttt{ub}.

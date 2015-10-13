@@ -9,6 +9,10 @@ where you replace the second argument with the name of the actual file you
 downloaded. This will unzip some files and then make a new Python script called
 setup.py that can be invoked, e.g., as
 
-    python setup.py install
+    python casadisetup.py install
 
 to install Casadi to the appropriate custom packages folder on your machine.
+
+Note that the installer (and corresponding setup.py) in this folder are for
+CasADi. To install mpctools to your Python path, a separate script is provided
+in the base directory (mpctoolssetup.py).

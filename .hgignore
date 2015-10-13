@@ -16,3 +16,4 @@ doc/*.blg
 cstr-matlab/*
 runall.log
 __local__/*
+build/*

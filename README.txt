@@ -31,12 +31,22 @@ To use mpc-tools-casadi, you will need a recent versions of
   Python 2.7
   Numpy
   Scipy
-  Casadi (download from <http://casadi.org> or
+  Casadi (Version >=2.7; download from <http://casadi.org> or
       <http://sourceforge.net/projects/casadi/files/CasADi>)
 
 With these packages installed, mpc-tools-casadi can be downloaded from the
-website above, and the mpctools folder can be placed in the user's Python
-path. Code is used by importing mpctools within python scripts. See sample
+website above, and the mpctools folder can be manually placed in the user's
+Python path, or the provided setup script mpctoolssetup.py can be used, e.g.,
+
+    python mpctoolssetup.py install --user
+
+to install for the current user only, or
+
+    sudo python mpctoolssetup.py install
+
+to install systemwide.
+
+Code is used by importing mpctools within python scripts. See sample
 files for  complete examples.
 
 Bugs
