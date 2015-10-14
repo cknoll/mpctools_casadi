@@ -1,7 +1,28 @@
-# Runs all of the example files.
-import sys, os, traceback
+"""
+Runs all the example files in mpc-tools-casadi showing only success or failure
+By default, pdf plots are created, although this can be prevented by running
+the script with an 'n' option, e.g.
+
+    python runall.py -n
+
+Note that in Matplotlib V1.4.2, there seems to be a bug that leads to error
+messages of the form
+
+    can't invoke "event" command: application has been destroyed
+        while executing
+    "event generate $w <<ThemeChanged>>"
+        (procedure "ttk::ThemeChanged" line 6)
+        invoked from within
+    "ttk::ThemeChanged"
+
+These errors appear to be harmless and can be ignored. Notably, they do not
+seem to be produced when this script is run from Spyder or when the example
+files are run individually.
+"""
+import sys, traceback
 import matplotlib.pyplot as plt
 import mpctools.solvers, mpctools.plots
+from mpctools.util import stdout_redirected, strcolor
 
 # Turn off output
 mpctools.solvers.setMaxVerbosity(0)
@@ -9,8 +30,6 @@ mpctools.plots.SHOW_FIGURE_WINDOWS = False
 choice = "y" if len(sys.argv) < 2 else sys.argv[1]
 mpctools.plots.SHOWANDSAVE_DEFAULT_CHOICE = choice
 
-stdout = sys.__stdout__
-devnull = open(os.devnull,"w")
 logfile = open("runall.log","w")
 
 # List of files. We hard-code these so that we explicitly pick everything.
@@ -34,23 +53,30 @@ examplefiles = [
     "vdposcillator.py",
 ]
 
+# Now loop through everybody.
 plt.ioff()
+print __doc__
+abort = False
 for f in examplefiles:
-    print "%s ... " % (f,),
-    sys.stdout = devnull        
+    print strcolor("%s ... " % (f,), "blue"),    
     try:
-        execfile(f, {}) # Run files in dummy namespace.
-        status = "succeeded"
+        with stdout_redirected():
+            execfile(f, {}) # Run files in dummy namespace.
+            status = strcolor("succeeded", "green", bold=True)
+    except KeyboardInterrupt:
+        status =  "\n\n%s\n" % (strcolor("*** USER INTERRUPT ***", "yellow"),) 
+        abort = True
     except:
         err = sys.exc_info()
         logfile.write("*** Error running <%s>:\n" % (f,))    
         traceback.print_exc(file=logfile)
-        status = "FAILED"
-    sys.stdout = stdout
-    print "%s." % (status,)
-    plt.close("all")
+        status = strcolor("FAILED", "red", bold=True)
+    finally:
+        print "%s" % (status,)
+        plt.close("all")
+        if abort:
+            break
 
 plt.ion()
 logfile.close()
-devnull.close()
         

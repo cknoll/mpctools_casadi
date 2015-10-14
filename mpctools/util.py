@@ -498,4 +498,36 @@ class ArrayDict(collections.MutableMapping):
         
     def __repr__(self):
         return repr(self.__arraydict__)
+
+
+def strcolor(s, color=None, bold=False):
+    """
+    Adds ANSI escape sequences to colorize string s.
+    
+    color must be one of the eight standard colors (RGBCMYKW). Accepts full
+    names or one-letter abbreviations.
+    
+    Keyword bold decides to make string bold.
+    """
+    colors = dict(_end="\033[0m", _bold="\033[1m", b="\033[94m", c="\033[96m",
+        g="\033[92m", k="\033[90m", m="\033[95m", r="\033[91m", w="\033[97m",
+        y="\033[93m")
+    colors[""] = "" # Add a few defaults.
+    colors[None] = ""
+    
+    # Decide what color user gave.
+    c = color.lower()
+    if c == "black":
+        c = "k"
+    elif len(c) > 0:
+        c = c[0]
+    try:
+        c = colors[c]
+    except KeyError:
+        raise ValueError("Invalid color choice '%s'!" % (color,))
+    
+    # Build up front and back of string and return.
+    front = (colors["_bold"] if bold else "") + c
+    back = (colors["_end"] if len(front) > 0 else "")
+    return "%s%s%s" % (front, s, back)
     
