@@ -3,7 +3,6 @@
 # Imports.
 import numpy as np
 import scipy.signal as spsignal
-#import mpctools.legacy as mpc
 import mpctools as mpc
 import mpctools.plots as mpcplots
 
@@ -53,5 +52,5 @@ x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpc.plots.mpcplot(x, u, t, xp.T)
+fig = mpcplots.mpcplot(x, u, t, xp.T)
 mpcplots.showandsave(fig,"periodicmpcexample.pdf")

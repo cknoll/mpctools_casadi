@@ -82,7 +82,6 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
     for i in range(len(xinds)):
         xind = xinds[i]
         a = fig.add_subplot(numrows,numcols,numcols*(i+1) - 1)
-        a.hold("on")
         a.plot(t,np.squeeze(x[xind,:]),xlspec,label="System")
         if plotxsp:
             a.plot(t,np.squeeze(xsp[xind,:]),"--r",label="Setpoint")
@@ -179,7 +178,7 @@ def showandsave(fig,filename="fig.pdf",choice=None,**kwargs):
     """
     if choice is None:
         choice = SHOWANDSAVE_DEFAULT_CHOICE
-    if SHOW_FIGURE_WINDOWS:    
+    if SHOW_FIGURE_WINDOWS and plt.isinteractive():    
         fig.show()
         if not SAVE_FIGURE_PDFS:
             raw_input("Press [Enter] to continue....")

@@ -432,31 +432,27 @@ def stdout_redirected(to=os.devnull):
     
     Used in a with statement, e.g.,
 
-        import os
         with stdout_redirected(to=filename):
-            print("from Python")
-            os.system("echo non-Python applications are also supported")    
+            print "from Python"
+            ipopt.solve()
     
-    Taken from stackoverflow:
-        http://stackoverflow.com/questions/5081657/
-            how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/
+    will capture both the Python print output and any output of calls to C
+    libraries (e.g., IPOPT).
+    
+    Note that this makes use of CasADi's tools.io.nice_stdout context, which
+    means all C output is buffered and then returned all at once. Thus, this is
+    only really useful if don't need to see output as it is created.
     """
-    fd = sys.stdout.fileno()
+    import casadi.tools.io as casadiio
 
-    def _redirect_stdout(to):
-        sys.stdout.close() # + implicit flush()
-        os.dup2(to.fileno(), fd) # fd writes to 'to' file
-        sys.stdout = os.fdopen(fd, 'w') # Python writes to fd
-
-    with os.fdopen(os.dup(fd), 'w') as old_stdout:
-        with open(to, 'w') as outputfile:
-            _redirect_stdout(to=outputfile)
-        try:
-            yield # allow code to be run with the redirected stdout
-        finally:
-            _redirect_stdout(to=old_stdout) # restore stdout.
-            sys.stdout.flush()
-
+    old_stdout = sys.stdout
+    with open(to, "w") as new_stdout:
+        with casadiio.nice_stdout(): # Buffers C output to Python stdout.
+            sys.stdout = new_stdout # Redefine Python stdout.
+            try:
+                yield # Allow code to be run with the redirected stdout.
+            finally:
+                sys.stdout = old_stdout # Reset stdout.
    
 @contextmanager
 def dummy_context(*args):

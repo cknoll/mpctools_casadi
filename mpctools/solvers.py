@@ -106,7 +106,7 @@ class ControlSolver(object):
         
     @verbosity.setter
     def verbosity(self, v):
-        v = min(min(max(v,0),12), _MAX_VERBOSITY)
+        v = min(min(max(v, -1), 12), _MAX_VERBOSITY)
         self.__changesettings(verbosity=v)
     
     @property
@@ -196,7 +196,8 @@ class ControlSolver(object):
         # options and pass them to the constructor. We build up a list of
         # defaults first, and then add any user options.
         
-        # Print ant time limit options.
+        # Print ant time limit options. Note that we must respect Ipopt's
+        # limits with print_level, which are different from ours.
         options["print_level"] =  min(12, max(0, self.verbosity))
         options["print_time"] = self.verbosity > 2  
         options["max_cpu_time"] = self.timelimit        
