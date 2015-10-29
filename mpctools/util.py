@@ -18,6 +18,19 @@ vertcat = casadi.vertcat
 # Grab pdb function to emulate Octave/Matlab's keyboard().
 keyboard = pdb.set_trace
 
+# Also make a wrapper to numpy's array function that forces float64 data type.
+def array(x, dtype=np.float64, **kwargs):
+    """
+    Wrapper to NumPy's array that forces floating point data type.
+    
+    Uses numpy.float64 as the default data type instead of trying to infer it.
+    See numpy.array for other keyword arguments.
+    """
+    kwargs["dtype"] = dtype
+    return np.array(x, **kwargs)
+
+
+# Now give the actual functions.
 def rk4(f,x0,par,Delta=1,M=1):
     """
     Does M RK4 timesteps of function f with variables x0 and parameters par.
@@ -38,6 +51,7 @@ def rk4(f,x0,par,Delta=1,M=1):
         x = x + (k1 + 2*k2 + 2*k3 + k4)*h/6
         j += 1
     return x
+
 
 def atleastnd(arr,n=2):
     """
@@ -67,46 +81,50 @@ def c2d(Ac,Bc,Delta):
     return (Ad,Bd)
 
 
-def getLinearization(f,xs,us=None,ds=None,Delta=None):
+def getLinearization(f, xs, us=None, ds=None, Delta=None):
     """
-    Returns linear state-space model for the given function.
+    Less general wrapper to getLinearizedModel.    
+    
+    Equivalent to
+    
+        getLinearizedModel(f, [xs,us,ds], ["A","B","Bp"], Delta)
+        
+    with the corresponding entries omitted if us and/or ds are None.
     """
-    # Put together function arguments.
-    args = []
-    N = {}
-    for (arg,name) in [(xs,'x'),(us,'u'),(ds,'d')]:
-        if arg is not None:
-            arg = np.array(arg)
-            args.append(arg)
-            N[name] = arg.shape[0]
-        else:
-            N[name] = 0
-    
-    # Evalueate function.
-    fs = np.array(f(args)[0]) # Column vector.        
-    
-    # Get Jacobian.
-    jacobian = f.fullJacobian()
-    Js = np.array(jacobian(args)[0])        
-    
-    A = Js[:,:N["x"]]
-    B = Js[:,N["x"]:N["x"]+N["u"]]
-    Bp = Js[:,N["x"]+N["u"]:N["x"]+N["u"]+N["d"]]
-    
-    if Delta is not None:
-        [A, B, Bp, f] = c2d_augmented(A,B,Bp,fs,Delta)
-    
-    return {"A": A, "B": B, "Bp": Bp, "f": fs}
+    args = [xs]
+    names = ["A"]
+    if us is not None:
+        args.append(us)
+        names.append("B")
+    if ds is not None:
+        args.append(ds)
+        names.append("Bp")
+    return getLinearizedModel(f, args, names, Delta)
 
 
-def linearizeModel(f,args,names=None,Delta=None):
+def linearizeModel(*args, **kwargs):
     """
-    Returns linear (affine) state-space model for f at the point point.
+    Synonym for getLinearizedModel.
+    
+    Refer to getLinearizedModel for more details.
+    """
+    return getLinearizedModel(*args, **kwargs)
+
+
+def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
+    """
+    Returns linear (affine) state-space model for f at the point in args.
+    
+    Note that f must be a casadi function (e.g., the output of getCasadiFunc).    
     
     names should be a list of strings to specify the dictionary entry for each
     element. E.g., for args = [xs, us] to linearize a model in (x,u), you
     might choose names = ["A", "B"]. These entries can then be accessed from
     the returned dictionary to get the linearized state-space model.
+    
+    If "f" is not in the list of names, then the return dict will also include
+    an "f" entry with the actual value of f at the linearization point. To
+    disable this, set returnf=False.
     """
     # Decide names.
     if names is None:
@@ -129,10 +147,10 @@ def linearizeModel(f,args,names=None,Delta=None):
     
     # Package everything up.
     ss = dict(zip(names,jacobians))
-    if "f" not in ss.keys():
+    if returnf and ("f" not in ss or forcef):
         ss["f"] = fs
-    return ss
-    
+    return ss    
+
     
 def c2d_augmented(A,B,Bp,f,Delta):
     """
@@ -159,6 +177,20 @@ def c2d_augmented(A,B,Bp,f,Delta):
 def c2dObjective(a,b,q,r,Delta):
     """
     Discretization with continuous objective.
+
+    Converts from continuous-time objective
+    
+                 / \Delta
+        l(x,u) = |        x'qx + u'ru  dt
+                 / 0
+        dx/dt = ax + bu
+    
+    to the equivalent
+    
+        L(x,u) = x'Qx + 2x'Mu + u'Qu
+        x^+ = Ax + Bu
+        
+    in discrete time.
     
     Formulas from Pannocchia, Rawlings, Mayne, and Mancuso (2014).
     """
@@ -530,4 +562,58 @@ def strcolor(s, color=None, bold=False):
     front = (colors["_bold"] if bold else "") + c
     back = (colors["_end"] if len(front) > 0 else "")
     return "%s%s%s" % (front, s, back)
+
+
+def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
+    """
+    Updates the prior distribution P^- using the Extended Kalman filter.
+    
+    f and h should be casadi functions. f must be discrete-time. P, Q, and R
+    are the prior, state disturbance, and measurement noise covariances. Note
+    that f must be f(x,u,w) and h must be h(x).
+    
+    If specified, f_jac and h_jac should be initialized jacobians. This saves
+    some time if you're going to be calling this many times in a row, althouth
+    it's really not noticable unless the models are very large.
+    
+    The value of x that should be fed is xhat(k | k-1), and the value of P
+    should be P(k | k-1). xhat will be updated to xhat(k | k) and then advanced
+    to xhat(k+1 | k), while P will be updated to P(k | k) and then advanced to
+    P(k+1 | k). The return values are a list as follows
+    
+        [P(k+1 | k), xhat(k+1 | k), P(k | k), xhat(k | k)]
+        
+    Depending on your specific application, you will only be interested in
+    some of these values.
+    """
+    
+    # Check jacobians.
+    if f_jacx is None:
+        f_jacx = f.jacobian(0)
+    if f_jacw is None:
+        f_jacw = f.jacobian(2)
+    if h_jacx is None:
+        h_jacx = h.jacobian(0)
+        
+    # Get linearization of measurement.
+    C = np.array(h_jacx([x])[0])
+    yhat = np.array(h([x])[0]).flatten()
+    
+    # Advance from x(k | k-1) to x(k | k).
+    xhatm = x                                          # This is xhat(k | k-1)    
+    Pm = P                                             # This is P(k | k-1)    
+    L = scipy.linalg.solve(C.dot(Pm).dot(C.T) + R, C.dot(Pm)).T          
+    xhat = xhatm + L.dot(y - yhat)                     # This is xhat(k | k) 
+    P = (np.eye(Pm.shape[0]) - L.dot(C)).dot(Pm)       # This is P(k | k)
+    
+    # Now linearize the model at xhat.
+    w = np.zeros(w.shape)
+    A = np.array(f_jacx([xhat,u,w])[0])
+    G = np.array(f_jacw([xhat,u,w])[0])
+    
+    # Advance.
+    Pmp1 = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)       # This is P(k+1 | k)
+    xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
+    
+    return [Pmp1, xhatmp1, P, xhat]
     

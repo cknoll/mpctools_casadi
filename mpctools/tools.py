@@ -2,7 +2,6 @@ from __future__ import print_function, division # Grab handy Python3 stuff.
 import numpy as np
 import casadi
 import casadi.tools as ctools
-import scipy.linalg
 import colloc
 import warnings
 
@@ -21,8 +20,8 @@ Functions for solving MPC problems using Casadi and Ipopt.
 #   much as possible, and make sure every function has a docstring.
 #
 #
-# - We use the print function here, so any calls to print must have the
-#   arguments surrounded by parentheses.
+# - We use the print function from Python 3 here, so any calls to print must
+#   have the arguments surrounded by parentheses.
 #
 #
 # - If any Python file gets longer than about 1000 lines, consider splitting it
@@ -392,17 +391,15 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
 def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         obj=None, f=None, g=None, h=None, l=None, e=None, funcargs={},
         Delta=None, con=None, conlb=None, conub=None, periodic=False,
-        discretef=True, deltaVars=[], finalpoint=True, verbosity=5,
+        discretef=True, deltaVars=None, finalpoint=True, verbosity=5,
         runOptimization=True, scalar=True, discretel=True, fErrorVars=None):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
-    struct should be a dictionary of the appropriate parameter or variable
-    casadi sym_structs. It should have an entry for each variable/parameter
-    that is a list running through time.
+    var and par must both be casadi sym_structs.
     
     Note that only variable fields are taken from lb and ub, but parameter
-    values must be specified in guess
+    values must be specified in the guess dictionary
     """
 
     # Initialize things.
@@ -412,8 +409,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     dataAndStructure = [(guess,varguess,"guess"), (lb,varlb,"lb"),
                         (ub,varub,"ub")]
     if par is not None:
-        parval = par(0)
-        dataAndStructure.append((guess,parval,"par"))
+        parval = par(0) # guess dictionary also contains parameter values.
+        dataAndStructure.append((guess,parval,"par"))  # See above.
     else:
         parval = None
         
@@ -469,6 +466,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
             N[name] = 0
     if fErrorVars is None:
         fErrorVars = []
+    if deltaVars is None:
+        deltaVars = []
     constraints = __generalConstraints(struct,N["t"],f=f,Nf=N["f"],
         g=g,Ng=N["g"],h=h,Nh=N["h"],l=l,funcargs=funcargs,Ncolloc=N["c"],
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
@@ -623,26 +622,13 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     
     # Define some helper functions/variables.    
     def getArgs(func,times,var):
+        """Returns a list of casadi variables with index time."""
         allargs = []
         for t in times:
             allargs.append(__getArgs(args[func],t,var))
         return allargs
     tintervals = range(0,Nt)
     tpoints = range(0,Nt + bool(finalpoint))
-    
-#     # We leave the following old definition here just in case we modify 
-#     # __getArgs and need to test it.
-#    def getArgs(func,times,var):    
-#        allargs = []
-#        for t in times:
-#            thisargs = []
-#            for v in args[func]:
-#                if len(var[v]) == 1:
-#                    thisargs.append(var[v][0])
-#                else:
-#                    thisargs.append(var[v][t])
-#            allargs.append(thisargs)
-#        return allargs
     
     # Preallocate return dictionary.
     returnDict = {}    
@@ -1190,57 +1176,10 @@ class DiscreteSimulator(object):
         return np.array(xf).flatten()
 
 
-def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
+def ekf(*args, **kwargs):
     """
-    Updates the prior distribution P^- using the Extended Kalman filter.
-    
-    f and h should be casadi functions. f must be discrete-time. P, Q, and R
-    are the prior, state disturbance, and measurement noise covariances. Note
-    that f must be f(x,u,w) and h must be h(x).
-    
-    If specified, f_jac and h_jac should be initialized jacobians. This saves
-    some time if you're going to be calling this many times in a row, althouth
-    it's really not noticable unless the models are very large.
-    
-    The value of x that should be fed is xhat(k | k-1), and the value of P
-    should be P(k | k-1). xhat will be updated to xhat(k | k) and then advanced
-    to xhat(k+1 | k), while P will be updated to P(k | k) and then advanced to
-    P(k+1 | k). The return values are a list as follows
-    
-        [P(k+1 | k), xhat(k+1 | k), P(k | k), xhat(k | k)]
-        
-    Depending on your specific application, you will only be interested in
-    some of these values.
+    Function moved to util. See full documentation in util.ekf
     """
-    
-    # Check jacobians.
-    if f_jacx is None:
-        f_jacx = f.jacobian(0)
-    if f_jacw is None:
-        f_jacw = f.jacobian(2)
-    if h_jacx is None:
-        h_jacx = h.jacobian(0)
-        
-    # Get linearization of measurement.
-    C = np.array(h_jacx([x])[0])
-    yhat = np.array(h([x])[0]).flatten()
-    
-    # Advance from x(k | k-1) to x(k | k).
-    xhatm = x                                          # This is xhat(k | k-1)    
-    Pm = P                                             # This is P(k | k-1)    
-    L = scipy.linalg.solve(C.dot(Pm).dot(C.T) + R, C.dot(Pm)).T          
-    xhat = xhatm + L.dot(y - yhat)                     # This is xhat(k | k) 
-    P = (np.eye(Pm.shape[0]) - L.dot(C)).dot(Pm)       # This is P(k | k)
-    
-    # Now linearize the model at xhat.
-    w = np.zeros(w.shape)
-    A = np.array(f_jacx([xhat,u,w])[0])
-    G = np.array(f_jacw([xhat,u,w])[0])
-    
-    # Advance.
-    Pmp1 = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)       # This is P(k+1 | k)
-    xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
-    
-    return [Pmp1, xhatmp1, P, xhat]
-    
+    warnings.warn("ekf moved to util module. Please call from there.")
+    return util.ekf(*args, **kwargs)    
     
