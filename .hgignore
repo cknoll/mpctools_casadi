@@ -17,3 +17,11 @@ cstr-matlab/*
 runall.log
 __local__/*
 build/*
+installer/include/*
+installer/build/*
+installer/casadi/*
+installer/lib/*
+installer/casadisetup.py
+installer/*.tar.gz
+installer/*.zip
+

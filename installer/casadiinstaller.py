@@ -57,7 +57,7 @@ if filename.endswith(".zip"):
         z.extractall()
         casadifiles = z.infolist()
         for c in casadifiles:
-            if not os.path.isdir(c):            
+            if not os.path.isdir(c.filename):            
                 extrafiles.append(os.path.normpath(c.filename))
 elif filename.endswith("tar.gz"):
     import tarfile
@@ -85,7 +85,7 @@ else:
 
 # Create setup file. Need a list of all Casadi's internals.
 print "*** Creating setup.py ***"
-front = "    '../"
+front = "    r'.." + os.sep
 back = "',\n"
 files =  "\n" + front + (back + front).join(extrafiles) + back
 setup = '''"""
@@ -115,11 +115,14 @@ with open("casadisetup.py", "w") as setupfile:
 instructions = """
 To install casadi for just the current user,
 
-    python casadisetup.py install --user
+    python casadisetup.py install --user --quiet
 
-Alternatively, to install systemwied, use
+To see full verbose output, omit the --quiet option (there may be a lot of
+output).
 
-    sudo python casadisetup.py install
+Alternatively, to install systemwide, use
+
+    sudo python casadisetup.py install --quiet
 
 For more flexibility, use
 
