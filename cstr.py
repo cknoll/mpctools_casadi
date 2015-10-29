@@ -76,7 +76,7 @@ ds = np.array([F0s])
 #<<ENDCHUNK>>
 
 # Now get a linearization at this steady state.
-ss = mpc.util.linearizeModel(ode_casadi, 
+ss = mpc.util.getLinearizedModel(ode_casadi, 
     [xs,us,ds], ["A","B","Bp"], Delta)
 A = ss["A"]
 B = ss["B"]

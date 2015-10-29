@@ -20,7 +20,8 @@ vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
 # Then get nonlinear casadi functions and a linearization.
 ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
-lin = mpc.util.getLinearization(ode_casadi,[0,0],[0],Delta=Delta)
+lin = mpc.util.getLinearizedModel(ode_casadi, [[0,0],[0]],
+                                  ["A","B"], Delta=Delta)
 
 # Also discretize using RK4.
 ode_rk4_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="F",

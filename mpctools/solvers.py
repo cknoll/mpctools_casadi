@@ -125,6 +125,14 @@ class ControlSolver(object):
     def timelimit(self, t):
         self.__changesettings(timelimit=t)
     
+    @property
+    def isQP(self):
+        return self.__settings["isQP"]
+    
+    @isQP.setter
+    def isQp(self, tf):
+        self.__changesettings(isQP=tf)
+    
     def __changesetting(self, **settings):
         """
         Changes fields of the settings dictionary and sets update flag.
@@ -134,7 +142,7 @@ class ControlSolver(object):
     
     
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
-                 par=None, parval=None, verbosity=5, timelimit=60, isQp=False,
+                 par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  scalar=True, name="ControlSolver", ipoptoptions={}):
         """
         Initialize the solver object.
@@ -159,7 +167,7 @@ class ControlSolver(object):
         
         self.__stats = {}
         self.__settings = {} # Need to initialize this.
-        self.__changesetting(scalar=scalar, isQp=isQp, name=name,
+        self.__changesetting(scalar=scalar, isQP=isQP, name=name,
                                verbosity=verbosity, timelimit=timelimit)
         
         # Now initialize the solver object.
@@ -208,13 +216,17 @@ class ControlSolver(object):
         options["eval_errors_fatal"] = True
                 
         # Options if problem is a QP.
-        if self.__settings["isQp"]:
+        if self.__settings["isQP"]:
             options["hessian_constant"] = "yes"
             options["jac_c_constant"] = "yes"
             options["jac_d_constant"] = "yes"
 
         # Finally, create the solver object.
         solver = casadi.NlpSolver(self.name, "ipopt", nlp, options)
+        
+        ## Prior to V2.4, we could check option names here. Since they're
+        ## handled at creation time, I'm not sure how best to trap those
+        ## errors. I leave the old code commented below. - MJR (10/29/2015)
 #        for (k,v) in kwargs.iteritems():
 #            try:
 #                solver.setOption(k,v)

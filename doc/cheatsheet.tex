@@ -273,14 +273,24 @@ For quick plotting, we have the \texttt{mpcplot} function.
 Required arguments are \texttt{x} and \texttt{u}, both 2D arrays with each row giving the value of $x$ or $u$ at a given time point, and a vector \texttt{t} of time points.
 Note that \texttt{t} should have as many entries as \texttt{x} has rows, while \texttt{u} should have one fewer rows.
 
-\paragraph*{Functions from Octave/\textsc{Matlab}.}
+\paragraph*{Linear MPC Functions.}
 
-For convenience, we have included a few simple control-related functions from Octave/\textsc{Matlab}.
+There are no specific functions to handle linear problems.
+However, if you are using the \texttt{ControlSolver} class, then you can use \lstinline@solver.isQP = True@ to let the solver know that the constraints are linear and the objective function quadratic, which can potentially speed up solution.
+
+To linearize nonlinear systems, we provide a useful function.
+
+\funcname{util.getLinearizedModel(f, args, names)}
+
+Evaluates the derivatives of the \casadi{} function \lstinline@f@ at the point indicated in \lstinline$args$ (which should be a Python list of vectors) and returns a dictionary.
+\lstinline$names$ should be a list of keys to use in the returned dictionary.
+Optionally, you can specify a \lstinline@Delta@ keyword argument to discretize the returned matrices.
+
+For convenience, we have also included a few simple control-related functions from Octave/\textsc{Matlab}.
 
 \funcname{util.dlqr(A,B,Q,R)}, \funcname[0pt]{util.dlqe(A,C,Q,R)}
 
 Discrete-time linear-quadratic regulator and estimator.
-Note that cross-penalties are not supported.
 
 \funcname{util.c2d(A,B,Delta)}
 

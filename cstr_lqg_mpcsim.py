@@ -115,10 +115,11 @@ def runsim(k, simcon, opnclsd):
 
         # Now get a linearization at this steady state.
 
-        ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+        ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds],
+                                         ["A","B","Bp"], Delta)
         A = ss["A"]
         B = ss["B"]
-        Bp = ss["Bp"]
+        #Bp = ss["Bp"]
         C = np.eye(Nx)
 
         # Weighting matrices for controller.

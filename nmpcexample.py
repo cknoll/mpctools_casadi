@@ -20,7 +20,7 @@ model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 xss = np.zeros((Nx,)) # Define steady-state solution.
 uss = np.zeros((Nu,))
-lin = mpc.util.linearizeModel(ode_casadi,[xss,uss],["A","B"],Delta=Delta)
+lin = mpc.util.getLinearizedModel(ode_casadi,[xss,uss],["A","B"],Delta=Delta)
 
 # Define stage cost and terminal weight.
 def lfunc(x,u):

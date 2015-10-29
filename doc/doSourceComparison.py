@@ -1,3 +1,5 @@
+import sys
+
 ENDCHUNK = set(["#<<ENDCHUNK>>","%<<ENDCHUNK>>"])
 
 def comparison(infiles,outfile,styles=None):
@@ -60,5 +62,12 @@ def outputlines(f,lines,style=""):
     # Finally write.
     f.writelines(lines)
 
-comparison(["../comparison_casadi.py","../comparison_mtc.py"],"sidebyside.tex")
-comparison(["../cstr.m","../cstr.py"],"sidebyside-cstr.tex",styles=["[style=matlab]","[style=python]"])    
+if __name__ == "__main__":
+    # Read files from command line.
+    if "sidebyside.tex" in sys.argv:
+        comparison(["../comparison_casadi.py","../comparison_mtc.py"],
+                   "sidebyside.tex")
+    if "sidebyside-cstr.tex" in sys.argv:
+        comparison(["../cstr.m","../cstr.py"],"sidebyside-cstr.tex",
+                   styles=["[style=matlab]","[style=python]"])
+   

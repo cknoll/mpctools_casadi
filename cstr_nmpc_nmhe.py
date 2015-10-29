@@ -123,7 +123,7 @@ Q = .5*np.diag(xs**-2)
 R = 2*np.diag(us**-2)
 
 # Now get a linearization at this steady state and calculate Riccati cost-to-go.
-ss = mpc.util.linearizeModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
 A = ss["A"]
 B = ss["B"]
 Bp = ss["Bp"]
@@ -169,9 +169,9 @@ lxest = None
 x0bar = None
 
 # Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
-Aaug = mpc.util.linearizeModel(ode_augmented_casadi,[xaugs, us, ds],
+Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us, ds],
                                ["A","B","Bp"], Delta)["A"]
-Caug = mpc.util.linearizeModel(measurement_casadi,[xaugs, ds],
+Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs, ds],
                                ["C","Cp"])["C"]
 Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
 svds = linalg.svdvals(Oaug)
