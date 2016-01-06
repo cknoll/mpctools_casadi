@@ -31,7 +31,7 @@ To use mpc-tools-casadi, you will need a recent versions of
   Python 2.7
   Numpy
   Scipy
-  Casadi (Version >=2.7; download from <http://casadi.org> or
+  Casadi (Version >=2.4; download from <http://casadi.org> or
       <http://sourceforge.net/projects/casadi/files/CasADi>)
 
 With these packages installed, mpc-tools-casadi can be downloaded from the
