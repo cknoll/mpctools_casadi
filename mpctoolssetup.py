@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 from distutils.core import setup
+import mpctools
 
 with open("README.txt", "r") as f:
     description = "".join(f)
 
 setup(name="mpc-tools-casadi",
-    version="2.0",
+    version=mpctools.__version__,
     description="Nonlinear MPC tools for use with CasADi",
     author="Michael Risbeck",
     author_email="risbeck@wisc.edu",

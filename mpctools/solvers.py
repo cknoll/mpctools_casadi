@@ -91,7 +91,11 @@ class ControlSolver(object):
     @property
     def var(self):
         return self.__varval
-        
+    
+    @property
+    def vardict(self):
+        return util.casadiStruct2numpyDict(self.__varval)
+    
     @property
     def obj(self):
         return self.__objval

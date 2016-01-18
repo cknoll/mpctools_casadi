@@ -57,7 +57,10 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     
     lb and ub should be dictionaries of bounds for the various variables. Each
     entry should have time as the first index (i.e. lb["x"] should be a
-    N["t"] + 1 by N["x"] array). guess should have the same structure.    
+    N["t"] + 1 by N["x"] array). If the bounds are not time-varying, you may
+    omit the first dimension. guess should have the same structure. For bounds
+    on the final state x, you may also specify an "xf" entry in lb or ub, which
+    should be a N["x"] array.
     
     Function argument are assumed to be the "usual" order, i.e. f(x,u), l(x,u),
     and Pf(x). If you wish to override any of these, specify a list of variable
@@ -76,6 +79,11 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     To include rate of change penalties or constraints, set uprev so a vector
     with the previous u entry. Bound constraints can then be entered with the
     key "Du" in the lb and ub structs. "Du" can also be specified as in largs.    
+    
+    The functions e and ef are constraints and terminal constraints,
+    respectively. These should be Casadi functions, and the feasible region is
+    defined by e <= 0 and ef <= 0. If either functions are specified, you must
+    also specify the arguments to each in funcargs.    
     
     The return value is a dictionary with the values of the optimal decision
     variables and also some time vectors. Alternatively, if runOptimization is
@@ -119,20 +127,27 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     if "c" not in N:
         N["c"] = 0    
     
-    # Sort out bounds on x0.
+    # Sort out bounds on x0 and xf.
     for (d,v) in [(lb,-np.inf), (ub,np.inf), (guess,0)]:
-        if "x" not in d.keys():
+        if "x" not in d:
             d["x"] = v*np.ones((N["t"]+1,N["x"]))
-    if x0 is not None:
+    if x0 is not None or any(["xf" in d for d in [lb, ub]]):
         # First, need to check if time-varying bounds were supplied. If not,
         # we need to make them time-varying.
         for d in [lb, ub, guess]:
             x = np.squeeze(d["x"])
             if x.shape == (N["x"],):
                 d["x"] = np.tile(x[np.newaxis,:], (N["t"]+1, 1))
-        lb["x"][0,...] = x0
-        ub["x"][0,...] = x0
-        guess["x"][0,...] = x0
+        if x0 is not None:
+            lb["x"][0,...] = x0
+            ub["x"][0,...] = x0
+            guess["x"][0,...] = x0
+        for d in [lb, ub, guess]:
+            if "xf" in d:
+                xf = d.pop()
+                if xf.size != (N["x"],):
+                    raise ValueError("Incorrect size for xf.")
+                d["x"][-1,...] = xf
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters. Note that

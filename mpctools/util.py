@@ -616,4 +616,38 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
     
     return [Pmp1, xhatmp1, P, xhat]
+
+
+# Conveinence function for getting derivatives.
+def getScalarDerivative(f, nargs=1, wrt=(0,), vectorize=True):
+    """
+    Returns a function that gives the derivative of the function scalar f.
+    
+    f must be a function that takes nargs scalar entries and returns a single
+    scalar. Derivatives are taken with respect to the variables specified in
+    wrt, which must be a tuple of integers. E.g., to take a second derivative
+    with respect to the first argument, specify wrt=(0,0).
+    
+    vectorize is a boolean flag to determine whether or not the function should
+    be wrapped with numpy's vectorize. Note that vectorized functions do not
+    play well with Casadi symbolics, so set vectorize=False if you wish to
+    use the function later on with Casadi symbolics.
+    """
+    x = [casadi.SX.sym("x" + str(n)) for n in range(nargs)]
+    dfdx_expression = f(*x)
+    for i in wrt:
+        dfdx_expression = casadi.jacobian(dfdx_expression, x[i])
+    dfcasadi = casadi.SXFunction("dfdx", x, [dfdx_expression])
+    def dfdx(*x):
+        return dfcasadi(x)[0]
+    if len(wrt) > 1:
+        funcstr = "d^%df/%s" % (len(wrt), "".join(["x%d" % (i,) for i in wrt]))
+    else:
+        funcstr = "df/dx"
+    dfdx.__doc__ = "\n%s = %s" % (funcstr, repr(dfdx_expression))
+    if vectorize:    
+        ret = np.vectorize(dfdx, otypes=[np.float])
+    else:
+        ret = dfdx
+    return ret
     

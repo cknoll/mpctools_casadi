@@ -2,7 +2,7 @@ Nonlinear Model Predictive Control Tools for Casadi (mpc-tools-casadi)
 
 Copyright (C) 2015
 
-Michael J. Risbeck, Nishith R. Patel, and James B. Rawlings,
+Michael J. Risbeck, Nishith R. Patel, and James B. Rawlings.
 
 mpc-tools-casadi is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by the
