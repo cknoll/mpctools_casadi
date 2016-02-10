@@ -616,7 +616,8 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
             raise TypeError("funcargs['%s'] must be a list of strings!" % (k,))
         if not okay:
             badvars = set(args[k]).difference(givenvars)
-            raise ValueError("Bad arguments for %s: %s." % (k,repr(badvars)))
+            raise ValueError("Bad arguments for %s: %s."
+                             % (k, repr(list(badvars))))
     
     # Now sort out defaults.
     defaultargs = {
@@ -976,14 +977,19 @@ def __getArgs(names,t=0,*structs):
     """
     thisargs = []
     for v in names:
-        i = -1
-        found = False
-        while not found and i + 1 < len(structs):
-            i += 1            
-            found = v in structs[i].keys()
+        for (i, struct) in enumerate(structs):
+            if struct is not None and v in struct.keys():
+                found = True
+                break
+        else:
+            found = False
         if not found:
+            allkeys = []
+            for struct in structs:
+                if struct is not None:
+                    allkeys.append(struct.keys())
             raise ValueError("Argument %s is invalid! Must be in [%s]!" 
-            % (v,", ".join(util.flattenlist([s.keys() for s in structs]))))
+                             % (v, ", ".join(util.flattenlist(allkeys))))
         if len(structs[i][v]) == 1:
             thisargs.append(structs[i][v][0])
         else:

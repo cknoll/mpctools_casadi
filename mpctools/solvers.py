@@ -1,4 +1,5 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
+import copy
 import numpy as np
 import util
 import casadi
@@ -77,6 +78,14 @@ class ControlSolver(object):
         return self.__guess    
     
     @property
+    def defaultguess(self):
+        return copy.deepcopy(self.__defaultguess)
+        
+    @defaultguess.setter
+    def defaultguess(self, g):
+        self.__defaultguess = copy.deepcopy(g)
+    
+    @property
     def conlb(self):
         return self.__conlb
         
@@ -144,7 +153,6 @@ class ControlSolver(object):
         self.__settings.update(settings)
         self.__changed = True
     
-    
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  scalar=True, name="ControlSolver", ipoptoptions={}):
@@ -160,6 +168,7 @@ class ControlSolver(object):
         self.__lb = varlb
         self.__ub = varub
         self.__guess = varguess
+        self.defaultguess = varguess
         
         self.__obj = obj
         self.__con = con
@@ -175,9 +184,9 @@ class ControlSolver(object):
                                verbosity=verbosity, timelimit=timelimit)
         
         # Now initialize the solver object.
-        self.initializeSolver(**ipoptoptions)        
+        self.initialize(**ipoptoptions)        
         
-    def initializeSolver(self, name=None, **options):
+    def initialize(self, name=None, **options):
         """
         Recreates the solver object completely.
         
@@ -265,7 +274,7 @@ class ControlSolver(object):
             print("See\n\n    %s\n\nfor details about IPOPT options."
                 % (options["__web__"],)) 
             print("\nOptions can be set using keyword arguments to"
-                " ControlSolver.initializeSolver.\n")
+                " ControlSolver.initialize().\n")
         return options
     
     def solve(self):
@@ -313,28 +322,34 @@ class ControlSolver(object):
         self.stats["status"] = status
         self.stats["time"] = endtime - starttime
          
-    def saveguess(self,toffset=1):
+    def saveguess(self, toffset=None, default=False):
         """
         Stores the vales from the from the last optimization as a guess.
         
         This is useful to store the results of the previous step as a guess for
         the next step. toffset defaults to 1, which means the time indices are
         shifted by 1, but you can set this to whatever you want.
+        
+        If default is True, then uses the guess stored in self.defaultguess
+        instead of the current optimization. Note that toffset defaults to 0
+        in this case.
         """
+        newguess = self.__defaultguess if default else self.var
+        if toffset is None:
+            toffset = 0 if default else 1
         for k in self.var.keys():
             # These values and the guess structure can potentially have a
             # different number of time points. So, we need to figure out
             # what range of times will be valid for both things. The offset
             # makes things a bit weird.
-            tmaxVal = len(self.var[k])
+            tmaxVal = len(newguess[k])
             tmaxGuess = len(self.guess[k]) + toffset
             tmax = min(tmaxVal,tmaxGuess)
-            
             tmin = max(toffset,0)
             
             # Now actually store the stuff.           
             for t in range(tmin,tmax):
-                self.guess[k,t-toffset] = self.var[k,t]
+                self.guess[k,t-toffset] = newguess[k,t]
     
     def fixvar(self,var,t,val,indices=None):
         """
