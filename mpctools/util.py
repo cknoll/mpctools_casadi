@@ -533,6 +533,20 @@ class ArrayDict(collections.MutableMapping):
         return repr(self.__arraydict__)
 
 
+class ReadOnlyDict(dict):
+    """Read-only dictionary to prevent user changes."""
+    def __readonly__(self, *args, **kwargs):
+        raise NotImplementedError("Cannot modify ReadOnlyDict")
+    __setitem__ = __readonly__
+    __delitem__ = __readonly__
+    pop = __readonly__
+    popitem = __readonly__
+    clear = __readonly__
+    update = __readonly__
+    setdefault = __readonly__
+    del __readonly__
+
+
 def strcolor(s, color=None, bold=False):
     """
     Adds ANSI escape sequences to colorize string s.

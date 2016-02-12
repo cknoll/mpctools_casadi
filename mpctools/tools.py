@@ -430,12 +430,14 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         dataAndStructure.append((guess,parval,"par"))  # See above.
     else:
         parval = None
+    misc = {"N" : N.copy()}
         
     # Check timestep.
-    if Delta is None:
-        Delta = 1
-        if "c" in N.keys() and N["c"] > 0:
-            warnings.warn("Using default value Delta = 1.")        
+    if "c" in N.keys() and N["c"] > 0:
+        if Delta is None:
+            Delta = 1
+            warnings.warn("Using default value Delta = 1.")
+        misc["Delta"] = Delta
         
     # Sort out bounds and parameters.
     for (data,structure,name) in dataAndStructure:
@@ -462,7 +464,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
                         "Ignoring." % (name,v))
                 elif len(vs) > d.shape[0]:
                     util.keyboard()
-                    raise IndexError("Too few time points in %s['%s']!" % (name,v))
+                    raise IndexError("Too few time points in %s['%s']!" %
+                                     (name, v))
                 o = 1 # Offset multiplier.
                 
             # Grab data.            
@@ -490,6 +493,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
         finalpoint=finalpoint,e=e,Ne=N["e"],discretel=discretel,
         fErrorVars=fErrorVars)
+    if "colloc" in constraints:
+        misc["colloc"] = constraints["colloc"]
     
     # Build up constraints.
     if con is None or conlb is None or conub is None:
@@ -518,31 +523,10 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     
     # Build ControlSolver object and return that.
     args = [var, varlb, varub, varguess, obj, con, conlb, conub, par, parval]
-    kwargs = dict(verbosity=verbosity, timelimit=60, casaditype=casaditype)
+    kwargs = dict(verbosity=verbosity, timelimit=60, casaditype=casaditype,
+                  misc=misc)
     solver = solvers.ControlSolver(*args, **kwargs)
     return solver
-
-    
-#    # If we want an optimization, then do some post-processing. Otherwise, just
-#    # return the solver object.
-#    if runOptimization:
-#        # Call the solver.
-#        [var, cost, status, solver] = solvers.callSolver(var,varlb,varub,
-#            varguess,obj,con,conlb,conub,par,parval,verbosity=verbosity,
-#            timelimit=60,scalar=scalar)
-#        returnDict = util.casadiStruct2numpyDict(var)
-#        returnDict["cost"] = cost
-#        returnDict["status"] = status    
-#        
-#        # Create an array of time points.
-#        returnDict["t"] = N["t"]*Delta*np.linspace(0,1,N["t"] + 1)
-#        if N["c"] > 0:
-#            r = constraints["colloc.weights"]["r"][1:-1] # Throw out endpoints.        
-#            r.shape = (1,r.size)
-#            returnDict["tc"] = returnDict["t"].reshape(
-#                (returnDict["t"].size,1))[:-1] + Delta*r
-#    else:
-
 
 def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
                          l=None, funcargs={}, Ncolloc=0, Delta=1,
@@ -661,7 +645,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         raise ValueError("Ncolloc must be a nonnegative integer if given.")
     if Ncolloc > 0:
         [r,A,B,q] = colloc.weights(Ncolloc, True, True) # Collocation weights.
-        returnDict["colloc.weights"] = {"r":r, "A":A, "B":B, "q":q}
+        returnDict["colloc"] = {"r" : r, "A" : A, "B" : B, "q" : q}
         collocvar = {}
         for v in givenvarscolloc:
             # Make sure we were given the corresponding "c" variables.            

@@ -55,7 +55,9 @@ holes = [(p,r) for p in itertools.product(centers,centers)]
 Ne = len(holes)
 
 def nlcon(x):
-    [x1, x2] = x[0:2]
+    # [x1, x2] = x[0:2] # Doesn't work in Casadi 3.0
+    x1 = x[0]
+    x2 = x[1]
     resid = [r**2 - (x1 - p1)**2 - (x2 - p2)**2 for ((p1,p2),r) in holes]
     return np.array(resid)
 e = mpc.getCasadiFunc(nlcon, [Nx], ["x"], "e")
@@ -101,8 +103,8 @@ else:
 N = {"x":Nx, "u":Nu, "e":Ne, "t":Nt}
 controller = mpc.nmpc(f, l, N, x0, lb, ub, funcargs=funcargs, e=e, Pf=Pf,
                       ef=ef, verbosity=(0 if movingHorizon else 5),
-                      runOptimization=False, scalar=False)
-controller.initializeSolver(max_iter=5000)
+                      casaditype="SX")
+controller.initialize(solveroptions=dict(max_iter=5000))
 
 # Now ready for simulation.
 x = np.zeros((Nsim+1,Nx))

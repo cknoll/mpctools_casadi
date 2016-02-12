@@ -19,36 +19,35 @@ def setMaxVerbosity(verb=100):
     _MAX_VERBOSITY = verb
 
 
-## This function looks unnecessary. - MJR 2/12/2016
-#def callSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par=None,
-#    parval=None,verbosity=5,timelimit=60,isQp=False,runOptimization=True,
-#    scalar=True):
-#    """
-#    Calls ipopt to solve an NLP or qpoases to solve QP.
-#    
-#    Arguments are mostly self-explainatory. var, varlb, varub, and varguess
-#    should be casadi struct_symMX objects, e.g. the outputs of getCasadiVars.
-#    obj should be a scalar casadi MX object, and con should be a vector casadi
-#    MX object (possibly from calling casadi.vertcat on a list of constraints).
-#    conlb and conub should be numpy vectors of the appropriate size.
-#    
-#    Returns the optimal variables, the objective function, status string, and
-#    the ControlSolver object.
-#    """
-#    solver = ControlSolver(var,varlb,varub,varguess,obj,con,conlb,conub,par,
-#        parval,verbosity,timelimit,isQp,scalar)
-#    
-#    # Solve if requested and get variables.
-#    if runOptimization:    
-#        solver.solve()
-#        status = solver.stats["status"]
-#        obj = solver.obj
-#    else:
-#        status = "NO_OPTIMIZATION_REQUESTED"
-#        obj = np.inf
-#    optvar = solver.var
-#     
-#    return [optvar, obj, status, solver]
+def callSolver(solver, verbosity=None):
+    """
+    Wrapper to ControlSolver.solve() that returns a single dictionary.
+    
+    This function is mainly for backward-compatibility now that the option
+    runOptimization was removed from nmpc, nmhe, etc.
+    
+    Returns a dictionary with optimal variables as NumPy arrays. Additional
+    keys "t", "obj" and "status" are also present. Finally, if the model used
+    collocation, an entry "tc" is also present which is an Nt by Nc array of
+    time points.
+    """
+    if verbosity is not None:
+        solver.verbosity = verbosity
+    solver.solve()
+
+    returnDict = util.casadiStruct2numpyDict(solver.var)
+    returnDict["obj"] = solver.obj
+    returnDict["status"] = solver.stats["status"]
+    
+    Delta = solver.misc.get("Delta", 1)
+    N = solver.misc["N"]
+    returnDict["t"] = Delta*np.arange(N["t"] + 1)
+    if "c" in N and N["c"] > 0:
+        r = solver.misc["colloc"]["r"][1:-1] # Throw out endpoints.        
+        r = r[np.newaxis,:]
+        returnDict["tc"] = returnDict["t"][:-1,np.newaxis] + Delta*r    
+    
+    return returnDict
     
 
 class ControlSolver(object):
@@ -147,7 +146,7 @@ class ControlSolver(object):
     def isQp(self, tf):
         self.__changesettings(isQP=tf)
     
-    def __changesetting(self, **settings):
+    def __changesettings(self, **settings):
         """
         Changes fields of the settings dictionary and sets update flag.
         """
@@ -156,12 +155,22 @@ class ControlSolver(object):
     
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
-                 casaditype="SX", name="ControlSolver", ipoptoptions={}):
+                 casaditype="SX", name="ControlSolver", casadioptions=None,
+                 solveroptions=None, misc=None):
         """
         Initialize the solver object.
         
-        These arguments should be almost identical to callSolver, which is
-        simply a functional wrapper for this class.
+        Arguments are mostly self-explainatory. var, varlb, varub, and varguess
+        should be casadi struct_symMX objects, e.g. the outputs of
+        getCasadiVars. obj should be a scalar casadi MX object, and con should
+        be a vector casadi MX object (possibly from calling casadi.vertcat on a
+        list of constraints). conlb and conub should be numpy vectors of the
+        appropriate size. misc is a read-only dictionary for storing to hold
+        miscellaneous parameters that cannot be changed.
+        
+        Typically, it's easiest to build these objects using nmpc, nmhe, or
+        sstarg from the tools module, all of which return ControlSolver
+        objects.
         """
         
         # First store everybody to the object.
@@ -181,13 +190,20 @@ class ControlSolver(object):
         
         self.__stats = {}
         self.__settings = {} # Need to initialize this.
-        self.__changesetting(isQP=isQP, name=name, verbosity=verbosity,
-                             timelimit=timelimit)
+        self.__changesettings(isQP=isQP, name=name, verbosity=verbosity,
+                              timelimit=timelimit)
+        if misc is None:
+            misc = {}
+        self.misc = util.ReadOnlyDict(**misc)
         
         # Now initialize the solver object.
-        self.initialize(**ipoptoptions)        
+        if casadioptions is None:
+            casadioptions = {}
+        if solveroptions is None:
+            solveroptions = {}
+        self.initialize(casadioptions, solveroptions)        
         
-    def initialize(self, name=None, **options):
+    def initialize(self, casadioptions=None, solveroptions=None):
         """
         Recreates the solver object completely.
         
@@ -200,8 +216,14 @@ class ControlSolver(object):
         that all of these are either strings or floats, and any boolean values
         will likely cause errors.
         """
-        if name is not None:
-            self.name = name
+        if casadioptions is None:
+            casadioptions = {}
+        else:
+            casadioptions = casadioptions.copy()
+        if solveroptions is None:
+            solveroptions = {}
+        else:
+            solveroptions = solveroptions.copy()
         
         nlp = {
             "x" : self.__var,
@@ -213,15 +235,14 @@ class ControlSolver(object):
         
         # Print and time limit options. Note that we must respect Ipopt's
         # limits with print_level, which are different from ours.
-        ipoptoptions = options.pop("ipopt", {})
-        ipoptoptions["print_level"] =  min(12, max(0, self.verbosity))
-        ipoptoptions["max_cpu_time"] = self.timelimit        
-        options["print_time"] = self.verbosity > 2        
+        solveroptions["print_level"] =  min(12, max(0, self.verbosity))
+        solveroptions["max_cpu_time"] = self.timelimit        
+        casadioptions["print_time"] = self.verbosity > 2        
         
         # Note that there is an option "check_derivatives_for_naninf" that in
         # theory would error out if NaNs or Infs are encountered, but it seems
         # to just crash Python whenever anything bad happens.
-        options["eval_errors_fatal"] = True
+        casadioptions["eval_errors_fatal"] = True
                 
         # Choose different function whether QP or not.
         # TODO: allow user to specify solver. - MJR 2/12/2016
@@ -229,8 +250,8 @@ class ControlSolver(object):
             # TODO: handle options for qpoases. - MJR 2/12/2016
             solver = casadi.qpsol(self.name, "qpoases", nlp)
         else:
-            options["ipopt"] = ipoptoptions
-            solver = casadi.nlpsol(self.name, "ipopt", nlp, options)
+            casadioptions["ipopt"] = solveroptions
+            solver = casadi.nlpsol(self.name, "ipopt", nlp, casadioptions)
         
         # Finally, save the solver and unset the changed flag.
         self.__solver = solver
@@ -267,7 +288,7 @@ class ControlSolver(object):
         # Solve the problem and get optimal variables.
         starttime = time.clock()
         if self.__changed:
-            self.initializeSolver()
+            self.initialize()
         solver = self.__solver
         
         # Now set guess and bounds.

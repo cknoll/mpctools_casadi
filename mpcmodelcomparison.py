@@ -52,7 +52,8 @@ F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
 
 print "\n=Exact Discretization="
 N = {"x":Nx, "u":Nu, "t":Nt}
-opt_dnmpc = mpc.nmpc(F,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
+opt_dnmpc = mpc.callSolver(mpc.nmpc(F, l, N, x0, lb, ub, Pf=Pf,
+                                    verbosity=verb))
 fig_dnmpc = mpc.plots.mpcplot(opt_dnmpc["x"],opt_dnmpc["u"],t,xsp,
                               xinds=[0,1])
 fig_dnmpc.canvas.set_window_title("Discrete-time NMPC")
@@ -66,12 +67,12 @@ f = mpc.getCasadiFunc(fcontinuous,[Nx,Nu],["x","u"],"f")
 Mrk4 = 5
 Mcolloc = 5
 
-def Fdiscrete_rk4(x,u):
-    return mpc.util.rk4(fcontinuous,x,[u],Delta=Delta,M=Mrk4)
-F_rk4 = mpc.getCasadiFunc(Fdiscrete_rk4,[Nx,Nu],["x","u"],"F_rk4")    
+F_rk4 = mpc.getCasadiFunc(fcontinuous, [Nx,Nu], ["x","u"], "F_rk4", rk4=True,
+                          Delta=Delta, M=Mrk4)    
 
 print "\n=RK4 Discretization="
-opt_crk4nmpc = mpc.nmpc(F_rk4,l,N,x0,lb,ub,Pf=Pf,verbosity=verb)
+opt_crk4nmpc = mpc.callSolver(mpc.nmpc(F_rk4, l, N, x0, lb, ub, Pf=Pf,
+                                       verbosity=verb))
 fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,
                                  xsp,xinds=[0,1])
 fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
@@ -80,8 +81,8 @@ mpc.plots.showandsave(fig_crk4nmpc,"mpcmodelcomparison_rk4.pdf")
 print "\n=Collocation Discretization="
 Ncolloc = N.copy()
 Ncolloc["c"] = Mcolloc
-opt_ccollocnmpc = mpc.nmpc(f,l,Ncolloc,x0,lb,ub,Pf=Pf,verbosity=verb,
-                           Delta=Delta)
+opt_ccollocnmpc = mpc.callSolver(mpc.nmpc(f, l, Ncolloc, x0, lb, ub, Pf=Pf,
+                                          verbosity=verb, Delta=Delta))
 fig_ccollocnmpc = mpc.plots.mpcplot(opt_ccollocnmpc["x"],
                                     opt_ccollocnmpc["u"],t,xsp,xinds=[0,1])
 fig_ccollocnmpc.canvas.set_window_title("Continuous-time NMPC (Collocation)")
@@ -92,8 +93,8 @@ mpc.plots.showandsave(fig_ccollocnmpc,"mpcmodelcomparison_collocation.pdf")
 print "\n=Casadi Integrator Discretization="
 F_integrator = mpc.tools.getCasadiIntegrator(fcontinuous,Delta,[Nx,Nu],
                                              ["x","u"],"int_f")
-opt_integrator = mpc.nmpc(F_integrator,l,N,x0,lb,ub,Pf=Pf,verbosity=verb,
-                          scalar=False)
+opt_integrator = mpc.callSolver(mpc.nmpc(F_integrator, l, N, x0, lb, ub, Pf=Pf,
+                                         verbosity=verb, casaditype="MX"))
 fig_integrator = mpc.plots.mpcplot(opt_integrator["x"],
                                    opt_integrator["u"],t,xsp,xinds=[0,1])
 fig_integrator.canvas.set_window_title("NMPC with Casadi Integrators")
