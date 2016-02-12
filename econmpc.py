@@ -49,13 +49,27 @@ times = np.arange(0,Nsim+1)
 
 # Convert to (x,u) notation.
 def ode(x,u):
-    [cA,cB] = x[:Nx]
-    [Q] = u[:Nu]
+    # We would like to write
+    #
+    # [cA,cB] = x[:Nx]
+    # [Q] = u[:Nu]
+    #
+    # but it doesn't work in Casadi 3.0. So,
+    cA = x[0]
+    cB = x[1]
+    Q = u[0]    
     return cstrmodel(cA,cB,Q)
 
 def lfunc(x,u,rho):
-    [cA,cB] = x[:Nx]
-    [Q] = u[:Nu]
+    # We would like to write
+    #
+    # [cA,cB] = x[:Nx]
+    # [Q] = u[:Nu]
+    #
+    # but it doesn't work in Casadi 3.0. So,
+    cA = x[0]
+    cB = x[1]
+    Q = u[0]
     return stagecost(cA,cB,Q,rho)
 
 def Pffunc(x):
@@ -107,8 +121,7 @@ contargs = dict(
     },
     x0=xs,
     extrapar={"rho" : np.zeros((Nrho,))},
-    largs=largs,
-    runOptimization=False,
+    funcargs={"l" : largs},
     Pf=Pf,
     verbosity=0,
     discretel=False,

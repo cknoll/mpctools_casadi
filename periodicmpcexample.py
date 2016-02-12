@@ -46,8 +46,8 @@ N = {"x" : n, "u" : m, "p" : m, "t" : Nt}
 funcargs = {"f" : ["x","u"], "l" : ["x","u","p"]}
 
 # Solve linear MPC problem.
-solution = mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, p=p, funcargs=funcargs,
-                    verbosity=3)
+solution = mpc.callSolver(mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, p=p,
+                                   funcargs=funcargs, verbosity=3))
 x = solution["x"]
 u = solution["u"]
 

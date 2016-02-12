@@ -32,14 +32,14 @@ Functions for solving MPC problems using Casadi and Ipopt.
 # MPC and MHE
 # =================================
 
-# These functions are rewrites of the legacy MPC and MHE versions to use a more
-# common framework. They appear to be strictly better than the functions they
-# replace.
+# Note that using dictionaries as default arguments is okay in these functions
+# because we always (should) make sure that the dictionary is copied internally
+# before modifying it.
 
 def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
-         Pf=None, largs=None, sp={}, p=None, uprev=None, verbosity=5,
-         timelimit=60, Delta=None, funcargs={}, extrapar={}, e=None, ef=None,
-         periodic=False, discretel=True, casaditype="SX"):
+         Pf=None, sp={}, p=None, uprev=None, verbosity=5, timelimit=60,
+         Delta=None, funcargs={}, extrapar={}, e=None, ef=None, periodic=False,
+         discretel=True, casaditype="SX"):
     """
     Solves nonlinear MPC problem.
     
@@ -62,19 +62,20 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     on the final state x, you may also specify an "xf" entry in lb or ub, which
     should be a N["x"] array.
     
-    Function argument are assumed to be the "usual" order, i.e. f(x,u), l(x,u),
-    and Pf(x). If you wish to override any of these, specify a list of variable
-    names in the corresponding entry of extrapar. E.g., for a stage cost
-    l(x,u,x_sp,u_sp,Du), specify funcargs={"l" : ["x","u","x_sp","u_sp","Du"]}.
-    Terminal constraints can be specified in ef, but arguments must be given,
-    and u cannot be included since there is no u(N) variable.    
-    
     sp is a dictionary that holds setpoints for x and u. If supplied, the stage
     cost is assumed to be a function l(x,u,x_sp,u_sp). If not supplied, l is
     l(x,u). To explicitly specify a different order of arguments or something
-    else, e.g. a dependence on parameters, specify a list of input variables.
-    Similarly, Pf is assumed to be Pf(x,x_sp) if a setpoint for x is supplied,
-    and it is left as Pf(x) otherwise.    
+    else, e.g. a dependence on parameters, specify a list of input variables
+    in funcargs as described in the next paragraph. Similarly, Pf is assumed to
+    be Pf(x,x_sp) if a setpoint for x is supplied, and it is left as Pf(x)
+    otherwise.    
+    
+    Function argument are assumed to be the "usual" order, i.e. f(x,u), l(x,u),
+    and Pf(x). If you wish to override any of these, specify a list of variable
+    names in the corresponding entry of funcargs. E.g., for a stage cost
+    l(x,u,x_sp,u_sp,Du), specify funcargs={"l" : ["x","u","x_sp","u_sp","Du"]}.
+    Terminal constraints can be specified in ef, but arguments must be given,
+    and u cannot be included since there is no u(N) variable.        
     
     To include rate of change penalties or constraints, set uprev so a vector
     with the previous u entry. Bound constraints can then be entered with the
@@ -151,7 +152,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters. Note that
     # if this ends up empty, we just set it to None.
-    parNames = set(["p"] + [k + "_sp" for k in sp.keys()]
+    parNames = set(["p"] + [k + "_sp" for k in sp]
         + [k + "_prev" for k in deltaVars] + extrapar.keys())
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
     if len(parStruct.keys()) == 0:
@@ -162,7 +163,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
 
     # Add parameters and setpoints to the guess structure.
     guess["p"] = p
-    for v in sp.keys():
+    for v in sp:
         guess[v + "_sp"] = sp[v]
     if uprev is not None:
         # Need uprev to have shape (1, N["u"]).
@@ -174,7 +175,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         guess[v] = thispar
     
     # Need to decide about algebraic constraints.
-    if "z" in allShapes.keys():
+    if "z" in allShapes:
         N["g"] = N["z"]
     else:
         N["g"] = None
@@ -182,7 +183,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     
     # Make initial objective term.    
     if Pf is not None:
-        if "x" in sp.keys():
+        if "x" in sp:
             obj = Pf([varStruct["x",-1],parStruct["x_sp",-1]])[0]
         else:
             obj = Pf([varStruct["x",-1]])[0]
@@ -191,7 +192,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     
     # Terminal constraint (if present).
     if ef is not None:
-        if "ef" not in funcargs.keys():
+        if "ef" not in funcargs:
             raise KeyError("Must provide an 'ef' entry in funcargs!")
         args = __getArgs(funcargs["ef"], N["t"], varStruct, parStruct)
         con = [ef(args)[0]]
@@ -204,16 +205,13 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         conub = None
     
     # Decide arguments of l.
-    if largs is None and "l" not in funcargs.keys():
+    if "l" not in funcargs:
         largs = ["x","u"]
-        if "x" in sp.keys():
+        if "x" in sp:
             largs.append("x_sp")
-        if "u" in sp.keys():
+        if "u" in sp:
             largs.append("u_sp")
         funcargs["l"] = largs
-    elif "l" not in funcargs.keys():
-        funcargs["l"] = largs
-    
     
     # Build list of arguments for optimal control type.
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
@@ -223,9 +221,9 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
                   casaditype=casaditype, discretel=discretel)
     return __optimalControlProblem(*args, **kwargs)
 
-def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
-    verbosity=5,largs=["w","v"],timelimit=60,Delta=None,runOptimization=True,
-    wAdditive=False,scalar=True):
+def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
+         p=None, verbosity=5, largs=None, funcargs={}, timelimit=60, Delta=None,
+         wAdditive=False, casaditype="SX"):
     """
     Solves nonlinear MHE problem.
     
@@ -251,10 +249,9 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
     predictor step.
     """
-    raise NotImplementedError("Function not updated.")
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
-    guess = guess.copy()    
+    funcargs = funcargs.copy()
     
     # Also make sure some things are arrays of numpy dicts.
     lb = util.ArrayDict(lb)
@@ -282,10 +279,10 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
     parNames = set(["u","p","y"])
-    parStruct = __casadiSymStruct(allShapes,parNames,scalar=scalar)
+    parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
         
     varNames = set(["x","z","w","v","xc","zc"])
-    varStruct = __casadiSymStruct(allShapes,varNames,scalar=scalar)
+    varStruct = __casadiSymStruct(allShapes, varNames, casaditype)
 
     # Now we fill up the parameters in the guess structure.
     for (name,val) in [("u",u),("p",p),("y",y)]:
@@ -300,8 +297,10 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     N["f"] = N["x"]
     
     # Make initial objective term.
-    finallargs = []    
-    for k in largs:
+    if "l" not in funcargs:
+        funcargs["l"] = ["w", "v"]
+    finallargs = []   
+    for k in funcargs["l"]:
         if k == "w":
             finallargs.append(np.zeros(N["w"]))
         elif k in parStruct.keys():
@@ -309,7 +308,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
         elif k in varStruct.keys():
             finallargs.append(varStruct[k,-1])
         else:
-            raise KeyError("l argument %s is invalid!" % (k,))
+            raise KeyError("l argument %s is invalid!" % k)
     obj = l(finallargs)[0]    
     if lx is not None and x0bar is not None:
         obj += lx([varStruct["x",0] - x0bar])[0]
@@ -318,15 +317,16 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     fErrorVars = []    
     if wAdditive:
         fErrorVars.append("w")
-    
-    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=h,l=l,funcargs={"l":largs},Delta=Delta,verbosity=verbosity,
-         runOptimization=runOptimization,scalar=scalar,fErrorVars=fErrorVars)
+    args = [N, varStruct, parStruct, lb, ub, guess, obj]
+    kwargs = dict(f=f, g=g, h=h, l=l, funcargs=funcargs, Delta=Delta,
+                  verbosity=verbosity, casaditype=casaditype,
+                  fErrorVars=fErrorVars)
+    return __optimalControlProblem(*args, **kwargs)
 
 
-def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
-    discretef=True,verbosity=5,timelimit=60,runOptimization=True,scalar=True,
-    funcargs={},extrapar={}):
+def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
+           funcargs={}, extrapar={}, discretef=True, verbosity=5, timelimit=60,
+           casaditype="SX"):
     """
     Solves nonlinear steady-state target problem.
     
@@ -336,10 +336,10 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     lb and ub should be dictionaries of bounds for the various variables.
     guess should have the same structure.    
     """
-    raise NotImplementedError("Function not updated.")
+    
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
-    guess = guess.copy()    
+    funcargs = funcargs.copy()    
     
     # Make sure certain dictionaries have numpy arrays.
     lb = util.ArrayDict(lb)
@@ -368,10 +368,10 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
     parNames = set(["p"] + extrapar.keys())
-    parStruct = __casadiSymStruct(allShapes,parNames,scalar=scalar)
+    parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
         
     varNames = set(["x","z","u","y"])
-    varStruct = __casadiSymStruct(allShapes,varNames,scalar=scalar)
+    varStruct = __casadiSymStruct(allShapes, varNames, casaditype)
 
     # Now we fill up the parameters in the guess structure.
     guess["p"] = p
@@ -390,19 +390,19 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
         N["f"] = N["x"]
     
     # Make objective term.
-    if phiargs is None and "phi" in funcargs.keys():
-        phiargs = funcargs["phi"]
-    if phi is not None and phiargs is not None:
-        args = __getArgs(phiargs, 0, varStruct, parStruct)
+    if phi is not None:
+        if "phi" not in funcargs:
+            raise KeyError("Must provide funcargs['phi'] if phi is given!")
+        args = __getArgs(funcargs["phi"], 0, varStruct, parStruct)
         obj = phi(args)[0]
-    elif scalar:
-        obj = casadi.SX(0)
     else:
-        obj = casadi.MX(0)
-       
-    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-         f=f,g=g,h=h,funcargs=funcargs,verbosity=verbosity,discretef=discretef,
-         finalpoint=False,runOptimization=runOptimization,scalar=scalar)
+        obj = None
+    
+    # Get controller arguments.    
+    args = [N, varStruct, parStruct, lb, ub, guess, obj]
+    kwargs = dict(f=f, g=g, h=h, funcargs=funcargs, verbosity=verbosity,
+                  discretef=discretef, finalpoint=False, casaditype=casaditype)
+    return __optimalControlProblem(*args, **kwargs)
 
 
 def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
@@ -433,7 +433,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     misc = {"N" : N.copy()}
         
     # Check timestep.
-    if "c" in N.keys() and N["c"] > 0:
+    if "c" in N and N["c"] > 0:
         if Delta is None:
             Delta = 1
             warnings.warn("Using default value Delta = 1.")
@@ -556,7 +556,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
     funcargs.    
     
     Also builds up a list of stage costs l(...). Note that if l is given, its
-    arguments must be specified in largs as a tuple of variable names.
+    arguments must be specified in funcargs as a list of variable names.
     
     In principle, you can use the variables for whatever you want, but they
     must show up in the proper order. We do very little checking of this, so

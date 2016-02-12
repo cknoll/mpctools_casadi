@@ -28,10 +28,19 @@ dH = -5e4
 #<<ENDCHUNK>>
 
 def ode(x,u,d):
-    # Grab the states, controls, and disturbance.
-    [c, T, h] = x[0:Nx]
-    [Tc, F] = u[0:Nu]
-    [F0] = d[0:Nd]
+    # Grab the states, controls, and disturbance. We would like to write
+    #    
+    # [c, T, h] = x[0:Nx]
+    # [Tc, F] = u[0:Nu]
+    # [F0] = d[0:Nd]
+    #    
+    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+    c = x[0]
+    T = x[1]
+    h = x[2]
+    Tc = u[0]
+    F = u[1]
+    F0 = d[0]
 
     # Now create the ODE.
     rate = k0*c*np.exp(-E/T)

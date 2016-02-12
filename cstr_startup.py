@@ -25,15 +25,24 @@ Cp = .239
 dH = -5e4
 
 def ode(x,u,d):
-    # Grab the states, controls, and disturbance.
-    [c, T, h] = x[0:Nx]
-    [Tc, F] = u[0:Nu]
-    [F0] = d[0:Nd]
+    # Grab the states, controls, and disturbance. We would like to write
+    #    
+    # [c, T, h] = x[0:Nx]
+    # [Tc, F] = u[0:Nu]
+    # [F0] = d[0:Nd]
+    #    
+    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+    c = x[0]
+    T = x[1]
+    h = x[2]
+    Tc = u[0]
+    F = u[1]
+    F0 = d[0]
 
     # Now create the ODE.
     rate = k0*c*np.exp(-E/T)
         
-    dxdt = casadi.vertcat([
+    dxdt = np.array([
         F0*(c0 - c)/(np.pi*r**2*h) - rate,
         F0*(T0 - T)/(np.pi*r**2*h)
             - dH/(rho*Cp)*rate
@@ -82,14 +91,14 @@ model_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],funcname="cstr")
 Fnonlinear = ode_rk4_casadi
 
 def measurement(x,d):
-    return np.array(x)
+    return x
 h = mpc.getCasadiFunc(measurement,[Nx,Nd],["x","d"],funcname="h")
 
 def linmodel(x,u,d):
     Ax = mpc.mtimes(A,x-xs) + xs
     Bu = mpc.mtimes(B,u-us)
     Bpd = mpc.mtimes(Bp,d-ds)
-    return np.array(Ax + Bu + Bpd)
+    return Ax + Bu + Bpd
 Flinear = mpc.getCasadiFunc(linmodel,[Nx,Nu,Nd],["x","u","d"],funcname="F")
 
 def stagecost(x,u,xsp,usp,Q,R):
@@ -97,7 +106,7 @@ def stagecost(x,u,xsp,usp,Q,R):
     dx = x - xsp
     du = u - usp
     # Calculate stage cost.
-    return np.array(mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du))
+    return mpc.mtimes(dx.T,Q,dx) + mpc.mtimes(du.T,R,du)
 largs = ["x","u","x_sp","u_sp","Q","R"]
 l = mpc.getCasadiFunc(stagecost,[Nx,Nu,Nx,Nu,(Nx,Nx),(Nu,Nu)],largs,
                       funcname="l")
@@ -107,7 +116,7 @@ def costtogo(x,xsp):
     dx = x - xsp
     
     # Calculate cost to go.
-    return np.array(mpc.mtimes(dx.T,Pi,dx))
+    return mpc.mtimes(dx.T,Pi,dx)
 Pf = mpc.getCasadiFunc(costtogo,[Nx,Nx],["x","s_xp"],funcname="Pf")
 
 # First see what happens if we try to start up the reactor under no control.
@@ -150,9 +159,8 @@ nmpc_commonargs = {
     "Pf" : Pf,
     "l" : l,
     "sp" : sp,
-    "runOptimization" : False,
     "uprev" : us,
-    "largs" : largs,
+    "funcargs" : {"l" : largs},
     "extrapar" : {"Q" : Q, "R" : R}, # In case we want to tune online.
 }
 solvers = {}
@@ -166,7 +174,6 @@ sstarg_commonargs = {
     "lb" : {"u" : np.tile(us - umax, (1,1))},
     "ub" : {"u" : np.tile(us + umax, (1,1))},
     "verbosity" : 0,
-    "runOptimization" : False,
     "h" : h,
     "p" : np.array([ds]),
 }

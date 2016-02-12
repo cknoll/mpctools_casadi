@@ -55,7 +55,7 @@ x0 = np.array([0,1])
 N = {"x":Nx, "u":Nu, "t":Nt}
 solver = mpc.nmpc(f=ode_rk4_casadi,N=N,
     verbosity=0,l=l,x0=x0,Pf=Pf,
-    lb=lb,ub=ub,runOptimization=False)
+    lb=lb,ub=ub)
 
 #<<ENDCHUNK>>
 

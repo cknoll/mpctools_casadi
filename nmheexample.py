@@ -8,7 +8,6 @@ from numpy import random
 
 random.seed(927) # Seed random number generator.
 
-verb = 2
 doPlots = True
 fullInformation = False # Whether to use full information estimation or MHE.
 
@@ -45,7 +44,10 @@ RT = 32.84
 
 # Continuous-time models.
 def ode(x,u,w=[0,0,0]): # We define the model with u, but there isn't one.
-    [cA, cB, cC] = x[:Nx]    
+    # [cA, cB, cC] = x[:Nx] # Doesn't work in Casadi 3.0.
+    cA = x[0]
+    cB = x[1]
+    cC = x[2]
     rate1 = k1*cA - k_1*cB*cC    
     rate2 = k2*cB**2 - k_2*cC
     return np.array([-rate1 + w[0], rate1 - 2*rate2 + w[1], rate1 + rate2 + w[2]])    
@@ -113,10 +115,13 @@ for t in range(Nsim):
     tmax = t+1        
     lb = {"x":np.zeros((N["t"] + 1,Nx))}  
 
-    # Call solver.
+    # Call solver. WOuld be baster to reuse a single solver object, but we
+    # can't because the horizon is changing.
     starttime = time.clock()
-    sol = mpc.nmhe(f=F,h=H,u=usim[tmin:tmax-1,:],y=ysim[tmin:tmax,:],l=l,N=N,
-                    lx=lx,x0bar=x0bar,verbosity=0,guess=guess,lb=lb)
+    sol = mpc.callSolver(mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
+                                  y=ysim[tmin:tmax,:], l=l, N=N, lx=lx,
+                                  x0bar=x0bar, verbosity=0, guess=guess,
+                                  lb=lb))
     print "%3d (%10.5g s): %s" % (t,time.clock() - starttime,sol["status"])
     if sol["status"] != "Solve_Succeeded":
         break
@@ -154,7 +159,7 @@ print "Simulation took %.5g s." % (time.clock() - initialtime)
 
 # Add to plots.
 for i in range(Nx):
-    ax.plot(tplot[:-1],xhat[:,i],"o",color=colors[i],markeredgecolor="none",
-            markersize=3)
+    ax.plot(tplot[:-1],xhat[:,i], marker="o", color=colors[i],
+            markeredgecolor=colors[i], markersize=3, linestyle="")
 mpc.plots.zoomaxis(ax, xscale=1.05,yscale=1.05)
 mpc.plots.showandsave(fig,"nmhe_exercise.pdf")

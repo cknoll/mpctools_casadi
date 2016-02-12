@@ -55,10 +55,19 @@ Tcs = 300
 F0s = .1
 
 def ode(x,u,d):
-    # Grab the states, controls, and disturbance.
-    [c, T, h] = x[0:Nx]
-    [Tc, F] = u[0:Nu]
-    [F0] = d[0:Nd]
+    # Grab the states, controls, and disturbance. We would like to write
+    #    
+    # [c, T, h] = x[0:Nx]
+    # [Tc, F] = u[0:Nu]
+    # [F0] = d[0:Nd]
+    #    
+    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+    c = x[0]
+    T = x[1]
+    h = x[2]
+    Tc = u[0]
+    F = u[1]
+    F0 = d[0]
     return cstrmodel(c,T,h,Tc,F,F0)
 
 # Turn into casadi function and simulator.
@@ -88,10 +97,21 @@ ps = np.concatenate((ds,xs,us))
 # all of the states.    
 def ode_disturbance(x,u,d=ds):
     # Grab states, estimated disturbances, controls, and actual disturbance.
-    [c, T, h] = x[0:Nx]
+    # We would
+    #    
+    # [c, T, h] = x[0:Nx]
+    # dhat = x[Nx:Nx+Nid] # Actually, this guy does work.
+    # [Tc, F] = u[0:Nu]
+    # [F0] = d[0:Nd]
+    #    
+    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+    c = x[0]
+    T = x[1]
+    h = x[2]
     dhat = x[Nx:Nx+Nid]
-    [Tc, F] = u[0:Nu]
-    [F0] = d[0:Nd]
+    Tc = u[0]
+    F = u[1]
+    F0 = d[0]
     
     dxdt = cstrmodel(c,T,h,Tc,F+dhat[2],F0)
     return dxdt
@@ -102,7 +122,10 @@ def ode_augmented(x,u,d=ds):
 cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                 [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 def measurement(x,d=ds):
-    [c, T, h] = x[0:Nx]
+    # [c, T, h] = x[0:Nx] # Doesn't work in Casadi 3.0
+    c = x[0]
+    T = x[1]
+    h = x[2]
     dhat = x[Nx:Nx+Nid]
     return np.array([c + dhat[0], T, h + dhat[1]])
 ys = measurement(xaugs)
@@ -225,7 +248,7 @@ xaug0 = xaugs
 nmpcargs = {
     "f" : ode_augmented_rk4_casadi,
     "l" : l,
-    "largs" : largs,
+    "funcargs" : {"l" : largs},
     "N" : N,
     "x0" : xaug0,
     "uprev" : us,
@@ -237,8 +260,7 @@ nmpcargs = {
     "p" : p,
     "verbosity" : 0,
     "timelimit" : 60,
-    "runOptimization" : False,
-    "scalar" : useCasadiSX,
+    "casaditype" : "SX" if useCasadiSX else "MX",
 }
 controller = mpc.nmpc(**nmpcargs)
 
@@ -258,8 +280,7 @@ nmheargs = {
     "verbosity" : 0,
     "guess" : {"x" : xaugs, "y" : ys, "u" : us},
     "timelimit" : 5,
-    "scalar" : useCasadiSX,
-    "runOptimization" : False,                        
+    "casaditype" : "SX" if useCasadiSX else "MX",                       
 }
 estimator = mpc.nmhe(**nmheargs)
 
@@ -300,12 +321,11 @@ sstargargs = {
     "p" : ds, # Parameters for system.
     "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
     "phi" : phi,
-    "phiargs" : phiargs,
+    "funcargs" : {"phi" : phiargs},
     "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},
     "verbosity" : 0,
     "discretef" : False,
-    "runOptimization" : False,
-    "scalar" : useCasadiSX,
+    "casaditype" : "SX" if useCasadiSX else "MX",
 }
 targetfinder = mpc.sstarg(**sstargargs)
 

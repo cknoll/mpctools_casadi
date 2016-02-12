@@ -33,19 +33,14 @@ def fcontinuous(x,u,w):
     return mpc.mtimes(Acont,x) + mpc.mtimes(Bcont,u) + mpc.mtimes(Gcont,w)
 fcontinuous = mpc.getCasadiFunc(fcontinuous,[Nx,Nu,Nw],["x","u","w"],"f")
 
-(Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,Delta)
-Cdisc = Ccont
-
-# Discrete-time example.
-A = mpc.util.DMatrix(Adisc) # Cast to Casadi matrix type.
-B = mpc.util.DMatrix(Bdisc)
-C = mpc.util.DMatrix(Cdisc)
+(A, B) = mpc.util.c2d(Acont, Bcont, Delta)
+C = Ccont
 
 def Fdiscrete(x,u,w):
-    return mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u) + w
+    return mpc.mtimes(A, x) + mpc.mtimes(B, u) + w
 Fdiscrete = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu,Nw],["x","u","w"],"F")
 
-def H(x): return mpc.mtimes(Cdisc,x)
+def H(x): return mpc.mtimes(C, x)
 H = mpc.getCasadiFunc(H,[Nx],["x"],"H")
 
 # Noise covariances.
@@ -109,7 +104,8 @@ lx = mpc.getCasadiFunc(lx,[Nx],["x"],"lx")
 
 N = {"t" : Nt, "x" : Nx, "y" : Ny, "u" : Nu, "c" : Nc}
 
-out = mpc.nmhe(fcontinuous,H,u,y,l,N,lx,x0hat,verbosity=5,Delta=Delta)
+out = mpc.callSolver(mpc.nmhe(fcontinuous, H, u, y, l, N, lx, x0hat,
+                              verbosity=5, Delta=Delta))
 
 west = out["w"]
 vest = out["v"]

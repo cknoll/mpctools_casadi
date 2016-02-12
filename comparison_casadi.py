@@ -25,23 +25,21 @@ x = casadi.SX.sym("x",Nx)
 u = casadi.SX.sym("u",Nu)
 
 # Make integrator object.
-ode_integrator = casadi.SXFunction(
-    "ode",
-    casadi.daeIn(x=x,p=u),
-    casadi.daeOut(ode=ode(x,u)))
+ode_integrator = dict(x=x,p=u,
+    ode=ode(x,u))
 intoptions = {
     "abstol" : 1e-8,
     "reltol" : 1e-8,
     "tf" : Delta,
 }
-vdp = casadi.Integrator("int_ode",
+vdp = casadi.integrator("int_ode",
     "cvodes", ode_integrator, intoptions)
 
 #<<ENDCHUNK>>
 
 # Then get nonlinear casadi functions
 # and rk4 discretization.
-ode_casadi = casadi.SXFunction(
+ode_casadi = casadi.Function(
     "ode",[x,u],[ode(x,u)])
 
 [k1] = ode_casadi([x,u])
@@ -49,18 +47,18 @@ ode_casadi = casadi.SXFunction(
 [k3] = ode_casadi([x + Delta/2*k2,u])
 [k4] = ode_casadi([x + Delta*k3,u])
 xrk4 = x + Delta/6*(k1 + 2*k2 + 2*k3 + k4)    
-ode_rk4_casadi = casadi.SXFunction(
+ode_rk4_casadi = casadi.Function(
     "ode_rk4", [x,u], [xrk4])
 
 #<<ENDCHUNK>>
 
 # Define stage cost and terminal weight.
-lfunc = (casadi.mul([x.T,x])
-    + casadi.mul([u.T,u]))
-l = casadi.SXFunction("l", [x,u], [lfunc])
+lfunc = (casadi.mtimes([x.T,x])
+    + casadi.mtimes([u.T,u]))
+l = casadi.Function("l", [x,u], [lfunc])
 
-Pffunc = casadi.mul([x.T,x])
-Pf = casadi.SXFunction("Pf", [x], [Pffunc])
+Pffunc = casadi.mtimes([x.T,x])
+Pf = casadi.Function("Pf", [x], [Pffunc])
 
 #<<ENDCHUNK>>
 
@@ -101,20 +99,16 @@ con = casadi.vertcat(con)
 conlb = np.zeros((Nx*Nt,))
 conub = np.zeros((Nx*Nt,))
 
-nlp = casadi.SXFunction(
-    "nlp",
-    casadi.nlpIn(x=var),
-    casadi.nlpOut(f=obj,g=con))
+nlp = dict(x=var, f=obj, g=con)
 nlpoptions = {
-    "print_level" : 0,
+    "ipopt" : {
+        "print_level" : 0,
+        "max_cpu_time" : 60,
+    },
     "print_time" : False,
-    "max_cpu_time" : 60,
 }
-solver = casadi.NlpSolver("solver",
+solver = casadi.nlpsol("solver",
     "ipopt", nlp, nlpoptions)
-
-solver.setInput(conlb,"lbg")
-solver.setInput(conub,"ubg")
 
 #<<ENDCHUNK>>
 
@@ -129,16 +123,18 @@ for t in range(Nsim):
     varlb["x",0,:] = x[t,:]
     varub["x",0,:] = x[t,:]
     varguess["x",0,:] = x[t,:]
-    solver.setInput(varguess,"x0")
-    solver.setInput(varlb,"lbx")
-    solver.setInput(varub,"ubx")    
+    args = dict(x0=varguess,
+                lbx=varlb,
+                ubx=varub,
+                lbg=conlb,
+                ubg=conub)   
     
     #<<ENDCHUNK>>    
     
     # Solve nlp.    
-    solver.evaluate()
-    status = solver.getStat("return_status")
-    optvar = var(solver.getOutput("x"))
+    sol = solver(args)
+    status = solver.stats()["return_status"]
+    optvar = var(sol["x"])
     
     #<<ENDCHUNK>>    
     
@@ -149,12 +145,11 @@ for t in range(Nsim):
     #<<ENDCHUNK>>    
     
     # Simulate.
-    vdp.setInput(x[t,:],"x0")
-    vdp.setInput(u[t,:],"p")
-    vdp.evaluate()
+    vdpargs = dict(x0=x[t,:],
+                   p=u[t,:])
+    out = vdp(vdpargs)
     x[t+1,:] = np.array(
-        vdp.getOutput("xf")).flatten()
-    vdp.reset()
+        out["xf"]).flatten()
 
 #<<ENDCHUNK>>
     

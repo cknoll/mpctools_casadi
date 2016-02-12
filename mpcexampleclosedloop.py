@@ -38,14 +38,16 @@ x0 = np.array([10,0])
 N = {"x" : n, "u" : m, "t" : Nt}
 
 # Now simulate.
+solver = mpc.nmpc(f, l, N, x0, lb, ub, verbosity=0)
 nsim = 100
 t = np.arange(nsim+1)*dt
 xcl = np.zeros((n,nsim+1))
 xcl[:,0] = x0
 ucl = np.zeros((m,nsim))
 for k in range(nsim):
-    sol = mpc.nmpc(f, l, N, x0, lb, ub, verbosity=0)   
-    print "Iteration %d Status: %s" % (k,sol["status"])
+    solver.fixvar("x", 0, x0)
+    sol = mpc.callSolver(solver)
+    print "Iteration %d Status: %s" % (k, sol["status"])
     xcl[:,k] = sol["x"][0,:]
     ucl[:,k] = sol["u"][0,:]
     x0 = ffunc(x0, ucl[:,k]) # Update x0.

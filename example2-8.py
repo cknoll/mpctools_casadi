@@ -20,9 +20,9 @@ N = dict(t=Nt, x=Nx, u=Nu)
 def F(x,u):
     return [x[0] + u[0], x[1] + u[0]**3]
 def l(x,u):
-    return [mpc.util.mtimes(x.T,x) + mpc.util.mtimes(u.T,u)]
+    return mpc.util.mtimes(x.T,x) + mpc.util.mtimes(u.T,u)
 def Pf(x):
-    return [1000*mpc.mtimes(x.T,x)] # Huge terminal penalty.
+    return 1000*mpc.mtimes(x.T,x) # Huge terminal penalty.
 
 def nlsim(x0, u, N):
     """
@@ -93,11 +93,11 @@ for guessmethod in range(Nguessmethods):
             print "%s (%3d of %d)" % (f,i+1,Npts)
         x0 = [np.cos(theta[i]), np.sin(theta[i])]
         guess = getguess(opt,guess,x0)
-        opt = mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, guess, Pf=Pfcasadi,
-                       verbosity=verb)
+        opt = mpc.callSolver(mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, guess,
+                                      Pf=Pfcasadi, verbosity=verb))
         if opt["status"] == "Solve_Succeeded":
             uopt[f][i] = opt["u"][0,0]
-            phiopt[f][i] = opt["cost"]
+            phiopt[f][i] = opt["obj"]
         else:
             uopt[f][i] = np.NaN
             phiopt[f][i] = np.NaN

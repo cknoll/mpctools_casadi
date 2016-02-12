@@ -4,8 +4,6 @@ import mpctools.plots as mpcplots
 import numpy as np
 import matplotlib.pyplot as plt
 
-#raise NotImplementedError("Needs to be updated viz. removal of legacy code!")
-
 # Build model.
 k00 = -2
 k11 = -.5
@@ -31,7 +29,7 @@ verbosity = 3
 
 # Solve "optimization" to get feasible x points.
 N = dict(x=Nx, u=Nu, c=Nc, t=Nt)
-sol = mpc.nmpc(f, l, N, x0, Delta=Delta, verbosity=verbosity)
+sol = mpc.callSolver(mpc.nmpc(f, l, N, x0, Delta=Delta, verbosity=verbosity))
 x = sol["x"]
 u = sol["u"]
 z = sol["xc"]
@@ -55,10 +53,12 @@ xfine[1,:] += (x0[1] - xfine[1,0])*np.exp(k11*tfine)
 f = plt.figure()
 for i in range(2):
     ax = f.add_subplot(2,1,1+i)
-    ax.plot(tfine,xfine[i,:],'-k',label="Analytical")
-    ax.plot(tx,x[:,i],'o',label="State Points",markerfacecolor="k",markeredgecolor="k")
-    ax.plot(tz,z[:,i],'o',label="Collocation Points",markerfacecolor="none",markeredgecolor="r")
-    ax.set_ylabel("$x_{%d}$" % (i,))    
+    ax.plot(tfine, xfine[i,:], "-k", label="Analytical")
+    ax.plot(tx, x[:,i],'o', label="State Points", markerfacecolor="k",
+            markeredgecolor="k")
+    ax.plot(tz, z[:,i], "o", label="Collocation Points",
+            markerfacecolor="none", markeredgecolor="r")
+    ax.set_ylabel("$x_{%d}$" % i)    
     ax.legend(loc="upper right")
 ax.set_xlabel("Time")
 mpcplots.showandsave(f,"collocationexample.pdf")

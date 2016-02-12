@@ -38,8 +38,7 @@ Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 # Create linear discrete-time model for comparison.
 def Ffunc(x,u):
-    return (mpc.mtimes(mpc.util.DMatrix(lin["A"]),x) +
-    mpc.mtimes(mpc.util.DMatrix(lin["B"]),u))
+    return mpc.mtimes(lin["A"], x) + mpc.mtimes(lin["B"], u)
 F = mpc.getCasadiFunc(Ffunc, [Nx,Nu], ["x","u"], funcname="F")
 
 # Make optimizers.
@@ -54,7 +53,6 @@ commonargs = dict(
     lb={"u" : -.75*np.ones((Nu,)), "Du" : -Dumax},
     ub={"u" : np.ones((Nu,)), "Du" : Dumax},
     uprev=us,
-    runOptimization=False,
 )
 solvers = {}
 solvers["lmpc"] = mpc.nmpc(f=F,**commonargs)
