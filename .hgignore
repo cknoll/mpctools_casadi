@@ -17,6 +17,10 @@ cstr-matlab/*
 runall.log
 __local__/*
 build/*
+lib/*
+include/*
+casadi/*
+build/*
 installer/include/*
 installer/build/*
 installer/casadi/*

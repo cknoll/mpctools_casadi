@@ -11,7 +11,7 @@ import os
 from contextlib import contextmanager
 
 # First, we grab a few things from the CasADi module.
-DMatrix = casadi.DMatrix
+DM = casadi.DM
 MX = casadi.MX
 vertcat = casadi.vertcat
 
@@ -272,21 +272,21 @@ def dlqe(A,C,Q,R):
     return [L, P]
 
     
-def mtimes(*args,**kwargs):
+def mtimes(*args, **kwargs):
     """
-    Smarter version casadi.tools.mul.
+    Smarter version casadi.tools.mtimes.
     
     Matrix multiplies all of the given arguments and returns the result. If all
     inputs are 2D, then passes straight through to casadi's mul. Otherwise,
     uses a sequence of np.dot operations.
     
-    Keyword arguments forceDot or forceMul can be set to True to pick one
+    Keyword arguments forcedot or forcemtimes can be set to True to pick one
     behavior or another.
     """
     # Pick whether to use mul or dot.
-    useMul = kwargs.get("forceMul",None)
+    useMul = kwargs.get("forcemtimes", None)
     if useMul is None:
-        useMul = kwargs.get("forceDot",None)
+        useMul = kwargs.get("forcedot", None)
         if useMul is None:
             useMul = True
             for (i,a) in enumerate(args):
@@ -303,7 +303,7 @@ def mtimes(*args,**kwargs):
             useMul = not useMul
     # Now actually do multiplication.
     if useMul:
-        ans = ctools.mul(args)
+        ans = ctools.mtimes(args)
     else:
         ans = args[0]
         for (i,a) in enumerate(args[1:]):
@@ -485,6 +485,7 @@ def stdout_redirected(to=os.devnull):
                 yield # Allow code to be run with the redirected stdout.
             finally:
                 sys.stdout = old_stdout # Reset stdout.
+
    
 @contextmanager
 def dummy_context(*args):

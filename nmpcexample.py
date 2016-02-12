@@ -49,7 +49,6 @@ commonargs = dict(
     Pf=Pf,
     lb={"u" : -np.ones((Nt,Nu))},
     ub={"u" : np.ones((Nt,Nu))},
-    runOptimization=False,
 )
 Nlin = {"t":Nt, "x":Nx, "u":Nu}
 Nnonlin = Nlin.copy()

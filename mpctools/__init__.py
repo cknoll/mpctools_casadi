@@ -6,11 +6,11 @@ new (due to backward incompatibility in Casadi).
 """
 
 # Version for mpctools.
-__version__ = "2.1.1"
+__version__ = "2.2"
 
 # Check Casadi version to make sure it's up to date.
-_MIN_CASADI_VERSION = "2.4"
-_MAX_CASADI_VERSION = "2.4.3"
+_MIN_CASADI_VERSION = "3.0"
+_MAX_CASADI_VERSION = "4.0"
 from distutils.version import LooseVersion as getVersion
 import casadi
 if getVersion(casadi.__version__) < getVersion(_MIN_CASADI_VERSION):

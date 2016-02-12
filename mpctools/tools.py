@@ -36,10 +36,10 @@ Functions for solving MPC problems using Casadi and Ipopt.
 # common framework. They appear to be strictly better than the functions they
 # replace.
 
-def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
-    largs=None,sp={},p=None,uprev=None,verbosity=5,timelimit=60,Delta=None,
-    runOptimization=True,scalar=True,funcargs={},extrapar={},e=None,ef=None,
-    periodic=False,discretel=True):
+def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
+         Pf=None, largs=None, sp={}, p=None, uprev=None, verbosity=5,
+         timelimit=60, Delta=None, funcargs={}, extrapar={}, e=None, ef=None,
+         periodic=False, discretel=True, casaditype="SX"):
     """
     Solves nonlinear MPC problem.
     
@@ -85,9 +85,8 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     defined by e <= 0 and ef <= 0. If either functions are specified, you must
     also specify the arguments to each in funcargs.    
     
-    The return value is a dictionary with the values of the optimal decision
-    variables and also some time vectors. Alternatively, if runOptimization is
-    False, then the return value is a ControlSolver object.
+    The return value is a ControlSolver object. To actually solve the
+    optimization, use ControlSolver.solve().
     """     
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
@@ -154,12 +153,12 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     # if this ends up empty, we just set it to None.
     parNames = set(["p"] + [k + "_sp" for k in sp.keys()]
         + [k + "_prev" for k in deltaVars] + extrapar.keys())
-    parStruct = __casadiSymStruct(allShapes,parNames,scalar=scalar)
+    parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
     if len(parStruct.keys()) == 0:
         parStruct = None
         
     varNames = set(["x","u","xc","zc"] + ["D" + k for k in deltaVars])
-    varStruct = __casadiSymStruct(allShapes,varNames,scalar=scalar)
+    varStruct = __casadiSymStruct(allShapes, varNames, casaditype)
 
     # Add parameters and setpoints to the guess structure.
     guess["p"] = p
@@ -215,12 +214,14 @@ def nmpc(f=None,l=None,N={},x0=None,lb={},ub={},guess={},g=None,Pf=None,
     elif "l" not in funcargs.keys():
         funcargs["l"] = largs
     
-    return __optimalControlProblem(N,varStruct,parStruct,lb,ub,guess,obj,
-        f=f,g=g,h=None,l=l,e=e,funcargs=funcargs,Delta=Delta,
-        con=con,conlb=conlb,conub=conub,periodic=periodic,
-        verbosity=verbosity,runOptimization=runOptimization,
-        deltaVars=deltaVars,scalar=scalar,discretel=discretel)
-
+    
+    # Build list of arguments for optimal control type.
+    args = [N, varStruct, parStruct, lb, ub, guess, obj]
+    kwargs = dict(f=f, g=g, h=None, l=l, e=e, funcargs=funcargs, Delta=Delta,
+                  con=con, conlb=conlb, conub=conub,periodic=periodic,
+                  verbosity=verbosity, deltaVars=deltaVars,
+                  casaditype=casaditype, discretel=discretel)
+    return __optimalControlProblem(*args, **kwargs)
 
 def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     verbosity=5,largs=["w","v"],timelimit=60,Delta=None,runOptimization=True,
@@ -250,6 +251,7 @@ def nmhe(f,h,u,y,l,N,lx=None,x0bar=None,lb={},ub={},guess={},g=None,p=None,
     array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
     predictor step.
     """
+    raise NotImplementedError("Function not updated.")
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
     guess = guess.copy()    
@@ -334,7 +336,7 @@ def sstarg(f,h,N,phi=None,phiargs=None,lb={},ub={},guess={},g=None,p=None,
     lb and ub should be dictionaries of bounds for the various variables.
     guess should have the same structure.    
     """
-    
+    raise NotImplementedError("Function not updated.")
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
     guess = guess.copy()    
@@ -407,7 +409,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         obj=None, f=None, g=None, h=None, l=None, e=None, funcargs={},
         Delta=None, con=None, conlb=None, conub=None, periodic=False,
         discretef=True, deltaVars=None, finalpoint=True, verbosity=5,
-        runOptimization=True, scalar=True, discretel=True, fErrorVars=None):
+        casaditype="SX", discretel=True, fErrorVars=None):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -506,43 +508,46 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     con = casadi.vertcat(con)
     
     if obj is None:
-        if scalar:
-            obj = casadi.SX(0)
-        else:
-            obj = casadi.MX(0)
+        try:
+            obj = dict(SX=casadi.SX, MX=casadi.MX)[casaditype](0)
+        except KeyError:
+            raise ValueError("Unknown casaditype. Must be 'SX' or 'MX'.")
+    
     if "cost" in constraints.keys():
         obj = sum(util.flattenlist(constraints["cost"]),obj)
-        
-    # If we want an optimization, then do some post-processing. Otherwise, just
-    # return the solver object.
-    if runOptimization:
-        # Call the solver.
-        [var, cost, status, solver] = solvers.callSolver(var,varlb,varub,
-            varguess,obj,con,conlb,conub,par,parval,verbosity=verbosity,
-            timelimit=60,scalar=scalar)
-        returnDict = util.casadiStruct2numpyDict(var)
-        returnDict["cost"] = cost
-        returnDict["status"] = status    
-        
-        # Create an array of time points.
-        returnDict["t"] = N["t"]*Delta*np.linspace(0,1,N["t"] + 1)
-        if N["c"] > 0:
-            r = constraints["colloc.weights"]["r"][1:-1] # Throw out endpoints.        
-            r.shape = (1,r.size)
-            returnDict["tc"] = returnDict["t"].reshape(
-                (returnDict["t"].size,1))[:-1] + Delta*r
-    else:
-        # Build ControlSolver object and return that.
-        returnDict = solvers.ControlSolver(var,varlb,varub,varguess,
-            obj,con,conlb,conub,par,parval,verbosity=verbosity,timelimit=60,
-            scalar=scalar)
     
-    return returnDict
+    # Build ControlSolver object and return that.
+    args = [var, varlb, varub, varguess, obj, con, conlb, conub, par, parval]
+    kwargs = dict(verbosity=verbosity, timelimit=60, casaditype=casaditype)
+    solver = solvers.ControlSolver(*args, **kwargs)
+    return solver
+
+    
+#    # If we want an optimization, then do some post-processing. Otherwise, just
+#    # return the solver object.
+#    if runOptimization:
+#        # Call the solver.
+#        [var, cost, status, solver] = solvers.callSolver(var,varlb,varub,
+#            varguess,obj,con,conlb,conub,par,parval,verbosity=verbosity,
+#            timelimit=60,scalar=scalar)
+#        returnDict = util.casadiStruct2numpyDict(var)
+#        returnDict["cost"] = cost
+#        returnDict["status"] = status    
+#        
+#        # Create an array of time points.
+#        returnDict["t"] = N["t"]*Delta*np.linspace(0,1,N["t"] + 1)
+#        if N["c"] > 0:
+#            r = constraints["colloc.weights"]["r"][1:-1] # Throw out endpoints.        
+#            r.shape = (1,r.size)
+#            returnDict["tc"] = returnDict["t"].reshape(
+#                (returnDict["t"].size,1))[:-1] + Delta*r
+#    else:
 
 
-def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
-    l=None,funcargs={},Ncolloc=0,Delta=1,discretef=True,deltaVars=[],
-    finalpoint=True,e=None,Ne=0,discretel=True,fErrorVars=[]):
+def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
+                         l=None, funcargs={}, Ncolloc=0, Delta=1,
+                         discretef=True, deltaVars=[], finalpoint=True, e=None,
+                         Ne=0, discretel=True, fErrorVars=None):
     """
     Creates general state evolution constraints for the following system:
     
@@ -600,6 +605,8 @@ def __generalConstraints(var,Nt,f=None,Nf=0,g=None,Ng=0,h=None,Nh=0,
     """
     
     # Figure out what variables are supplied.
+    if fErrorVars is None:
+        fErrorVars = []
     givenvars = set(var.keys())
     givenvarscolloc = givenvars.intersection(["x","z"])    
     
@@ -896,7 +903,7 @@ def __generalVariableShapes(sizeDict,setpoint=[],delta=[],finalx=True,
     return shapeDict
 
 
-def __casadiSymStruct(allVars,theseVars=None,scalar=True):
+def __casadiSymStruct(allVars, theseVars=None, casaditype="SX"):
     """
     Returns a Casadi sym struct for the variables in allVars.
     
@@ -911,13 +918,17 @@ def __casadiSymStruct(allVars,theseVars=None,scalar=True):
         for v in varNames.difference(theseVars):
             allVars.pop(v)
     
-    # Build casadi sym_structX    
+    # Choose type of struct.
+    if casaditype == "SX":
+        struct = ctools.struct_symSX
+    elif casaditype == "MX":
+        struct = ctools.struct_symMX
+    else:
+        raise ValueError("Invalid choice of casaditype. Must be 'SX' or 'MX'.")
+    
+    # Build casadi struct_symSX    
     structArgs = tuple([ctools.entry(name,**args) for (name,args)
         in allVars.items()])
-    if scalar:
-        struct = ctools.struct_symSX
-    else:
-        struct = ctools.struct_symMX
     return struct([structArgs])
 
 def __getShapes(vals, mindims=1, extra="prepend"):
@@ -941,7 +952,7 @@ def __getShapes(vals, mindims=1, extra="prepend"):
     try:
         fixfunc = extras[extra]
     except KeyError:
-        raise ValueError("Invalid choices for extr!")
+        raise ValueError("Invalid choices for extra!")
     shapes = {}
     for (k, v) in vals.iteritems():
         s = getattr(v, "shape", None)
@@ -996,8 +1007,8 @@ def __getArgs(names,t=0,*structs):
             thisargs.append(structs[i][v][t])
     return thisargs
 
-def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
-                  rk4=False,Delta=1,M=1):
+def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
+                  Delta=1, M=1):
     """
     Takes a function handle and turns it into a Casadi function.
     
@@ -1009,14 +1020,7 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
     This version is more general because it lets you specify arbitrary
     arguments, but you have to make sure you do everything properly.
     """
-    # Decide whether to use SX or MX.    
-    if scalar:
-        XSym = casadi.SX.sym
-        XFunction = casadi.SXFunction
-    else:
-        XSym = casadi.MX.sym
-        XFunction = casadi.MXFunction
-    
+        
     # Create symbolic variables.
     if varnames is None:
         varnames = ["x%d" % (i,) for i in range(len(varsizes))]
@@ -1039,17 +1043,18 @@ def getCasadiFunc(f,varsizes,varnames=None,funcname="f",scalar=True,
             raise TypeError("Entries of varsizes must be integers or "
                 "two-element lists!")
         realvarsizes.append(s)
-    args = [XSym(name,*size) for (name,size) in zip(varnames,realvarsizes)]
+    args = [casadi.SX.sym(name, *size) for (name, size) in
+            zip(varnames, realvarsizes)]
     
     # Now evaluate function and make a Casadi object.  
     fval = [safevertcat(f(*args))]
-    fcasadi = XFunction(funcname, args, fval)   
+    fcasadi = casadi.Function(funcname, args, fval)   
     
     if rk4:
         def wrappedf(*args):
             return fcasadi(args)[0]
         frk4 = util.rk4(wrappedf, args[0], args[1:], Delta, M)
-        fcasadi = XFunction(funcname, args, [frk4])
+        fcasadi = casadi.Function(funcname, args, [frk4])
     
     return fcasadi
 
@@ -1081,9 +1086,8 @@ def safevertcat(args):
     return val
 
 
-def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
-                        abstol=1e-8,reltol=1e-8,wrap=True,scalar=True,
-                        verbosity=1):
+def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
+                        abstol=1e-8, reltol=1e-8, wrap=True, verbosity=1):
     """
     Gets a Casadi integrator for function f from 0 to Delta.
     
@@ -1097,28 +1101,16 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
     if len(argsizes) < 1:
         raise IndexError("argsizes must have at least one element!")
     if argnames is None:
-        argnames = ["x_%d" for i in range(len(argsizes))]    
-    
-    # Decide casadi SX vs MX.    
-    if scalar:
-        XSym = casadi.SX.sym
-        XFunction = casadi.SXFunction
-    else:
-        XSym = casadi.MX.sym
-        XFunction = casadi.MXFunction    
+        argnames = ["x_%d" for i in range(len(argsizes))]  
     
     # Create symbolic variables for integrator I(x0,p).
-    x0 = XSym(argnames[0],argsizes[0])
-    par = [XSym(argnames[i],argsizes[i]) for i
+    x0 = casadi.SX.sym(argnames[0],argsizes[0])
+    par = [casadi.SX.sym(argnames[i],argsizes[i]) for i
         in range(1,len(argsizes))]
     fode = safevertcat(f(x0,*par))   
     
     # Build ODE and integrator.
-    invar = casadi.daeIn(x=x0,p=casadi.vertcat(par))
-    outvar = casadi.daeOut(ode=fode)
-    ode = XFunction("ode", invar, outvar)
-    
-    # Need to package up all options first for V2.4.
+    ode = dict(x=x0, p=casadi.vertcat(par), ode=fode)
     options = {
         "abstol" : abstol,
         "reltol" : reltol,
@@ -1126,7 +1118,7 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
         "disable_internal_warnings" : verbosity <= 0,
         "verbose" : verbosity >= 2,
     }
-    integrator = casadi.Integrator(funcname, "cvodes", ode, options)
+    integrator = casadi.integrator(funcname, "cvodes", ode, options)
     
     # Now do the subtle bit. Integrator has arguments x0 and p, but we need
     # arguments as given by the user. First we need MX arguments.
@@ -1135,7 +1127,7 @@ def getCasadiIntegrator(f,Delta,argsizes,argnames=None,funcname="int_f",
         PAR = [casadi.MX.sym(argnames[i],argsizes[i]) for i
             in range(1,len(argsizes))]    
         wrappedIntegrator = integrator(x0=X0, p=casadi.vertcat(PAR))["xf"]
-        integrator = casadi.MXFunction(funcname, [X0] + PAR, [wrappedIntegrator])
+        integrator = casadi.Function(funcname, [X0] + PAR, [wrappedIntegrator])
     return integrator
 
 class DiscreteSimulator(object):
@@ -1185,22 +1177,13 @@ class DiscreteSimulator(object):
         if len(args) != self.Nargs:
             raise ValueError("Wrong number of arguments: "
                 "%d given; %d expected." % (len(args),self.Nargs))
-        self.__integrator.setInput(args[0],"x0")
+        integratorargs = dict(x0=args[0])
         if len(args) > 1:
-            self.__integrator.setInput(casadi.vertcat(args[1:]),"p")
+            integratorargs["p"] = casadi.vertcat(args[1:])
         
         # Call integrator.
-        self.__integrator.evaluate()
-        xf = self.__integrator.getOutput("xf")
-        self.__integrator.reset()
+        nextstep = self.__integrator(integratorargs)
+        xf = nextstep["xf"]
         
-        return np.array(xf).flatten()
-
-
-def ekf(*args, **kwargs):
-    """
-    Function moved to util. See full documentation in util.ekf
-    """
-    warnings.warn("ekf moved to util module. Please call from there.")
-    return util.ekf(*args, **kwargs)    
+        return np.array(xf).flatten()  
     
