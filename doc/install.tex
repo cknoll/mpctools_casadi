@@ -6,7 +6,7 @@
 
 \begin{document}
 %
-\begin{frame}[allowframebreaks]{Windows/Linux Installation}
+\begin{frame}[allowframebreaks]{Installation}
     Install a scientific Python distribution
     \begin{itemize}
         \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
@@ -16,9 +16,9 @@
     
     \medskip
     
-    Download \casadi (Version $\ge$2.4)
+    Download \casadi{} (Version $\ge$3.0)
     \begin{itemize}
-        \item Windows/Linux zip file available at \smallurl{http://sourceforge.net/projects/casadi/files/CasADi/}
+        \item Windows/Linux/Mac zip file available at \smallurl{http://files.casadi.org}
         \item Unzip to a convenient location (e.g., \smallurl{C:/Python2.7/casadi} for Windows or \smallurl{/opt/casadi} for Casadi), or use Python install script (see \texttt{installer} folder)
     \end{itemize}
     
@@ -26,7 +26,7 @@
     
     Download our \texttt{mpctools} Python package
     \begin{itemize}
-        \item Download Mercurial repo (zip link on left): \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
+        \item Download zipped package (see ``Downloads''): \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
         \item Unzip to a convenient location.
         \item Move the \texttt{mpctools} sub-folder to where you unzipped \texttt{casadi} or use the \texttt{mpctoolssetup.py} Python script; the remaining files (examples and documentation) can be left where they are.
     \end{itemize}
@@ -39,32 +39,6 @@
         \item Run the commands \lstinline[style=python]!import site; print site.getsitepackages()! to see where your site packages are stored
         \item In one of the site package folders, make a text file called \texttt{casadi.pth}, and type the path to your CasADi installation directory
     \end{itemize}
-\end{frame}
-
-\begin{frame}{Mac Installation (Difficult)}
-       Install Python, NumPy, SciPy, matplotlib
-       \begin{itemize}
-           \item E.g., via Homebrew: \lstinline[style=shell]!brew install python!
-           \item Packages via \texttt{pip}: \lstinline[style=shell]!pip install ipython matplotlib numpy scipy
-           !
-        \end{itemize}
-        
-        \medskip
-        
-        Build and Install (Version $\ge$2.4)
-        \begin{itemize}
-            \item You'll have to build from sources.
-            \item See \smallurl{https://github.com/casadi/casadi/wiki/InstallationMac} for details.
-            \item We can only provide minimal support for this option.
-        \end{itemize}
-        
-        \medskip
-        
-        Our Python package
-        \begin{itemize}
-            \item Download Mercurial repo: \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}
-            \item Unzip and move the \texttt{mpctools} folder to somewhere on your Python Path
-        \end{itemize}
 \end{frame}
 
 \begin{frame}{Making Sure Everything Works}

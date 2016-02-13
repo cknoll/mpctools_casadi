@@ -1,5 +1,7 @@
 # Makes all the documentation.
 
+PDFLATEX := pdflatex --interaction=nonstopmode
+
 # Pdfs.
 tex := cheatsheet.tex install.tex introslides.tex octave-vs-python.tex
 pdf := $(tex:.tex=.pdf)
@@ -9,9 +11,9 @@ all : $(pdf)
 
 $(pdf) : %.pdf : %.tex
 	@echo Making $@
-	@pdflatex $< > /dev/null
-	@pdflatex $< > /dev/null
-	@pdflatex $<
+	@$(PDFLATEX) $< > /dev/null
+	@$(PDFLATEX) $< > /dev/null
+	@$(PDFLATEX) $<
         # Yes, we could be smarter than just running three times.
 
 # Included .tex files.
@@ -22,10 +24,9 @@ $(sidebyside) : %.tex : doSourceComparison.py
 
 # Included .pdf files.
 vdp := ../vdposcillator_lmpc.pdf ../vdposcillator_nmpc.pdf
-$(vdp) : %.pdf : ../vdposcillator.py
+$(vdp) : ../vdposcillator.py
 	@echo Making $@
 	@cd .. && python vdposcillator.py --ioff
-        # Yes, this rule runs python one too many times.
 
 ../cstr_python.pdf : ../cstr.py
 	@echo Making $@
@@ -35,9 +36,13 @@ $(vdp) : %.pdf : ../vdposcillator.py
 	@echo Making $@
 	@cd .. && octave cstr.m
 
+../cstr_startup.pdf : ../cstr_startup.py
+	@echo Making $@
+	@cd .. && python cstr_startup.py --ioff
+
 # Extra dependencies.
 introslides_figures = ../vdposcillator_nmpc.pdf ../vdposcillator_lmpc.pdf \
-    ../cstr_python.pdf ../cstr_octave.pdf
+    ../cstr_python.pdf ../cstr_octave.pdf ../cstr_startup.pdf
 introslides.pdf : $(introslides_figures)
 
 cheatsheet.pdf : sidebyside.tex

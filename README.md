@@ -1,4 +1,4 @@
-Nonlinear Model Predictive Control Tools for Casadi (mpc-tools-casadi)
+# Nonlinear Model Predictive Control Tools for Casadi (mpc-tools-casadi) #
 
 Copyright (C) 2015
 
@@ -14,25 +14,21 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the file
 COPYING for more details.
 
-Availability
-------------
+## Availability ##
 
 The latest development sources of mpc-tools-casadi are also available via
 anonymous access to a read-only Mercurial archive. There is also a web
 interface to the archive available at
+<https://bitbucket.org/rawlings-group/mpc-tools-casadi>
 
-    <https://hg.cae.wisc.edu/hg/mpc-tools-casadi>
-
-Installation
-------------
+## Installation ##
 
 To use mpc-tools-casadi, you will need a recent versions of
 
-  Python 2.7
-  Numpy
-  Scipy
-  Casadi (Version >=2.4; download from <http://casadi.org> or
-      <http://sourceforge.net/projects/casadi/files/CasADi>)
+* Python 2.7
+* Numpy
+* Scipy
+* Casadi (Version >=3.0; download from <http://files.casadi.org>)
 
 With these packages installed, mpc-tools-casadi can be downloaded from the
 website above, and the mpctools folder can be manually placed in the user's
@@ -49,21 +45,18 @@ to install systemwide.
 Code is used by importing mpctools within python scripts. See sample
 files for  complete examples.
 
-Bugs
-----
+## Bugs ##
 
 Questions, comments, bug reports, and contributions should be sent to
 risbeck@wisc.edu.
 
-Documentation
--------------
+## Documentation ##
 
 Documentation for mpc-tools-casadi is included in each function. We also
 provide a cheatsheet (doc/cheatsheet.pdf). See sample files for complete
 examples.
 
---
-Michael J. Risbeck
-risbeck@wisc.edu
-University of Wisconsin-Madison
+Michael J. Risbeck  
+<risbeck@wisc.edu>  
+University of Wisconsin-Madison  
 Department of Chemical Engineering

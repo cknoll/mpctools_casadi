@@ -57,7 +57,7 @@ These descriptions are not intended to be complete, and you should consult the d
 
 \paragraph*{Obtaining \texttt{mpc-tools-casadi}.}
 
-The latest files can be found on \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}.
+The latest files can be found on \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}.
 You will see a link on the left to download all of the files in a compressed archive.
 No specific installation is required beyond Python and \casadi{}, but note that \casadi{} must be at least Version 2.4.
 
@@ -146,26 +146,24 @@ Additional optional arguments are given below.
     \item \texttt{uprev}: Value of the previous control input.
     If provided, variables $\Delta u$ will be added to the control problem.
     Bounds for $\Delta u$ can be specified as \lstinline|"Du"| entries in \texttt{lb} and \texttt{ub}.
-    \item \texttt{largs}: List of strings specifying the arguments of \texttt{l} in order.
-    \lstinline|"Du"| can be included in this list if you wish to use rate-of-change penalties for $u$.
+    \item \texttt{funcargs}: A dictionary of lists of strings specifying the arguments of each function for nonstandard inputs.
+    For example, \lstinline|"Du"| can be included in \lstinline|funcargs["l"]| if you wish to use rate-of-change penalties for $u$ in the stage cost.
     \item \texttt{verbosity}: an integer to control how detailed the solver output is.
     Lower numbers give less output.
 \end{itemize}
 
-Returns a dictionary of optimal variables and other information.
+This function returns a \texttt{ControlSolver} object (see ``Repeated Optimization'' below for more details).
+If you simply want to solve a single instance, pass the return value to the \texttt{callSolver} function, and you will receive a dictionary.
 Entries include \lstinline@"x"@ and \lstinline@"u"@ with optimal trajectories for $x$ and $u$.
 These are both arrays with each column corresponding to values at different time points.
 Also given are \lstinline@"obj"@ with the optimal objective function value and \lstinline@"status"@ as reported by the optimizer.
 
 For continuous-time problems, there are a few options.
-To use Runge-Kutta methods, you can convert your function ahead of time (e.g., with \texttt{util.rk4} as above).
+To use Runge-Kutta methods, you can convert your function ahead of time (e.g., with \lstinline@rk4=True@ as above).
 To use collocation, you can add an entry \lstinline|"c"| to the argument \texttt{N} to specify the number of collocation points on each time interval.
 This also requires specifying the sample time \texttt{Delta}.
 Note that if you want a continuous-time objective function (i.e., integral of $\ell(x(t),u(t))$ instead of a sum), then you can specify \lstinline@discretel=False@ as an argument.
 Note that this is only supported with collocation.
-
-Currently, there is no support for a continuous-time objective function (i.e., continuous-time integral of a cost function).
-We plan to add support for this feature in the future, but in principle you could augment your model with an integrator state to calculate the objective function.
 
 \paragraph*{State Estimation.}
 
@@ -194,6 +192,8 @@ Note that for feasibility reasons, \lstinline@N["v"]@ is always set to \lstinlin
     \item \texttt{verbosity}: same as in \texttt{nmpc}.
 \end{itemize}
 
+The return value is the same as in \texttt{nmpc}.
+
 \funcname{ekf(f,h,x,u,w,y,P,Q,R)}
 
 Advances one step using the Extended Kalman Filter.
@@ -220,20 +220,19 @@ This must have entries \lstinline@"x"@, \lstinline@"u"@, and \lstinline@"y"@.
 Additional arguments are below.
 
 \begin{itemize}[noitemsep,nolistsep]
-    \item \texttt{phi}, \texttt{phiargs}: Objective function for if the solution is non-unique.
-    \texttt{phi} must be a \casadi{} function with the arguments as given in \texttt{phiargs}.
+    \item \texttt{phi}, \texttt{funcargs}: Objective function for if the solution is non-unique.
+    \texttt{phi} must be a \casadi{} function with the arguments as given in \lstinline@funcargs["phi"]@.
+    Other functions (e.g., \lstinline@"f"@ or \lstinline@"h"@) can be included in \lstinline@funcargs@ as well.
     \item \texttt{lb}, \texttt{ub}, \texttt{guess}: Dictionaries to hold bounds and a guess for the decision variables.
     Each entry must be a 1 by $n$ array, i.e., with a dummy "time" dimension first to match \texttt{nmpc} and \texttt{nmhe}.
     Note that if you want to force outputs $y$ to a specific value, you should set equal lower and upper bounds for those entries.
     \item \texttt{verbosity}: same as in \texttt{nmpc}.
 \end{itemize}
 
-\paragraph*{Time-Invariant Problems.}
+\paragraph*{Repeated Optimization.}
 
-If your system is time-invariant and you plan to be solving the problem repeatedly, speed can be improved by using the \texttt{ControlSolver} class.
-
-The easiest way to build one of these objects is by setting the optional argument \texttt{runOptimization} to \texttt{False} in \texttt{nmpc}, \texttt{nmhe}, or \texttt{sstarg}.
-This returns a \texttt{ControlSolver} object instead of immediately optimizing and returning the solution.
+If you plan to be solving the same optimization repeatedly, speed can be improved by using the \texttt{ControlSolver} class.
+The easiest way to build one of these objects is by calling \texttt{False} in \texttt{nmpc}, \texttt{nmhe}, or \texttt{sstarg}.
 Below we list the useful methods for this class.
 
 \funcname{fixvar(var,t,val)}
