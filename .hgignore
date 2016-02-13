@@ -28,4 +28,5 @@ installer/lib/*
 installer/casadisetup.py
 installer/*.tar.gz
 installer/*.zip
+mpc-tools-casadi.zip
 
