@@ -38,7 +38,7 @@ x0 = np.array([10,0])
 N = {"x" : n, "u" : m, "t" : Nt}
 
 # Now simulate.
-solver = mpc.nmpc(f, l, N, x0, lb, ub, verbosity=0)
+solver = mpc.nmpc(f, l, N, x0, lb, ub, verbosity=0, isQP=True)
 nsim = 100
 t = np.arange(nsim+1)*dt
 xcl = np.zeros((n,nsim+1))

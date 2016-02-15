@@ -1,9 +1,11 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
 import copy
+import collections
 import numpy as np
 import util
 import casadi
 import time
+import warnings
 
 """
 Holds solver interfaces, wrappers, and class definitions.
@@ -48,7 +50,35 @@ def callSolver(solver, verbosity=None):
         returnDict["tc"] = returnDict["t"][:-1,np.newaxis] + Delta*r    
     
     return returnDict
+
+
+def listAvailableSolvers(asstring=True, front="    "):
+    """
+    Returns available solvers as a string or a dictionary.
     
+    If asstring is True, lists solvers as in two categories (QP and NLP) on
+    separate lines with the front string at the beginning of each line. If
+    asstring is false, returns a dictionary with list entries "QP" and "NLP"
+    containing the available solvers of each type.
+    """
+    availablesolvers = util.getCasadiPlugins(["Nlpsol", "Qpsol"])
+    solvers = collections.defaultdict(lambda : [])
+    for (k, v) in availablesolvers.iteritems():
+        if v == "Nlpsol":
+            solvers["NLP"].append(k)
+        elif v == "Qpsol":
+            solvers["QP"].append(k)
+    if asstring:
+        types = ["%s : %s" % (s, ", ".join(solvers[s])) for s in ["QP", "NLP"]]
+        retval = front + ("\n" + front).join(types)
+    else:
+        retval = dict(solvers)
+    return retval
+
+
+# Build a dictionary of names for the time limit setting.
+_CPU_TIME_SETTING = util.ReadOnlyDict({"ipopt" : "max_cpu_time",
+                                       "qpoases" : "CPUtime"})
 
 class ControlSolver(object):
     """
@@ -143,8 +173,26 @@ class ControlSolver(object):
         return self.__settings["isQP"]
     
     @isQP.setter
-    def isQp(self, tf):
+    def isQP(self, tf):
         self.__changesettings(isQP=tf)
+    
+    @property
+    def solver(self):
+        return self.__settings["solver"]
+        
+    @solver.setter
+    def solver(self, solverstr):
+        availablesolvers = listAvailableSolvers(asstring=False)
+        if solverstr not in availablesolvers["NLP"] + availablesolvers["QP"]:
+            errmsg = ("%s is not a valid solver. Available solvers:\n%s" %
+                      (solverstr, listAvailableSolvers()))
+            raise ValueError(errmsg)
+        elif solverstr in availablesolvers["QP"] and not self.isQP:
+            errmsg = ("%s is a QP solver and self.isQP is False. Please set "
+                      "isQP to True or choose a QP solver. Available solvers:"
+                      "\n%s" % (solverstr, listAvailableSolvers()))
+            raise ValueError(errmsg)
+        self.__changesettings(solver=solverstr)
     
     def __changesettings(self, **settings):
         """
@@ -156,7 +204,7 @@ class ControlSolver(object):
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  casaditype="SX", name="ControlSolver", casadioptions=None,
-                 solveroptions=None, misc=None):
+                 solveroptions=None, misc=None, solver=None):
         """
         Initialize the solver object.
         
@@ -190,8 +238,10 @@ class ControlSolver(object):
         
         self.__stats = {}
         self.__settings = {} # Need to initialize this.
+        if solver is None:
+            solver = "qpoases" if isQP else "ipopt"
         self.__changesettings(isQP=isQP, name=name, verbosity=verbosity,
-                              timelimit=timelimit)
+                              timelimit=timelimit, solver=solver)
         if misc is None:
             misc = {}
         self.misc = util.ReadOnlyDict(**misc)
@@ -208,13 +258,11 @@ class ControlSolver(object):
         Recreates the solver object completely.
         
         You shouldn't need to do this manually unless you are changing internal
-        casadi or ipopt options (via keyword arguments). Note that casadi
-        options are passed as keywords, while ipopt options should be passed
-        in a single dictionary as ipopt.
+        casadi or solver options (via the respective dictionaries).
         
-        For a complete list of ipopt options, use availableIpoptOptions. Note
-        that all of these are either strings or floats, and any boolean values
-        will likely cause errors.
+        For a complete list of solver-specific options, use
+        self.getSolverOptions. Note that most options are either strings or
+        floats, and any boolean values will likely cause errors.
         """
         if casadioptions is None:
             casadioptions = {}
@@ -233,51 +281,79 @@ class ControlSolver(object):
         if self.__par is not None:
             nlp["p"] = self.__par
         
-        # Print and time limit options. Note that we must respect Ipopt's
-        # limits with print_level, which are different from ours.
-        solveroptions["print_level"] =  min(12, max(0, self.verbosity))
-        solveroptions["max_cpu_time"] = self.timelimit        
-        casadioptions["print_time"] = self.verbosity > 2        
-        
-        # Note that there is an option "check_derivatives_for_naninf" that in
-        # theory would error out if NaNs or Infs are encountered, but it seems
-        # to just crash Python whenever anything bad happens.
-        casadioptions["eval_errors_fatal"] = True
-                
-        # Choose different function whether QP or not.
-        # TODO: allow user to specify solver. - MJR 2/12/2016
-        if self.__settings["isQP"]:
-            # TODO: handle options for qpoases. - MJR 2/12/2016
-            solver = casadi.qpsol(self.name, "qpoases", nlp)
+        # Print and time limit options.
+        if self.solver == "ipopt":
+            solveroptions["print_level"] =  min(12, max(0, self.verbosity))
+        elif self.solver == "qpoases":
+            solveroptions["verbose"] = self.verbosity >= 10
+            if self.verbosity >= 9:
+                plevel = "high"
+            elif self.verbosity >= 6:
+                plevel = "medium"
+            elif self.verbosity >= 3:
+                plevel = "low"
+            else:
+                plevel = "none"
+            solveroptions["printLevel"] = plevel
         else:
-            casadioptions["ipopt"] = solveroptions
-            solver = casadi.nlpsol(self.name, "ipopt", nlp, casadioptions)
+            #TODO: add other solver-specific verbosity code.
+            warnings.warn("Solver '%s' does not have a verbosity setting"
+                          % self.solver)
+        if self.timelimit is not None:
+            timesetting = _CPU_TIME_SETTING.get(self.solver, None)
+            if timesetting is None:
+                warnings.warn("Solver '%s' does not support a time limit."
+                              % self.solver)
+            else:
+                solveroptions[timesetting] = self.timelimit        
+             
+        # Choose different function whether QP or not.
+        #TODO: Specify constant Lagrangian if isQP
+        availablesolvers = listAvailableSolvers(asstring=False)
+        if self.solver in availablesolvers["QP"]:
+            solverfunc = casadi.qpsol
+            casadioptions.update(solveroptions) #TODO: Verity API difference.
+        elif self.solver in availablesolvers["NLP"]:
+            if self.isQP:
+                warnings.warn("NLP solver '%s' selected for QP." % self.solver)
+            solverfunc = casadi.nlpsol
+            if "eval_errors_fatal" not in casadioptions:
+                casadioptions["eval_errors_fatal"] = True
+            casadioptions["print_time"] = self.verbosity > 2
+            casadioptions[self.solver] = solveroptions
+        else:
+            raise ValueError("Invalid choice of solver: %s" % self.solver)
+        solver = solverfunc(self.name, self.solver, nlp, casadioptions)
         
         # Finally, save the solver and unset the changed flag.
         self.__solver = solver
         self.__changed = False
     
-    def availableIpoptOptions(self, display=True):
+    def getSolverOptions(self, display=True):
         """
-        Returns a dictionary of ipopt options and prints web link.
+        Returns a dictionary of solver-specific options.
         
-        Dictionary entry "__web__" includes the link to the online ipopt
-        documentation, which may be better. Set display to False to suppress
-        printing.
+        Dictionary keys are option names, and values are tuples with the
+        default value of each option and a text description. Notice that
+        default values are always given, not any values that you may have set.
+        Also, in some cases, the default may be a tuple whose first entry is
+        the value and whose second entry is a type.        
+        
+        If display is True, all options are also printed to the screen.
         """
-        # TODO: List options for the chosen solver. - MJR 2/12/2016
-        names = self.__solver.getOptionNames()
-        options = {}
-        for n in names:
-            o = self.__solver.getOptionDescription(n)
-            o = o.replace("(see IPOPT documentation)","").strip()
-            options[n] = o
-        options["__web__"] = ("http://www.coin-or.org/"
-            "Ipopt/documentation/node39.html")
+        availablesolvers = listAvailableSolvers(asstring=False)
+        if self.solver in availablesolvers["NLP"]:
+            docstring = casadi.doc_nlpsol(self.solver)
+        elif self.solver in availablesolvers["QP"]:
+            docstring = casadi.doc_qpsol(self.solver)
+        else:
+            raise ValueError("Unknown solver: '%s'." % self.solver)
+        options = util._getDocDict(docstring)
         if display:
-            print("See\n\n    %s\n\nfor details about IPOPT options."
-                % (options["__web__"],)) 
-            print("\nOptions can be set using keyword arguments to"
+            print("Available options [default] for %s:\n" % self.solver)
+            for k in sorted(options.keys()):
+                print(k, " [%r]: %s\n" % options[k])
+            print("Options can be set using solveroptions in"
                 " ControlSolver.initialize().\n")
         return options
     
@@ -318,7 +394,7 @@ class ControlSolver(object):
         endtime = time.clock()
         
         # Grab some stats.
-        status = stats["return_status"]
+        status = stats.get("return_status", "UNKNOWN")
         if self.verbosity > 0:
             print("Solver Status:", status)
             if status == "NonIpopt_Exception_Thrown":

@@ -8,6 +8,7 @@ import pdb
 import itertools
 import sys
 import os
+import warnings
 from contextlib import contextmanager
 
 # First, we grab a few things from the CasADi module.
@@ -665,4 +666,117 @@ def getScalarDerivative(f, nargs=1, wrt=(0,), vectorize=True):
     else:
         ret = dfdx
     return ret
+
+
+# Function to list available Casadi plugins, e.g., for solving NLPs.
+def getCasadiPlugins(keep=None):
+    """
+    Returns a dictionary of casadi plugin (name, type).
+
+    If keep is not None, it should be a list of plugin types to keep. Only
+    plugins of these types are in the return dictionary.    
+    """
+    plugins = casadi.CasadiMeta_getPlugins().split(";")
+    plugins = dict([tuple(reversed(p.split("::"))) for p in plugins])
+    if keep is not None:
+        plugins = {k : v for (k, v) in plugins.iteritems() if v in keep}
+    return plugins
+
+
+# Functions for turning solver documentation tables into a Python dict.
+_DocCell = collections.namedtuple("DocCell", ["id", "default", "doc"])
+
+def _getDocCell(lines, joins=("", "", "", " ")):
+    """
+    Returns a DocCell tuple for the set of lines.
+    
+    joins is a tuple of strings to say how to join multiple lines in a given
+    cell. It must have exactly one entry for each cell    
+    """
+    Ncol = len(joins)
+    fields = [[] for i in xrange(Ncol)]
+    for line in lines:
+        cells = line.split(" | ", Ncol - 1)
+        cells[0] = cells[0].lstrip().lstrip("|")
+        cells[-1] = cells[-1].rstrip().rstrip("|")
+        if len(cells) != Ncol:
+            raise ValueError("Wrong number of columns.")
+        for (i, c) in enumerate(cells):
+            fields[i].append(c.strip())
+    fields = [j.join(f) for (j, f) in zip(joins, fields)]
+    types = {"OT_INTEGER" : int, "OT_STRING" : str, "OT_REAL" : float,
+             "OT_INT" : int, "OT_DICT" : dict,
+             "OT_DOUBLE" : float, "OT_BOOL" : bool, "OT_STR" : str,
+             "OT_INTVECTOR" : _LambdaType(lambda x : [int(i) for i in x],
+                                          "list[int]"),
+             "OT_STRINGVECTOR" : _LambdaType(lambda x : [str(i) for i in x],
+                                             "list[str]"),
+             }
+    [thisid, thistype, thisdefault, thisdoc] = fields
+    try:
+        thisdefault = types[thistype](thisdefault)
+    except (ValueError, TypeError):
+        includetype = True
+        typefunc = types[thistype]
+        if thisdefault == "None" or thisdefault == "GenericType()":
+            thisdefault = None
+        elif typefunc is int:
+            try:
+                thisdefault = int(float(thisdefault))
+                includetype = False
+            except (ValueError, TypeError):
+                pass
+        if includetype:
+            thisdefault = (thisdefault, typefunc)
+    except KeyError:
+        warnings.warn("Unknown type for '%s', '%s'." % (thisid, thistype))
+    return _DocCell(thisid, thisdefault, thisdoc)
+
+_TABLE_START = "+=" # String prefix that starts the table.
+_CELL_END = "+-" # String prefix that ends the cell.
+_CELL_CONTENTS = "|" # String prefix that continues the cell.
+
+class _LambdaType(object):
+    """Surrogate type defined by a lambda function (or similar)."""
+    def __init__(self, func, typerepr):
+        """Initialize with function and representation."""
+        self.__typerepr = typerepr
+        self.__func = func
+    def __call__(self, val):
+        return self.__func(val)
+    def __repr__(self):
+        return "<type '%s'>" % self.__typerepr
+    def __str__(self):
+        return repr(self)
+
+def _getDocDict(docstring):
+    """
+    Returns a dictionary of options drawn from docstring.
+    
+    Keys are option names, and values are a tuple with (default value,
+    text description).
+    """
+    # Strip header from documentation string.
+    lineiter = itertools.dropwhile(lambda x : not x.startswith(_TABLE_START),
+                                   docstring.split("\n"))
+    try:
+        next(lineiter)
+    except StopIteration:
+        raise ValueError("No table found!")
+        
+    # Loop through table cells.
+    thiscell = []
+    allcells = []
+    for line in lineiter:
+        if line.startswith(_CELL_END):
+            allcells.append(_getDocCell(thiscell))
+            thiscell = []
+        elif line.startswith(_CELL_CONTENTS):
+            thiscell.append(line)
+        else:
+            break
+    
+    # Now return the dictionary.
+    return {c.id : (c.default, c.doc) for c in allcells}
+    
     

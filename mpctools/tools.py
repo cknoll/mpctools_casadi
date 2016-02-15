@@ -39,7 +39,7 @@ Functions for solving MPC problems using Casadi and Ipopt.
 def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
          Pf=None, sp={}, p=None, uprev=None, verbosity=5, timelimit=60,
          Delta=None, funcargs={}, extrapar={}, e=None, ef=None, periodic=False,
-         discretel=True, casaditype="SX"):
+         discretel=True, isQP=False, casaditype="SX"):
     """
     Solves nonlinear MPC problem.
     
@@ -217,7 +217,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=None, l=l, e=e, funcargs=funcargs, Delta=Delta,
                   con=con, conlb=conlb, conub=conub,periodic=periodic,
-                  verbosity=verbosity, deltaVars=deltaVars,
+                  verbosity=verbosity, deltaVars=deltaVars, isQP=isQP,
                   casaditype=casaditype, discretel=discretel)
     return __optimalControlProblem(*args, **kwargs)
 
@@ -409,7 +409,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         obj=None, f=None, g=None, h=None, l=None, e=None, funcargs={},
         Delta=None, con=None, conlb=None, conub=None, periodic=False,
         discretef=True, deltaVars=None, finalpoint=True, verbosity=5,
-        casaditype="SX", discretel=True, fErrorVars=None):
+        timelimit=60, casaditype="SX", discretel=True, fErrorVars=None,
+        isQP=False):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -523,8 +524,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     
     # Build ControlSolver object and return that.
     args = [var, varlb, varub, varguess, obj, con, conlb, conub, par, parval]
-    kwargs = dict(verbosity=verbosity, timelimit=60, casaditype=casaditype,
-                  misc=misc)
+    kwargs = dict(verbosity=verbosity, timelimit=timelimit, isQP=isQP,
+                  casaditype=casaditype, misc=misc)
     solver = solvers.ControlSolver(*args, **kwargs)
     return solver
 
