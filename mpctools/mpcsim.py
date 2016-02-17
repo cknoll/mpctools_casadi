@@ -20,7 +20,6 @@ from   tkSimpleDialog import askfloat
 from   matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 
 def makegui(simcon):
 
@@ -37,16 +36,25 @@ def makegui(simcon):
 
     # create the control panel on the menubar
     cpanel = ConPanel(menubar)
-
+    
+    # Add the step button and the reset button.
+    stepbutton = tk.Button(menubar)
+    stepbutton.configure(text="Manual\nStep")
+    stepbutton.pack(side=tk.LEFT)
+    
+    resetbutton = tk.Button(menubar)
+    resetbutton.configure(text="Reset\nSimulation")
+    resetbutton.pack(side=tk.LEFT)
+    
     # add the simulation name box
-    makename(menubar, simcon.simname)
-
+    makename(menubar, simcon.simname)    
+    
     # fill in remaining space on the menubar
     fillspace(menubar)
 
     # create the trend plots
-    #mytrndplt = Trndplt(root, simcon, rpanel, cpanel)
-    Trndplt(root, simcon, rpanel, cpanel)
+    trndplt = Trndplt(root, simcon, rpanel, cpanel, stepbutton, resetbutton)
+    trndplt.autosim()
 
     # start the main loop
     root.mainloop()
@@ -435,8 +443,8 @@ def makemenus(win, simcon):
 
 class Trndplt:
 
-    def __init__(self, parent, simcon, runpause, 
-                 opnclsd):
+    def __init__(self, parent, simcon, runpause, opnclsd, stepbutton,
+                 resetbutton):
 
         # store inputs
 
@@ -451,10 +459,13 @@ class Trndplt:
         self.oplist   = simcon.oplist
         self.runpause = runpause
         self.opnclsd  = opnclsd
+        self.stepbutton = stepbutton
+        self.resetbutton = resetbutton
         self.refint   = simcon.refint
         self.runsim   = simcon.runsim
         self.k        = 0
         self.xvec     = np.arange(-simcon.N,0)
+        self.parent = parent # Save this guy.
 
         # build the figure
 
@@ -714,30 +725,40 @@ class Trndplt:
 
             cvaxis.plot((0,0),(-1e6,1e6), 'r')
 
-        # attach figure to parent and start animation
+        # attach figure to parent and configure buttons.
 
         self.canvas   = FigureCanvasTkAgg(self.fig, master=parent)
         self.canvas.get_tk_widget().pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
-        self.ani      = animation.FuncAnimation(self.fig, self.simulate, 
-                        interval=self.refint)
+        
+        self.stepbutton.configure(command=self.simulate)
+        self.stepbutton.focus_force()
 
-    def simulate(self,i):
+        self.resetbutton.configure(command=self.reset)
 
-        if (self.runpause.status.get() == 1):
+    def autosim(self, repeat=True):
+        """Loop to automatically run simulation."""
+        if self.runpause.status.get() == 1:
+            self.simulate()
+        if repeat:
+            self.parent.after(int(self.refint), self.autosim)
+    
+    def simulate(self, i=0):
+        """Run one simulation step if not paused."""
+        # Run step.
+        self.simcon.runsim(self.k, self.simcon, self.opnclsd)
 
-            k = self.k
+        # update the trends
+        self.pltvals()
 
-            self.simcon.runsim(k, self.simcon, self.opnclsd)
+        # increment the iteration count
+        self.k += 1
 
-            # update the trends
+    def reset(self):
+        """Resets simulation to initial values."""
+        self.k = 0
+        #TODO: rest all plot data and options.
 
-            self.pltvals()
-
-            # increment the iteration count
-
-            self.k += 1
-
-    def pltvals(self):
+    def pltvals(self, updatefig=True):
 
         # update mv trends
 
@@ -916,6 +937,10 @@ class Trndplt:
             fcvmnline  = self.fcvmnlines[cvndx]
             yvec       = cv.minlim*np.ones((cv.Nf,1))
             fcvmnline.set_ydata(yvec)
+            
+        # Update figure.
+        if updatefig:
+            self.fig.canvas.draw()
 
 class RadioPanel(object):
     def __init__(self, parent, title="", lbutton="", rbutton=""):

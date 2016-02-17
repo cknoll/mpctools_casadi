@@ -60,9 +60,6 @@ def runsim(k, simcon, opnclsd):
         
         Delta = deltat
 
-        # Define a small number
-        
-        eps = 1e-6
 
         # Define model parameters
         
@@ -94,12 +91,19 @@ def runsim(k, simcon, opnclsd):
                 # Define ode for CSTR simulation
 
         def ode(x,u,d):
-
-            # Grab the states, controls, and disturbance.
-
-            [c, T, h] = x[0:Nx]
-            [Tc, F] = u[0:Nu]
-            [F0] = d[0:Nd]
+            # Grab the states, controls, and disturbance. We would like to write
+            #    
+            # [c, T, h] = x[0:Nx]
+            # [Tc, F] = u[0:Nu]
+            # [F0] = d[0:Nd]
+            #    
+            # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+            c = x[0]
+            T = x[1]
+            h = x[2]
+            Tc = u[0]
+            F = u[1]
+            F0 = d[0]
             return cstrmodel(c,T,h,Tc,F,F0)
 
         # Create casadi function and simulator.
@@ -135,13 +139,25 @@ def runsim(k, simcon, opnclsd):
         # but we should just be explicit to avoid any bugs.    
         def ode_disturbance(x,u,d=ds):
             # Grab states, estimated disturbances, controls, and actual disturbance.
-            [c, T, h] = x[0:Nx]
+            # We would
+            #    
+            # [c, T, h] = x[0:Nx]
+            # dhat = x[Nx:Nx+Nid] # Actually, this guy does work.
+            # [Tc, F] = u[0:Nu]
+            # [F0] = d[0:Nd]
+            #    
+            # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+            c = x[0]
+            T = x[1]
+            h = x[2]
             dhat = x[Nx:Nx+Nid]
-            [Tc, F] = u[0:Nu]
-            [F0] = d[0:Nd]
+            Tc = u[0]
+            F = u[1]
+            F0 = d[0]
             
             dxdt = cstrmodel(c,T,h,Tc,F+dhat[2],F0)
             return dxdt
+
         def ode_augmented(x,u,d=ds):
             # Need to add extra zeros for derivative of disturbance states.
             dxdt = np.concatenate((ode_disturbance(x,u,d),np.zeros((Nid,))))
@@ -151,7 +167,9 @@ def runsim(k, simcon, opnclsd):
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 
         def measurement(x,d=ds):
-            [c, T, h] = x[0:Nx]
+            c = x[0]
+            T = x[1]
+            h = x[2]
             dhat = x[Nx:Nx+Nid]
             return np.array([c + dhat[0], T + dhat[1], h])
         ys = measurement(xaugs)
@@ -172,9 +190,6 @@ def runsim(k, simcon, opnclsd):
             return ode_augmented_casadi([x,u,d])[0] + w
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-                                   [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
-
-        ode_estimator_casadi = mpc.getCasadiFunc(ode_estimator,
                                    [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
@@ -239,7 +254,7 @@ def runsim(k, simcon, opnclsd):
 #        def lest(w,v):
 #            d = np.array([w[3], w[4], w[5]])
 #            Qd = np.eye(3)
-            return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) +  mpc.mtimes(d.T,Qd,d)
+            #return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) +  mpc.mtimes(d.T,Qd,d)
                       
         lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
@@ -279,8 +294,7 @@ def runsim(k, simcon, opnclsd):
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
 #            "wAdditive" : True,
             "timelimit" : 60,
-            "scalar" : useCasadiSX,
-            "runOptimization" : False,                        
+            "casaditype" : "SX" if useCasadiSX else "MX",                       
         }
         estimator = mpc.nmhe(**nmheargs)
 
@@ -329,12 +343,11 @@ def runsim(k, simcon, opnclsd):
             "p" : np.tile(ds, (1,1)), # Parameters for system.
             "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
             "phi" : phi,
-            "phiargs" : phiargs,
+            "funcargs" : dict(phi=phiargs),
             "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
-            "runOptimization" : False,
-            "scalar" : useCasadiSX,
+            "casaditype" : "SX" if useCasadiSX else "MX",
         }
         targetfinder = mpc.sstarg(**sstargargs)
 
@@ -354,7 +367,7 @@ def runsim(k, simcon, opnclsd):
         nmpcargs = {
             "f" : ode_augmented_rk4_casadi,
             "l" : l,
-            "largs" : largs,
+            "funcargs" : dict(l=largs),
             "N" : N,
             "x0" : xaug0,
             "uprev" : us,
@@ -366,8 +379,7 @@ def runsim(k, simcon, opnclsd):
             "p" : p,
             "verbosity" : 0,
             "timelimit" : 60,
-            "runOptimization" : False,
-            "scalar" : useCasadiSX,
+            "casaditype" : "SX" if useCasadiSX else "MX",
         }
         controller = mpc.nmpc(**nmpcargs)
 
@@ -696,7 +708,7 @@ CVlist = [CV1,CV2,CV3]
 OPlist = [NF,DH]
 DeltaT = 0.5
 N      = 120
-refint = 100.0
+refint = 100
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
