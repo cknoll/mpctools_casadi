@@ -13,8 +13,8 @@
 # - implement re-initialize option
 #
 
-from   Tkinter import *
-from   tkMessageBox import *
+import Tkinter as tk
+import tkMessageBox as tkmsg
 from   tkFileDialog import askopenfilename
 from   tkSimpleDialog import askfloat
 from   matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -25,43 +25,34 @@ import matplotlib.animation as animation
 def makegui(simcon):
 
     # create main window
-
-    root = Tk()
-
+    root = tk.Tk()
     root.title('MPC-Sim')
-
     simcon.root = root
 
     # create the menus
-
     menubar = makemenus(root, simcon)
 
     # create the run panel on the menubar
-
     rpanel = RunPanel(menubar)
 
     # create the control panel on the menubar
-
     cpanel = ConPanel(menubar)
 
     # add the simulation name box
-
     makename(menubar, simcon.simname)
 
     # fill in remaining space on the menubar
-
     fillspace(menubar)
 
     # create the trend plots
-
-    mytrndplt = Trndplt(root, simcon, rpanel, cpanel)
+    #mytrndplt = Trndplt(root, simcon, rpanel, cpanel)
+    Trndplt(root, simcon, rpanel, cpanel)
 
     # start the main loop
-
     root.mainloop()
 
 def notdone():
-    showerror('Not implemented', 'Not yet available')
+    tkmsg.showerror('Not implemented', 'Not yet available')
 
 def my_add_command(mymenu, var, desc):
     mymenu.add_command(label='Set ' + desc, 
@@ -69,7 +60,6 @@ def my_add_command(mymenu, var, desc):
     underline=0)
 
 def openfile(simcon):
-
     f = askopenfilename()
     simcon.root.destroy()
     execfile(f)
@@ -302,8 +292,8 @@ def setvalue(var, desc):
         notdone()
 
 def showhelp():
-    showinfo('About MPC-Sim','MPC-Sim is a GUI for the '
-    + 'mpc-tools-casadi package (Tom Badgwell)')
+    tkmsg.showinfo('About MPC-Sim','MPC-Sim is a GUI for the '
+                   'mpc-tools-casadi package (Tom Badgwell)')
 
 def makemenus(win, simcon):
 
@@ -313,15 +303,15 @@ def makemenus(win, simcon):
     xvlist = simcon.xvlist
     oplist = simcon.oplist
 
-    menubar = Frame(win)
-    menubar.config(bd=2, relief=GROOVE)
-    menubar.pack(side=TOP, fill=X)
+    menubar = tk.Frame(win)
+    menubar.config(bd=2, relief=tk.GROOVE)
+    menubar.pack(side=tk.TOP, fill=tk.X)
 
     # build the file menu
 
-    fbutton = Menubutton(menubar, text='File', underline=0)
-    fbutton.pack(side=LEFT)
-    filemenu = Menu(fbutton, tearoff=0)
+    fbutton = tk.Menubutton(menubar, text='File', underline=0)
+    fbutton.pack(side=tk.LEFT)
+    filemenu = tk.Menu(fbutton, tearoff=0)
 #    filemenu.add_command(label='Open',  command=lambda: openfile(simcon),  underline=0)
 #    filemenu.add_command(label='Close', command=notdone,  underline=0)
     filemenu.add_command(label='Exit',  command=win.quit, underline=0)
@@ -329,14 +319,14 @@ def makemenus(win, simcon):
 
     # build the MV menu
 
-    mbutton = Menubutton(menubar, text='MVs', underline=0)
-    mbutton.pack(side=LEFT)
-    mvsmenu = Menu(mbutton, tearoff=0)
+    mbutton = tk.Menubutton(menubar, text='MVs', underline=0)
+    mbutton.pack(side=tk.LEFT)
+    mvsmenu = tk.Menu(mbutton, tearoff=0)
     mbutton.config(menu=mvsmenu)
 
     for mv in mvlist:
 
-        mvmenu = Menu(mvsmenu, tearoff=False)
+        mvmenu = tk.Menu(mvsmenu, tearoff=False)
         if ("value"  in mv.menu): my_add_command(mvmenu, mv, 'Value')
         if ("sstarg" in mv.menu): my_add_command(mvmenu, mv, 'SS Target') 
         if ("ssrval" in mv.menu): my_add_command(mvmenu, mv, 'SS R Weight') 
@@ -356,14 +346,14 @@ def makemenus(win, simcon):
 
     if (len(dvlist) > 0):
 
-        dbutton = Menubutton(menubar, text='DVs', underline=0)
-        dbutton.pack(side=LEFT)
-        dvsmenu = Menu(dbutton, tearoff=0)
+        dbutton = tk.Menubutton(menubar, text='DVs', underline=0)
+        dbutton.pack(side=tk.LEFT)
+        dvsmenu = tk.Menu(dbutton, tearoff=0)
         dbutton.config(menu=dvsmenu)
 
         for dv in dvlist:
 
-            dvmenu = Menu(dvsmenu, tearoff=False)
+            dvmenu = tk.Menu(dvsmenu, tearoff=False)
             if ("value"  in dv.menu): my_add_command(dvmenu, dv, 'Value')
             if ("pltmax" in dv.menu): my_add_command(dvmenu, dv, 'Plot High Limit') 
             if ("pltmin" in dv.menu): my_add_command(dvmenu, dv, 'Plot Low Limit') 
@@ -374,14 +364,14 @@ def makemenus(win, simcon):
 
     if (len(xvlist) > 0):
 
-        xbutton = Menubutton(menubar, text='XVs', underline=0)
-        xbutton.pack(side=LEFT)
-        xvsmenu = Menu(xbutton, tearoff=0)
+        xbutton = tk.Menubutton(menubar, text='XVs', underline=0)
+        xbutton.pack(side=tk.LEFT)
+        xvsmenu = tk.Menu(xbutton, tearoff=0)
         xbutton.config(menu=xvsmenu)
 
         for xv in xvlist:
 
-            xvmenu = Menu(xvsmenu, tearoff=False)
+            xvmenu = tk.Menu(xvsmenu, tearoff=False)
             if ("value"    in xv.menu): my_add_command(xvmenu, xv, 'Value')
             if ("sstarg"   in xv.menu): my_add_command(xvmenu, xv, 'SS Target') 
             if ("ssqval"   in xv.menu): my_add_command(xvmenu, xv, 'SS Q Weight') 
@@ -398,14 +388,14 @@ def makemenus(win, simcon):
 
     # build the CV menu
 
-    cbutton = Menubutton(menubar, text='CVs', underline=0)
-    cbutton.pack(side=LEFT)
-    cvsmenu = Menu(cbutton, tearoff=0)
+    cbutton = tk.Menubutton(menubar, text='CVs', underline=0)
+    cbutton.pack(side=tk.LEFT)
+    cvsmenu = tk.Menu(cbutton, tearoff=0)
     cbutton.config(menu=cvsmenu)
 
     for cv in cvlist:
 
-        cvmenu = Menu(cvsmenu, tearoff=False)
+        cvmenu = tk.Menu(cvsmenu, tearoff=False)
         if ("value"    in cv.menu): my_add_command(cvmenu, cv, 'Value')
         if ("sstarg"   in cv.menu): my_add_command(cvmenu, cv, 'SS Target') 
         if ("ssqval"   in cv.menu): my_add_command(cvmenu, cv, 'SS Q Weight') 
@@ -422,22 +412,22 @@ def makemenus(win, simcon):
 
     # build the options menu
 
-    obutton = Menubutton(menubar, text='Options', underline=0)
-    obutton.pack(side=LEFT)
-    opsmenu = Menu(obutton, tearoff=0)
+    obutton = tk.Menubutton(menubar, text='Options', underline=0)
+    obutton.pack(side=tk.LEFT)
+    opsmenu = tk.Menu(obutton, tearoff=0)
     obutton.config(menu=opsmenu)
 
     for op in oplist:
 
-        opmenu = Menu(opsmenu, tearoff=False)
+        opmenu = tk.Menu(opsmenu, tearoff=False)
         my_add_command(opmenu, op, op.desc) 
         opsmenu.add_cascade(label=op.name, menu=opmenu, underline = 0)
 
     # build the help menu
 
-    hbutton = Menubutton(menubar, text='Help', underline=0)
-    hbutton.pack(side=LEFT)
-    helpmenu = Menu(hbutton, tearoff=0)
+    hbutton = tk.Menubutton(menubar, text='Help', underline=0)
+    hbutton.pack(side=tk.LEFT)
+    helpmenu = tk.Menu(hbutton, tearoff=0)
     helpmenu.add_command(label='About', command=showhelp,  underline=0)
     hbutton.config(menu=helpmenu)
 
@@ -727,7 +717,7 @@ class Trndplt:
         # attach figure to parent and start animation
 
         self.canvas   = FigureCanvasTkAgg(self.fig, master=parent)
-        self.canvas.get_tk_widget().pack(side=TOP, expand=YES, fill=BOTH)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
         self.ani      = animation.FuncAnimation(self.fig, self.simulate, 
                         interval=self.refint)
 
@@ -927,57 +917,44 @@ class Trndplt:
             yvec       = cv.minlim*np.ones((cv.Nf,1))
             fcvmnline.set_ydata(yvec)
 
-class RunPanel:
-
-    def __init__(self, parent):
-
-        self.status = IntVar()
-        self.rframe = Frame(parent)
-        self.rframe.config(bd=2, relief=GROOVE)
-        self.rframe.pack(side=LEFT)
-        msg = Label(self.rframe, text='Sim Status')
-        msg.pack(side=TOP)
-        pauseb = Radiobutton(self.rframe, text='Pause', command=self.setbg, 
-                             variable=self.status, value=0)
-        pauseb.pack(side=LEFT)
-        runb = Radiobutton(self.rframe, text='Run', command=self.setbg,
-                             variable=self.status, value=1)
-        runb.pack(side=LEFT)
+class RadioPanel(object):
+    def __init__(self, parent, title="", lbutton="", rbutton=""):
+        self.status = tk.IntVar()
+        self.frame = tk.Frame(parent)
+        self.frame.config(bd=2, relief=tk.GROOVE)
+        self.frame.pack(side=tk.LEFT)
+        msg = tk.Label(self.frame, text=title)
+        msg.pack(side=tk.TOP)
+        pauseb = tk.Radiobutton(self.frame, text=lbutton, command=self.setbg, 
+                                variable=self.status, value=0)
+        pauseb.pack(side=tk.LEFT)
+        runb = tk.Radiobutton(self.frame, text=rbutton, command=self.setbg,
+                              variable=self.status, value=1)
+        runb.pack(side=tk.LEFT)
         self.status.set(0)
-        self.rframe.config(bg='red')
+        self.frame.config(bg='red')
 
     def setbg(self):
+        if self.status.get() == 0:
+            self.frame.config(bg='red')
+        if self.status.get() == 1:
+            self.frame.config(bg='green')
 
-        if (self.status.get() == 0):
-            self.rframe.config(bg='red')
-        if (self.status.get() == 1):
-            self.rframe.config(bg='green')
-
-class ConPanel:
-
+class RunPanel(RadioPanel):
     def __init__(self, parent):
+        super(RunPanel, self).__init__(parent, title="Sim Status",
+                                       lbutton="Pause", rbutton="Run")    
+    @property
+    def rframe(self):
+        return self.frame
 
-        self.status = IntVar()
-        self.cframe = Frame(parent)
-        self.cframe.config(bd=2, relief=GROOVE)
-        self.cframe.pack(side=LEFT)
-        msg = Label(self.cframe, text='Loop Status')
-        msg.pack(side=TOP)
-        oloopb = Radiobutton(self.cframe, text='Open', command=self.setbg, 
-                             variable=self.status, value='0')
-        oloopb.pack(side=LEFT)
-        cloopb = Radiobutton(self.cframe, text='Closed', command=self.setbg,
-                             variable=self.status, value='1')
-        cloopb.pack(side=LEFT)
-        self.status.set(0)
-        self.cframe.config(bg='red')
-
-    def setbg(self):
-
-        if (self.status.get() == 0):
-            self.cframe.config(bg='red')
-        if (self.status.get() == 1):
-            self.cframe.config(bg='green')
+class ConPanel(RadioPanel):
+    def __init__(self, parent):
+        super(ConPanel, self).__init__(parent, title="Loop Status",
+                                       lbutton="Open", rbutton="Closed")    
+    @property
+    def rframe(self):
+        return self.frame
 
 class Option:
 
@@ -990,18 +967,18 @@ class Option:
 
 def makename(parent, simname):
 
-    nameframe = Frame(parent)
-    nameframe.config(bd=2, relief=GROOVE)
-    nameframe.pack(side=LEFT)
+    nameframe = tk.Frame(parent)
+    nameframe.config(bd=2, relief=tk.GROOVE)
+    nameframe.pack(side=tk.LEFT)
     padname = ' ' + simname + ' '
-    namebox = Label(nameframe, text=padname, font=('ariel', 12, 'bold'))
-    namebox.pack(side=LEFT)
+    namebox = tk.Label(nameframe, text=padname, font=('ariel', 12, 'bold'))
+    namebox.pack(side=tk.LEFT)
 
 def fillspace(parent):
 
-    fillframe = Frame(parent)
+    fillframe = tk.Frame(parent)
     fillframe.config(bg='blue')
-    fillframe.pack(side=LEFT, expand=YES, fill=BOTH)
+    fillframe.pack(side=tk.LEFT, expand=tk.YES, fill=tk.BOTH)
 
 class MVobj:
 

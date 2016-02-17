@@ -69,17 +69,22 @@ def runsim(k, simcon, opnclsd):
         # Define ode for CSTR simulation
         
         def ode(x,u,d):
-
-            # Grab the states, controls, and disturbance.
-
-            [c, T, h] = x[0:Nx]
-            [Tc, F] = u[0:Nu]
-            [F0] = d[0:Nd]
+            # Grab the states, controls, and disturbance. We would like to write
+            #    
+            # [c, T, h] = x[0:Nx]
+            # [Tc, F] = u[0:Nu]
+            # [F0] = d[0:Nd]
+            #    
+            # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+            c = x[0]
+            T = x[1]
+            h = x[2]
+            Tc = u[0]
+            F = u[1]
+            F0 = d[0]
 
             # Now create the ODE.
-
             rate = k0*c*np.exp(-E/T)
-
             dxdt = [
                 F0*(c0 - c)/(np.pi*r**2*h) - rate,
                 F0*(T0 - T)/(np.pi*r**2*h)
@@ -87,7 +92,6 @@ def runsim(k, simcon, opnclsd):
                     + 2*U/(r*rho*Cp)*(Tc - T),    
                 (F0 - F)/(np.pi*r**2)
             ]
-
             return dxdt
 
         # Create casadi function and simulator.
@@ -199,7 +203,7 @@ def runsim(k, simcon, opnclsd):
         Rv = np.diag([cvlist[0].mnoise, eps, cvlist[2].mnoise])
 
         Aaug = np.bmat([[A,Bd],[np.zeros((Nid,Nx)),np.eye(Nid)]]).A 
-        Baug = np.vstack((B,np.zeros((Nid,Nu))))
+        #Baug = np.vstack((B,np.zeros((Nid,Nu)))) # Don't actually need this.
         Caug = np.hstack((C,Cd))
 
         # Get steady-state Kalman filter.
