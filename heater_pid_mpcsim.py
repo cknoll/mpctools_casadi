@@ -195,7 +195,7 @@ CVlist = [COMBTO]
 OPlist = [NF,KC,TI,TD,AV]
 DeltaT = 1.0
 N = 120
-refint = 10.0
+refint = 100
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, 
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)

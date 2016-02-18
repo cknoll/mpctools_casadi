@@ -10,19 +10,21 @@
 # - implement a menu for the unmeasured disturbances - tun factors
 # - implement plots for the unmeasured disturbance variables
 # - implement option to show process diagram
-# - implement re-initialize option
-#
+# - finish re-initialize option
+# - refactor Trndplt.plotvals
 
 import Tkinter as tk
 import tkMessageBox as tkmsg
-from   tkFileDialog import askopenfilename
-from   tkSimpleDialog import askfloat
-from   matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tkFileDialog import askopenfilename
+from tkSimpleDialog import askfloat
+import collections
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import matplotlib.pyplot as plt
+import util
 
 def makegui(simcon):
-
+    """Build Tk window and plots; then start simulation."""
     # create main window
     root = tk.Tk()
     root.title('MPC-Sim')
@@ -42,6 +44,7 @@ def makegui(simcon):
     stepbutton.configure(text="Manual\nStep")
     stepbutton.pack(side=tk.LEFT)
     
+    #TODO: finalize reset button appearence.
     resetbutton = tk.Button(menubar)
     resetbutton.configure(text="Reset\nSimulation")
     resetbutton.pack(side=tk.LEFT)
@@ -60,248 +63,91 @@ def makegui(simcon):
     root.mainloop()
 
 def notdone():
+    """Tk error message for features not yet available."""
     tkmsg.showerror('Not implemented', 'Not yet available')
 
-def my_add_command(mymenu, var, desc):
-    mymenu.add_command(label='Set ' + desc, 
-    command=lambda: setvalue(var, desc), 
-    underline=0)
+def my_add_command(menu, var, desc):
+    """Wrapper to add a command to dropdown menus."""    
+    menu.add_command(label='Set ' + desc, command=lambda: setvalue(var, desc),
+                     underline=0)
 
 def openfile(simcon):
+    """Open another python file and run it."""
     f = askopenfilename()
     simcon.root.destroy()
     execfile(f)
 
+# Generate dictionary of available options for setvalue.
+def _get_setvalue_options():
+    """Returns a dictionary of available setvalue options."""
+    SetvalueTuple = collections.namedtuple("SetValue", ["field", "xmin",
+                                                        "xmax", "chflag"])
+    def svo(field, xmin=None, xmax=None, chflag=False):
+        """Wrapper for SetvalueTuple with default arguments."""
+        return SetvalueTuple(field, xmin, xmax, chflag)
+    setvalue_options = util.ReadOnlyDict({
+        "Value" : svo("value"),
+        "SS Target" : svo("sstarg", chflag=True), 
+        "SS R Weight" : svo("ssrval", xmin=0, chflag=True),
+        "SS Q Weight" : svo("ssqval", xmin=0, chflag=True),
+        "Target" : svo("target"),
+        "Setpoint" : svo("setpoint"),
+        "Q Weight" : svo("qvalue", xmin=0, chflag=True),
+        "R Weight" : svo("rvalue", xmin=0, chflag=True),
+        "S Weight" : svo("svalue", xmin=0, chflag=True),
+        "Max Limit" : svo("maxlim", xmin="minlim", chflag=True),
+        "Min Limit" : svo("minlim", xmax="maxlim", chflag=True),
+        "ROC Limit" : svo("roclim", xmin=0, chflag=True),
+        "Plot High Limit" : svo("pltmax", xmin="pltmin"),
+        "Plot Low Limit" : svo("pltmin", xmax="pltmax"),
+        "Process Noise" : svo("noise", xmin=0),
+        "Model Noise" : svo("mnoise", xmin=0),
+        "Process Step Dist." : svo("dist"),
+        "Refresh Int." : svo("refint", xmin=10, xmax=10000),
+        "Noise Factor" : svo("value", xmin=0),
+        "A Value" : svo("value", xmin=-10, xmax=10, chflag=True),
+        "Gain Mismatch Factor" : svo("gfac", xmin=0, chflag=True),
+        "Disturbance Model" : svo("value", xmin=1, xmax=5, chflag=True),
+        "Control Gain" : svo("value", xmin=-10, xmax=10, chflag=True),
+        "Reset Time" : svo("value", xmin=0, xmax=10000, chflag=True),
+        "Derivative Time" : svo("value", xmin=0, xmax=100, chflag=True),
+        "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=1e6, chflag=True),
+    })
+    return setvalue_options
+_setvalue_options = _get_setvalue_options()
+
 def setvalue(var, desc):
-
-    if desc == 'Value':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext)
-#        if value != None: var.value  = value*np.ones((1,1))
-        if value != None: var.value  = value
-
-    elif desc == 'SS Target':
-
-        value = float(var.sstarg)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext)
-        if value != None: 
-            var.sstarg = value
-            var.chflag = 1
-
-    elif desc == 'SS R Weight':
-
-        value = float(var.ssrval)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.ssrval = value
-            var.chflag = 1
-
-    elif desc == 'SS Q Weight':
-
-        value = float(var.ssqval)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.ssval = value
-            var.chflag = 1
-
-    elif desc == 'Target':
-
-        value = float(var.target)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext)
-        if value != None: 
-            var.target = value
-#            var.chflag = 1
-
-    elif desc == 'Setpoint':
-
-        value = float(var.setpoint)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext)
-        if value != None: 
-            var.setpoint = value
-#            var.chflag = 1
-
-    elif desc == 'Q Weight':
-
-        value = float(var.qvalue)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.qvalue = value
-            var.chflag = 1
-
-    elif desc == 'R Weight':
-
-        value = float(var.rvalue)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.rvalue = value
-            var.chflag = 1
-
-    elif desc == 'S Weight':
-
-        value = float(var.svalue)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.svalue = value
-            var.chflag = 1
-
-    elif desc == 'Max Limit':
-
-        value = float(var.maxlim)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=var.minlim)
-        if value != None: 
-            var.maxlim = value
-            var.chflag = 1
-
-    elif desc == 'Min Limit':
-
-        value = float(var.minlim)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, maxvalue=var.maxlim)
-        if value != None: 
-            var.minlim = value
-            var.chflag = 1
-
-    elif desc == 'ROC Limit':
-
-        value = float(var.roclim)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.roclim = value
-            var.chflag = 1
-
-    elif desc == 'Plot High Limit':
-
-        value = float(var.pltmax)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=var.pltmin)
-        if value != None: var.pltmax = value
-
-    elif desc == 'Plot Low Limit':
-
-        value = float(var.pltmin)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, maxvalue=var.pltmax)
-        if value != None: var.pltmin = value
-
-    elif desc == 'Process Noise':
-
-        value = float(var.noise)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: var.noise = value
-
-    elif desc == 'Model Noise':
-
-        value = float(var.mnoise)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.mnoise = value
-            var.chflag = 1
-
-    elif desc == 'Process Step Dist.':
-
-        value = float(var.dist)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext)
-        if value != None: var.dist = value
-
-    elif desc == 'Refresh Int':
-
-        value = float(var.refint)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=10.0, maxvalue=1000.0)
-        if value != None: var.refint = value
-
-    elif desc == 'Noise Factor':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: var.value = value
-
-    elif desc == 'A Value':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=-10.0, maxvalue=10.0)
-        if value != None: 
-            var.value = value
-            var.chflag = 1
-
-    elif desc == 'Gain Mismatch Factor':
-
-        value = float(var.gfac)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0)
-        if value != None: 
-            var.gfac = value
-            var.chflag = 1
-
-    elif desc == 'Disturbance Model':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=1.0, maxvalue=5.0)
-        if value != None: 
-            var.value   = value
-            var.chflag = 1
-
-    elif desc == 'Control Gain':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=-10.0, maxvalue=10.0)
-        if value != None: 
-            var.value   = value
-            var.chflag = 1
-
-    elif desc == 'Reset Time':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0, maxvalue=10000.0)
-        if value != None: 
-            var.value   = value
-            var.chflag = 1
-
-    elif desc == 'Derivative Time':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=0.0, maxvalue=100.0)
-        if value != None: 
-            var.value   = value
-            var.chflag = 1
-
-    elif desc == 'Heat Of Reaction':
-
-        value = float(var.value)
-        entrytext = desc + ' currently ' + str(value) + ', enter new value'
-        value = askfloat(var.name, entrytext, minvalue=-1e6, maxvalue=1e6)
-        if value != None: 
-            var.value   = value
-            var.chflag = 1
-
+    """Sets a specific variable field using a dialog box."""
+    vinfo = _setvalue_options.get(desc, None)    
+    if vinfo is not None:
+        value = float(getattr(var, vinfo.field))
+        entrytext = "%s currently %g, enter new value" % (desc, value)
+        kwargs = {}
+        for (k, lim) in [("minvalue", vinfo.xmin), ("maxvalue", vinfo.xmax)]:
+            if lim is not None:
+                if isinstance(lim, str):
+                    val = getattr(var, lim)
+                else:
+                    val = lim
+                kwargs[k] = val
+        value = askfloat(var.name, entrytext, **kwargs)
+        if value is not None:
+            setattr(var, vinfo.field, value)
+            if vinfo.chflag:
+                var.chflag = 1
     else:
-
         notdone()
 
 def showhelp():
-    tkmsg.showinfo('About MPC-Sim','MPC-Sim is a GUI for the '
+    """Tk dialog box with simulation information."""
+    tkmsg.showinfo('About MPC-Sim', 'MPC-Sim is a GUI for the '
                    'mpc-tools-casadi package (Tom Badgwell)')
+
+def _addmenus(variable, menu, keyandname):
+    """Loops through keyandname, adding to menu if any keys are found."""
+    for (key, name) in keyandname:
+        if key in variable.menu:
+            my_add_command(menu, variable, name)
 
 def makemenus(win, simcon):
 
@@ -332,90 +178,98 @@ def makemenus(win, simcon):
     mvsmenu = tk.Menu(mbutton, tearoff=0)
     mbutton.config(menu=mvsmenu)
 
+    mvkeyandname = [
+        # (key string, nice menu name)
+        ("value", 'Value'),
+        ("sstarg", 'SS Target'), 
+        ("ssrval", 'SS R Weight'), 
+        ("target", 'Target'),
+        ("rvalue", 'R Weight'), 
+        ("svalue", 'S Weight'),
+        ("maxlim", 'Max Limit'), 
+        ("minlim", 'Min Limit'), 
+        ("roclim", 'ROC Limit'), 
+        ("pltmax", 'Plot High Limit'), 
+        ("pltmin", 'Plot Low Limit'), 
+        ("noise", 'Noise'), 
+        ("dist", 'Step Disturbance'),      
+    ]
     for mv in mvlist:
-
         mvmenu = tk.Menu(mvsmenu, tearoff=False)
-        if ("value"  in mv.menu): my_add_command(mvmenu, mv, 'Value')
-        if ("sstarg" in mv.menu): my_add_command(mvmenu, mv, 'SS Target') 
-        if ("ssrval" in mv.menu): my_add_command(mvmenu, mv, 'SS R Weight') 
-        if ("target" in mv.menu): my_add_command(mvmenu, mv, 'Target') 
-        if ("rvalue" in mv.menu): my_add_command(mvmenu, mv, 'R Weight') 
-        if ("svalue" in mv.menu): my_add_command(mvmenu, mv, 'S Weight') 
-        if ("maxlim" in mv.menu): my_add_command(mvmenu, mv, 'Max Limit') 
-        if ("minlim" in mv.menu): my_add_command(mvmenu, mv, 'Min Limit') 
-        if ("roclim" in mv.menu): my_add_command(mvmenu, mv, 'ROC Limit') 
-        if ("pltmax" in mv.menu): my_add_command(mvmenu, mv, 'Plot High Limit') 
-        if ("pltmin" in mv.menu): my_add_command(mvmenu, mv, 'Plot Low Limit') 
-        if ("noise"  in mv.menu): my_add_command(mvmenu, mv, 'Noise') 
-        if ("dist"   in mv.menu): my_add_command(mvmenu, mv, 'Step Disturbance') 
+        _addmenus(mv, mvmenu, mvkeyandname)
         mvsmenu.add_cascade(label=mv.name, menu=mvmenu, underline = 0)
 
     # build the DV menu if there are DVs
 
-    if (len(dvlist) > 0):
-
+    if len(dvlist) > 0:
         dbutton = tk.Menubutton(menubar, text='DVs', underline=0)
         dbutton.pack(side=tk.LEFT)
         dvsmenu = tk.Menu(dbutton, tearoff=0)
         dbutton.config(menu=dvsmenu)
 
+        dvkeyandname = [
+            # (key string, nice menu name)
+            ("value", 'Value'),
+            ("pltmax", 'Plot High Limit'),
+            ("pltmin", 'Plot Low Limit'),
+            ("noise", 'Process Noise'),
+        ]
         for dv in dvlist:
-
             dvmenu = tk.Menu(dvsmenu, tearoff=False)
-            if ("value"  in dv.menu): my_add_command(dvmenu, dv, 'Value')
-            if ("pltmax" in dv.menu): my_add_command(dvmenu, dv, 'Plot High Limit') 
-            if ("pltmin" in dv.menu): my_add_command(dvmenu, dv, 'Plot Low Limit') 
-            if ("noise"  in dv.menu): my_add_command(dvmenu, dv, 'Process Noise') 
+            _addmenus(dv, dvmenu, dvkeyandname) 
             dvsmenu.add_cascade(label=dv.name, menu=dvmenu, underline = 0)
 
     # build the XV menu if there are XVs
-
-    if (len(xvlist) > 0):
-
+    if len(xvlist) > 0:
         xbutton = tk.Menubutton(menubar, text='XVs', underline=0)
         xbutton.pack(side=tk.LEFT)
         xvsmenu = tk.Menu(xbutton, tearoff=0)
         xbutton.config(menu=xvsmenu)
 
+        xvkeyandname = [
+            # (key string, nice menu name)
+            ("value", 'Value'),
+            ("sstarg", 'SS Target'),
+            ("ssqval", 'SS Q Weight'),
+            ("setpoint", 'Setpoint'),
+            ("qvalue", 'Q Weight'),
+            ("maxlim", 'Max Limit'),
+            ("minlim", 'Min Limit'),
+            ("pltmax", 'Plot High Limit'),
+            ("pltmin", 'Plot Low Limit'),
+            ("mnoise", 'Model Noise'),
+            ("noise", 'Process Noise'),
+            ("dist", 'Process Step Dist.'),
+        ]
         for xv in xvlist:
-
             xvmenu = tk.Menu(xvsmenu, tearoff=False)
-            if ("value"    in xv.menu): my_add_command(xvmenu, xv, 'Value')
-            if ("sstarg"   in xv.menu): my_add_command(xvmenu, xv, 'SS Target') 
-            if ("ssqval"   in xv.menu): my_add_command(xvmenu, xv, 'SS Q Weight') 
-            if ("setpoint" in xv.menu): my_add_command(xvmenu, xv, 'Setpoint') 
-            if ("qvalue"   in xv.menu): my_add_command(xvmenu, xv, 'Q Weight') 
-            if ("maxlim"   in xv.menu): my_add_command(xvmenu, xv, 'Max Limit') 
-            if ("minlim"   in xv.menu): my_add_command(xvmenu, xv, 'Min Limit') 
-            if ("pltmax"   in xv.menu): my_add_command(xvmenu, xv, 'Plot High Limit') 
-            if ("pltmin"   in xv.menu): my_add_command(xvmenu, xv, 'Plot Low Limit') 
-            if ("mnoise"   in xv.menu): my_add_command(xvmenu, xv, 'Model Noise') 
-            if ("noise"    in xv.menu): my_add_command(xvmenu, xv, 'Process Noise') 
-            if ("dist"     in xv.menu): my_add_command(xvmenu, xv, 'Process Step Dist.') 
-            xvsmenu.add_cascade(label=xv.name, menu=xvmenu, underline = 0)
+            _addmenus(xv, xvmenu, xvkeyandname)
+            xvsmenu.add_cascade(label=xv.name, menu=xvmenu, underline=0)
 
     # build the CV menu
-
     cbutton = tk.Menubutton(menubar, text='CVs', underline=0)
     cbutton.pack(side=tk.LEFT)
     cvsmenu = tk.Menu(cbutton, tearoff=0)
     cbutton.config(menu=cvsmenu)
 
+    cvkeyandname = [
+        # (key string, nice menu name)
+        ("value", 'Value'),
+        ("sstarg", 'SS Target'),
+        ("ssqval", 'SS Q Weight'),
+        ("setpoint", 'Setpoint'),
+        ("qvalue", 'Q Weight'),
+        ("maxlim", 'Max Limit'),
+        ("minlim", 'Min Limit'),
+        ("pltmax", 'Plot High Limit'),
+        ("pltmin", 'Plot Low Limit'),
+        ("mnoise", 'Model Noise'),
+        ("noise", 'Process Noise'),
+        ("dist", 'Process Step Dist.'),
+    ]
     for cv in cvlist:
-
         cvmenu = tk.Menu(cvsmenu, tearoff=False)
-        if ("value"    in cv.menu): my_add_command(cvmenu, cv, 'Value')
-        if ("sstarg"   in cv.menu): my_add_command(cvmenu, cv, 'SS Target') 
-        if ("ssqval"   in cv.menu): my_add_command(cvmenu, cv, 'SS Q Weight') 
-        if ("setpoint" in cv.menu): my_add_command(cvmenu, cv, 'Setpoint') 
-        if ("qvalue"   in cv.menu): my_add_command(cvmenu, cv, 'Q Weight') 
-        if ("maxlim"   in cv.menu): my_add_command(cvmenu, cv, 'Max Limit') 
-        if ("minlim"   in cv.menu): my_add_command(cvmenu, cv, 'Min Limit') 
-        if ("pltmax"   in cv.menu): my_add_command(cvmenu, cv, 'Plot High Limit') 
-        if ("pltmin"   in cv.menu): my_add_command(cvmenu, cv, 'Plot Low Limit') 
-        if ("mnoise"   in cv.menu): my_add_command(cvmenu, cv, 'Model Noise') 
-        if ("noise"    in cv.menu): my_add_command(cvmenu, cv, 'Process Noise') 
-        if ("dist"     in cv.menu): my_add_command(cvmenu, cv, 'Process Step Dist.') 
+        _addmenus(cv, cvmenu, cvkeyandname)
         cvsmenu.add_cascade(label=cv.name, menu=cvmenu, underline = 0)
 
     # build the options menu
@@ -426,13 +280,11 @@ def makemenus(win, simcon):
     obutton.config(menu=opsmenu)
 
     for op in oplist:
-
         opmenu = tk.Menu(opsmenu, tearoff=False)
         my_add_command(opmenu, op, op.desc) 
         opsmenu.add_cascade(label=op.name, menu=opmenu, underline = 0)
 
     # build the help menu
-
     hbutton = tk.Menubutton(menubar, text='Help', underline=0)
     hbutton.pack(side=tk.LEFT)
     helpmenu = tk.Menu(hbutton, tearoff=0)
@@ -441,56 +293,96 @@ def makemenus(win, simcon):
 
     return menubar
 
-class Trndplt:
-
+class Trndplt(object):
+    """Strip chart using matplotlib."""
     def __init__(self, parent, simcon, runpause, opnclsd, stepbutton,
                  resetbutton):
-
         # store inputs
-
-        self.N        = simcon.N
-        self.Nm1      = simcon.N-1
-        self.deltat   = simcon.deltat
-        self.simcon   = simcon
-        self.mvlist   = simcon.mvlist
-        self.dvlist   = simcon.dvlist
-        self.cvlist   = simcon.cvlist
-        self.xvlist   = simcon.xvlist
-        self.oplist   = simcon.oplist
+        self.N = simcon.N
+        self.Nm1 = simcon.N - 1
+        self.deltat = simcon.deltat
+        self.simcon = simcon
+        self.mvlist = simcon.mvlist
+        self.dvlist = simcon.dvlist
+        self.cvlist = simcon.cvlist
+        self.xvlist = simcon.xvlist
+        self.oplist = simcon.oplist
         self.runpause = runpause
         self.opnclsd  = opnclsd
         self.stepbutton = stepbutton
         self.resetbutton = resetbutton
-        self.refint   = simcon.refint
-        self.runsim   = simcon.runsim
-        self.k        = 0
-        self.xvec     = np.arange(-simcon.N,0)
-        self.parent = parent # Save this guy.
+        self.refint = simcon.refint
+        self.runsim = simcon.runsim
+        self.k = 0
+        self.parent = parent # Save parent to reference later.
+        self.pendingevent = None
 
         # build the figure
-
         self.fig      = plt.Figure()
 
         # determine the subplot dimensions
-
         self.nmvs      = len(self.mvlist)
         self.ndvs      = len(self.dvlist)
         self.ncvs      = len(self.cvlist)
         self.nxvs      = len(self.xvlist)
         self.ninputs   = self.nmvs + self.ndvs
         self.noutputs  = self.ncvs
-        self.nrows     = max(self.ninputs,self.nxvs,self.noutputs)
+        self.nrows     = max(self.ninputs, self.nxvs, self.noutputs)
         self.ncols     = 2
-        if (self.nxvs > 0): self.ncols = 3
+        if self.nxvs > 0:
+            self.ncols = 3
         self.submat    = str(self.nrows) + str(self.ncols)
 
-        # initialize values
+        # set up the subplots.
+        self.initlines()
+        self.mvaxes = self.addaxes(self.mvlist, col=1)
+        self.dvaxes = self.addaxes(self.dvlist, startrow=self.nmvs + 1, col=1)
+        self.xvaxes = self.addaxes(self.xvlist, col=2)
+        self.cvaxes = self.addaxes(self.cvlist, col=3)
+        self.initializeaxes()
+        
+        # attach figure to parent and configure buttons.
+        self.canvas   = FigureCanvasTkAgg(self.fig, master=parent)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, expand=tk.YES,
+                                         fill=tk.BOTH)
+        
+        self.stepbutton.configure(command=self.simulate)
+        self.stepbutton.focus_force()
 
-        self.mvaxes    = []
-        self.dvaxes    = []
-        self.cvaxes    = []
-        self.xvaxes    = []
+        self.resetbutton.configure(command=self.reset)
 
+    def autosim(self, repeat=True):
+        """Loop to automatically run simulation."""
+        if self.runpause.status.get() == 1:
+            self.simulate()
+        if repeat:
+            self.pendingevent = self.parent.after(int(self.refint),
+                                                  self.autosim)
+    
+    def simulate(self, i=0):
+        """Run one simulation step if not paused."""
+        # Run step.
+        self.simcon.runsim(self.k, self.simcon, self.opnclsd)
+
+        # update the trends
+        self.pltvals()
+
+        # increment the iteration count
+        self.k += 1
+
+    def reset(self):
+        """Resets simulation to initial values."""
+        if self.pendingevent is not None:
+            self.parent.after_cancel(self.pendingevent)
+        self.k = 0
+        #TODO: rest all options and variable values.            
+        self.initlines()
+        self.initializeaxes(clear=True)
+        self.autosim() # Restart automatic loop.
+
+    def initlines(self):
+        """Sets all line attributes to empty lists."""
+        #TODO: replace with a dictionary or class
         self.mvlines   = []
         self.mvmxlines = []
         self.mvmnlines = []
@@ -528,235 +420,124 @@ class Trndplt:
         self.fxvmxlines = []
         self.fxvmnlines = []
 
-        # set up the subplots
+    def addaxes(self, varlist, col=1, startrow=1):
+        """Adds an axis in the given column for each variable."""
+        axes = []
+        for (i, var) in enumerate(varlist):        
+            isub = (startrow + i - 1)*self.ncols + col        
+            ax = self.fig.add_subplot(self.nrows, self.ncols ,isub)
+            ax.set_ylabel("%s %s" % (var.name, var.units))
+            ax.set_title(var.desc)
+            ax.set_ylim([var.pltmin, var.pltmax])
+            axes.append(ax)
+        return axes
 
-        imv = 1;
-        idv = 1;
-        icv = 1;
-        ixv = 1;
+    def initplot(self, ax, var, vallines=None, maxlines=None, minlines=None,
+                 forecast=False, openloop=False, valcolor="b", vlinex=None,
+                 valfield="value"):
+        """Initialize given axis with variable information and append lines."""
+        # Get x vector for everything.
+        xvec = np.arange(0, var.Nf) if forecast else np.arange(-self.N, 0)
 
-        for irow in range(1,self.nrows+1):
+        # Plot value of variable.
+        if vallines is not None:
+            yvec = getattr(var, valfield)*np.ones(xvec.shape)
+            linestyle = "--" if openloop else "-"
+            [line] = ax.plot(xvec, yvec, color=valcolor,
+                             linestyle=linestyle)
+            vallines.append(line)
 
-            isub = (irow - 1)*self.ncols + 1
+        # Plot minimum and maximum values.
+        if maxlines is not None:
+            yvec = var.maxlim*np.ones(xvec.shape)
+            [line] = ax.plot(xvec, yvec, color="r", linestyle="--")
+            maxlines.append(line)
+            
+        if minlines is not None:
+            yvec = var.minlim*np.ones(xvec.shape)
+            [line] = ax.plot(xvec, yvec, color="r", linestyle="--")
+            minlines.append(line)
 
-            if (imv <= self.nmvs):
-                mv = self.mvlist[imv-1]
-                mvaxis = self.fig.add_subplot(self.nrows,self.ncols,isub,
-                         ylabel=mv.name+' '+mv.units, 
-                         title=mv.desc,
-                         ylim=(mv.pltmin,mv.pltmax))
-                mvaxis.grid(True,'major')
-                self.mvaxes.append(mvaxis)
-                imv += 1
+        # Plot vertical line.
+        if vlinex is not None:
+            ax.axvline(vlinex, color="r")
+
+    def initializeaxes(self, clear=False):
+        """Plots initial lines on all of the subplots."""
+        # Add grids after clearing axes.
+        for varax in [self.mvaxes, self.dvaxes, self.xvaxes, self.cvaxes]:
+            for ax in varax:
+                if clear:
+                    for line in ax.get_lines():
+                        line.remove()
+                ax.grid(True, "major")
+
+        # Plot initial values
+        for (mv, mvaxis) in zip(self.mvlist, self.mvaxes):
+            # Value history with limits and vertical line at t = 0.
+            self.initplot(mvaxis, mv, vallines=self.mvlines,
+                          maxlines=self.mvmxlines, minlines=self.mvmnlines,
+                          vlinex=0, valcolor="k")
+
+            # Closed-loop forecast with limits.
+            self.initplot(mvaxis, mv, vallines=self.fcmvlines,
+                          maxlines=self.fmvmxlines, minlines=self.fmvmnlines,
+                          forecast=True)
+                          
+            # Open-loop forecast.
+            self.initplot(mvaxis, mv, vallines=self.fomvlines, forecast=True,
+                          openloop=True)
+
+        for (dv, dvaxis) in zip(self.dvlist, self.dvaxes):
+            # Value history with vertical line at t = 0.
+            self.initplot(dvaxis, dv, vallines=self.dvlines, vlinex=0,
+                          valcolor="k")
+
+            # Value forecast.
+            self.initplot(dvaxis, dv, vallines=self.fdvlines, forecast=True)
+
+        for (xv, xvaxis) in zip(self.xvlist, self.xvaxes):
+            # Value history for states with vertical line at t = 0.
+            self.initplot(xvaxis, xv, vallines=self.xvlines, vlinex=0,
+                          valcolor="k")
         
-            if (idv <= self.ndvs) and (irow > self.nmvs):
-                dv = self.dvlist[idv-1]
-                dvaxis = self.fig.add_subplot(self.nrows,self.ncols,isub,
-                         ylabel=dv.name+' '+dv.units, 
-                         title=dv.desc,
-                         ylim=(dv.pltmin,dv.pltmax))
-                dvaxis.grid(True,'major')
-                self.dvaxes.append(dvaxis)
-                idv +=1
+            # Estimated value history for states.
+            self.initplot(xvaxis, xv, vallines=self.xveslines, valfield="est")
 
-            if (ixv <= self.nxvs):
-                isub += 1
-                xv = self.xvlist[ixv-1]
-                xvaxis = self.fig.add_subplot(self.nrows,self.ncols,isub,
-                         ylabel=xv.name+' '+xv.units,
-                         title=xv.desc,
-                         ylim=(xv.pltmin,xv.pltmax))
-                xvaxis.grid(True,'major')
-                self.xvaxes.append(xvaxis)
-                ixv +=1
+            # Closed-loop forecast.
+            self.initplot(xvaxis, xv, vallines=self.fcxvlines, forecast=True)
 
-            if (icv <= self.ncvs):
-                isub += 1
-                cv = self.cvlist[icv-1]
-                cvaxis = self.fig.add_subplot(self.nrows,self.ncols,isub,
-                         ylabel=cv.name+' '+cv.units, 
-                         title=cv.desc,
-                         ylim=(cv.pltmin,cv.pltmax))
-                cvaxis.grid(True,'major')
-                self.cvaxes.append(cvaxis)
-                icv += 1
-
-        # plot initial values
-
-        for mv in self.mvlist:
-
-            mvndx   = self.mvlist.index(mv)
-            mvaxis  = self.mvaxes[mvndx]
-
-            yvec    = mv.value*np.ones((self.N,1))
-            mvline, = mvaxis.plot(self.xvec, yvec, 'k')
-            self.mvlines.append(mvline)
-
-            yvec    = mv.maxlim*np.ones((self.N,1))
-            mvmxline, = mvaxis.plot(self.xvec, yvec, 'r', ls='--')
-            self.mvmxlines.append(mvmxline)
-
-            yvec    = mv.minlim*np.ones((self.N,1))
-            mvmnline, = mvaxis.plot(self.xvec, yvec, 'r', ls='--')
-            self.mvmnlines.append(mvmnline)
-
-            yvec      = mv.value*np.ones((mv.Nf,1))
-            xvec      = np.arange(0,mv.Nf)
-            fomvline, = mvaxis.plot(xvec, yvec, 'b', ls='--')
-            fcmvline, = mvaxis.plot(xvec, yvec, 'b')
-            self.fomvlines.append(fomvline)
-            self.fcmvlines.append(fcmvline)
-
-            yvec       = mv.maxlim*np.ones((mv.Nf,1))
-            fmvmxline, = mvaxis.plot(xvec, yvec, 'r', ls='--')
-            self.fmvmxlines.append(fmvmxline)
-
-            yvec       = mv.minlim*np.ones((mv.Nf,1))
-            fmvmnline, = mvaxis.plot(xvec, yvec, 'r', ls='--')
-            self.fmvmnlines.append(fmvmnline)
-
-            mvaxis.plot((0,0),(-1e6,1e6), 'r')
-
-        for dv in self.dvlist:
-
-            dvndx   = self.dvlist.index(dv)
-            dvaxis  = self.dvaxes[dvndx]
-
-            yvec    = dv.value*np.ones((self.N,1))
-            dvline, = dvaxis.plot(self.xvec, yvec, 'k')
-            self.dvlines.append(dvline)
-
-            yvec      = dv.value*np.ones((dv.Nf,1))
-            xvec      = np.arange(0,dv.Nf)
-            fdvline, = dvaxis.plot(xvec, yvec, 'b')
-            self.fdvlines.append(fdvline)
-
-            dvaxis.plot((0,0),(-1e6,1e6), 'r')
-
-        for xv in self.xvlist:
-
-            xvndx   = self.xvlist.index(xv)
-            xvaxis  = self.xvaxes[xvndx]
-
-            yvec    = xv.value*np.ones((self.N,1))
-            xvline, = xvaxis.plot(self.xvec, yvec, 'k')
-            self.xvlines.append(xvline)
-
-            yvec    = xv.est*np.ones((self.N,1))
-            xvesline, = xvaxis.plot(self.xvec, yvec, 'b')
-            self.xveslines.append(xvesline)
-
-#            yvec    = xv.setpoint*np.ones((self.N,1))
-#            xvspline, = xvaxis.plot(self.xvec, yvec, 'g')
-#            self.xvsplines.append(xvspline)
-
-#            yvec    = xv.maxlim*np.ones((self.N,1))
-#            xvmxline, = xvaxis.plot(self.xvec, yvec, 'r', ls='--')
-#            self.xvmxlines.append(xvmxline)
-
-#            yvec    = xv.minlim*np.ones((self.N,1))
-#            xvmnline, = xvaxis.plot(self.xvec, yvec, 'r', ls='--')
-#            self.xvmnlines.append(xvmnline)
-
-            yvec      = xv.value*np.ones((xv.Nf,1))
-            xvec      = np.arange(0,xv.Nf)
-            foxvline, = xvaxis.plot(xvec, yvec, 'b', ls='--')
-            fcxvline, = xvaxis.plot(xvec, yvec, 'b')
-            self.foxvlines.append(foxvline)
-            self.fcxvlines.append(fcxvline)
-
-#            yvec       = xv.setpoint*np.ones((xv.Nf,1))
-#            fxvspline, = xvaxis.plot(xvec, yvec, 'g')
-#            self.fxvsplines.append(fxvspline)
-
-#            yvec       = xv.maxlim*np.ones((xv.Nf,1))
-#            fxvmxline, = xvaxis.plot(xvec, yvec, 'r', ls='--')
-#            self.fxvmxlines.append(fxvmxline)
-
-#            yvec       = xv.minlim*np.ones((xv.Nf,1))
-#            fxvmnline, = xvaxis.plot(xvec, yvec, 'r', ls='--')
-#            self.fxvmnlines.append(fxvmnline)
-
-            xvaxis.plot((0,0),(-1e6,1e6), 'r')
-
-        for cv in self.cvlist:
-
-            cvndx   = self.cvlist.index(cv)
-            cvaxis  = self.cvaxes[cvndx]
-
-            yvec    = cv.value*np.ones((self.N,1))
-            cvline, = cvaxis.plot(self.xvec, yvec, 'k')
-            self.cvlines.append(cvline)
-
-            yvec    = cv.est*np.ones((self.N,1))
-            cvesline, = cvaxis.plot(self.xvec, yvec, 'b')
-            self.cveslines.append(cvesline)
-
-            yvec    = cv.setpoint*np.ones((self.N,1))
-            cvspline, = cvaxis.plot(self.xvec, yvec, 'g')
-            self.cvsplines.append(cvspline)
-
-            yvec    = cv.maxlim*np.ones((self.N,1))
-            cvmxline, = cvaxis.plot(self.xvec, yvec, 'r', ls='--')
-            self.cvmxlines.append(cvmxline)
-
-            yvec    = cv.minlim*np.ones((self.N,1))
-            cvmnline, = cvaxis.plot(self.xvec, yvec, 'r', ls='--')
-            self.cvmnlines.append(cvmnline)
-
-            yvec      = cv.value*np.ones((cv.Nf,1))
-            xvec      = np.arange(0,cv.Nf)
-            focvline, = cvaxis.plot(xvec, yvec, 'b', ls='--')
-            fccvline, = cvaxis.plot(xvec, yvec, 'b')
-            self.focvlines.append(focvline)
-            self.fccvlines.append(fccvline)
-
-            yvec       = cv.setpoint*np.ones((cv.Nf,1))
-            fcvspline, = cvaxis.plot(xvec, yvec, 'g')
-            self.fcvsplines.append(fcvspline)
-
-            yvec       = cv.maxlim*np.ones((cv.Nf,1))
-            fcvmxline, = cvaxis.plot(xvec, yvec, 'r', ls='--')
-            self.fcvmxlines.append(fcvmxline)
-
-            yvec       = cv.minlim*np.ones((cv.Nf,1))
-            fcvmnline, = cvaxis.plot(xvec, yvec, 'r', ls='--')
-            self.fcvmnlines.append(fcvmnline)
-
-            cvaxis.plot((0,0),(-1e6,1e6), 'r')
-
-        # attach figure to parent and configure buttons.
-
-        self.canvas   = FigureCanvasTkAgg(self.fig, master=parent)
-        self.canvas.get_tk_widget().pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
+            # Open-loop forecast.
+            self.initplot(xvaxis, xv, vallines=self.foxvlines, forecast=True,
+                          openloop=True)            
         
-        self.stepbutton.configure(command=self.simulate)
-        self.stepbutton.focus_force()
+        for (cv, cvaxis) in zip(self.cvlist, self.cvaxes):
+            # Value history with limits and vertical line at t = 0.
+            self.initplot(cvaxis, cv, vallines=self.cvlines,
+                          maxlines=self.cvmxlines, minlines=self.cvmnlines,
+                          vlinex=0, valcolor="k")
 
-        self.resetbutton.configure(command=self.reset)
+            # Closed-loop forecast with limits.
+            self.initplot(cvaxis, cv, vallines=self.fccvlines,
+                          maxlines=self.fcvmxlines, minlines=self.fcvmnlines,
+                          forecast=True)
 
-    def autosim(self, repeat=True):
-        """Loop to automatically run simulation."""
-        if self.runpause.status.get() == 1:
-            self.simulate()
-        if repeat:
-            self.parent.after(int(self.refint), self.autosim)
-    
-    def simulate(self, i=0):
-        """Run one simulation step if not paused."""
-        # Run step.
-        self.simcon.runsim(self.k, self.simcon, self.opnclsd)
+            # Open-loop forecast.
+            self.initplot(cvaxis, cv, vallines=self.focvlines, forecast=True,
+                          openloop=True)
 
-        # update the trends
-        self.pltvals()
+            # Setpoint past and history.
+            self.initplot(cvaxis, cv, vallines=self.cvsplines, valcolor="g",
+                          valfield="setpoint")
+            self.initplot(cvaxis, cv, vallines=self.fcvsplines, valcolor="g",
+                          valfield="setpoint", forecast=True)
 
-        # increment the iteration count
-        self.k += 1
-
-    def reset(self):
-        """Resets simulation to initial values."""
-        self.k = 0
-        #TODO: rest all plot data and options.
+            # Estimated history.
+            self.initplot(cvaxis, cv, vallines=self.cveslines, valfield="est")
+            
+        # Make sure everything is drawn.
+        if self.fig.canvas is not None:
+            self.fig.canvas.draw()
 
     def pltvals(self, updatefig=True):
 
@@ -981,17 +762,16 @@ class ConPanel(RadioPanel):
     def rframe(self):
         return self.frame
 
-class Option:
-
+class Option(object):
+    """Struct for dropdown menu options."""
     def __init__(self, name=' ', desc=' ', value=0.0):
-
         self.name   = name
         self.desc   = desc
         self.value  = value
         self.chflag = 0
 
 def makename(parent, simname):
-
+    """Adds name frame to top of UI."""
     nameframe = tk.Frame(parent)
     nameframe.config(bd=2, relief=tk.GROOVE)
     nameframe.pack(side=tk.LEFT)
@@ -1000,15 +780,14 @@ def makename(parent, simname):
     namebox.pack(side=tk.LEFT)
 
 def fillspace(parent):
-
+    """Fills remaining horizontal space at top of UI."""
     fillframe = tk.Frame(parent)
     fillframe.config(bg='blue')
     fillframe.pack(side=tk.LEFT, expand=tk.YES, fill=tk.BOTH)
 
-class MVobj:
-
-    nmvs = 0;
-
+class MVobj(object):
+    """Structure for manipulated variables."""
+    nmvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units= ' ',
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssrval=0.01,
@@ -1021,7 +800,6 @@ class MVobj:
                        "dist"]):
         
         MVobj.nmvs += 1
-
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -1046,10 +824,9 @@ class MVobj:
         self.clpred = value*np.ones((Nf,1))
         self.menu   = menu
 
-class DVobj:
-
-    ndvs = 0;
-
+class DVobj(object):
+    """Structure for disturbance variables."""
+    ndvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  pltmax=100.0, pltmin=0.0,
@@ -1073,10 +850,9 @@ class DVobj:
         self.clpred = value*np.ones((Nf,1))
         self.menu   = menu
 
-class CVobj:
-
-    ncvs = 0;
-
+class CVobj(object):
+    """Structure for controlled variables."""
+    ncvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssqval=1.0,
@@ -1114,10 +890,9 @@ class CVobj:
         self.clpred = value*np.ones((Nf,1))
         self.menu   = menu
 
-class XVobj:
-
-    nxvs = 0;
-
+class XVobj(object):
+    """Struct for estimated variables."""
+    nxvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssqval=1.0,
@@ -1125,9 +900,9 @@ class XVobj:
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
-                 menu=["value","sstarg","ssqval","setpoint","qvalue",
+                 menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
-                       "noise","dist"]):
+                       "noise","dist")):
         
         XVobj.nxvs += 1
 
@@ -1153,43 +928,36 @@ class XVobj:
         self.bias   = bias
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
-        self.menu   = menu
+        self.menu   = list(menu)
 
-class SimCon:
-
-    def __init__(self, simname=[], 
-                 mvlist=[], dvlist=[], cvlist=[], xvlist=[], oplist=[],
-                 N=[], refint=[], runsim=[], deltat=[], alg=[], proc=[],
-                 mod=[], F=[], l=[], Pf=[], xmk=[], gain=[],
-                 ydata=[], udata=[], root=[]):
-
+class SimCon(object):
+    """Struct for simulation contents."""
+    def __init__(self, simname="", mvlist=(), dvlist=(), cvlist=(), xvlist=(),
+                 oplist=(), N=100, refint=100, runsim=False, deltat=1,
+                 alg=None, proc=None, mod=None, F=None, l=None, Pf=None,
+                 xmk=None, gain=None, ydata=(), udata=(), root=None):
         self.simname = simname
-        self.mvlist  = mvlist
-        self.dvlist  = dvlist
-        self.cvlist  = cvlist
-        self.xvlist  = xvlist
-        self.oplist  = oplist
-        self.nmvs    = len(mvlist)
-        self.ndvs    = len(dvlist)
-        self.ncvs    = len(cvlist)
-        self.nxvs    = len(xvlist)
-        self.xvlist  = xvlist
-        self.N       = N
-        self.refint  = refint
-        self.runsim  = runsim
-        self.deltat  = deltat
-        self.alg     = alg
-        self.proc    = proc
-        self.mod     = mod
-        self.F       = F
-        self.l       = l
-        self.Pf      = Pf
-        self.xmk     = xmk
-        self.gain    = gain
-        self.ydata   = ydata
-        self.udata   = udata
-        self.root    = root
-
-
-
-if __name__ == '__main__': execfile('siso_lmpc_mpcsim.py')
+        self.mvlist = list(mvlist)
+        self.dvlist = list(dvlist)
+        self.cvlist = list(cvlist)
+        self.xvlist = list(xvlist)
+        self.nmvs = len(self.mvlist)
+        self.ndvs = len(self.dvlist)
+        self.ncvs = len(self.cvlist)
+        self.nxvs = len(self.xvlist)
+        self.oplist = list(oplist)        
+        self.N = N
+        self.refint = refint
+        self.runsim = runsim
+        self.deltat = deltat
+        self.alg = alg
+        self.proc = proc
+        self.mod = mod
+        self.F = F
+        self.l = l
+        self.Pf = Pf
+        self.xmk = xmk
+        self.gain = gain
+        self.ydata = list(ydata)
+        self.udata = list(udata)
+        self.root = root
