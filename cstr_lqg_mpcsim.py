@@ -499,7 +499,7 @@ CVlist = [CV1,CV2,CV3]
 OPlist = [NF,DM]
 DeltaT = 1
 N      = 120
-refint = 100
+refint = 50
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)

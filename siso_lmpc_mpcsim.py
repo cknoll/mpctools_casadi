@@ -125,24 +125,24 @@ def runsim(k, simcon, opnclsd):
     cv.bias = (ypk - ymk)[0] # Needs to be a scalar.
 
     # update future predictions
-    mv.olpred[0,0] = uk[0]
-    xv.olpred[0,0] = xmk[0] + cv.bias
-    cv.olpred[0,0] = ymk[0] + cv.bias
+    mv.olpred[0] = uk[0]
+    xv.olpred[0] = xmk[0] + cv.bias
+    cv.olpred[0] = ymk[0] + cv.bias
     xv.est = xmk[0]
     cv.est = ymk[0] + cv.bias
-    mv.clpred[0,0] = uk[0]
-    xv.clpred[0,0] = xmk[0] + cv.bias
-    cv.clpred[0,0] = ymk[0] + cv.bias
+    mv.clpred[0] = uk[0]
+    xv.clpred[0] = xmk[0] + cv.bias
+    cv.clpred[0] = ymk[0] + cv.bias
     duk = uk - uref # This guy is a vector.
 
     for i in range(xv.Nf -1):
        dxmkp1 = simcon.mod(dxmk, duk)
-       mv.olpred[i+1,0] = uk
-       xv.olpred[i+1,0] = dxmkp1[0] + xv.ref + cv.bias
-       cv.olpred[i+1,0] = dxmkp1[0] + cv.ref + cv.bias
-       mv.clpred[i+1,0] = uk[0]
-       xv.clpred[i+1,0] = dxmkp1[0] + xv.ref + cv.bias
-       cv.clpred[i+1,0] = dxmkp1[0] + cv.ref + cv.bias
+       mv.olpred[i+1] = uk
+       xv.olpred[i+1] = dxmkp1[0] + xv.ref + cv.bias
+       cv.olpred[i+1] = dxmkp1[0] + cv.ref + cv.bias
+       mv.clpred[i+1] = uk[0]
+       xv.clpred[i+1] = dxmkp1[0] + xv.ref + cv.bias
+       cv.clpred[i+1] = dxmkp1[0] + cv.ref + cv.bias
        dxmk = dxmkp1
 
     # set xv target, limits same as cv limits
@@ -185,10 +185,9 @@ def runsim(k, simcon, opnclsd):
         uk = duk + np.array([mv.sstarg])
         
         # update future predictions
-        for i in range(xv.Nf):
-            mv.clpred[i,0] = sol["u"][i,0] + mv.sstarg
-            xv.clpred[i,0] = sol["x"][i,0] + xv.sstarg + cv.bias
-            cv.clpred[i,0] = sol["x"][i,0] + cv.sstarg + cv.bias
+        mv.clpred = sol["u"][:,0] + mv.sstarg
+        xv.clpred = sol["x"][:-1,0] + xv.sstarg + cv.bias
+        cv.clpred = sol["x"][:-1,0] + cv.sstarg + cv.bias
 
         print "runsim: control status - %s" % sol["status"]
 

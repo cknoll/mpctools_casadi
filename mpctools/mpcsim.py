@@ -363,7 +363,6 @@ class Trndplt(object):
         """Copies attributes from self.simcon to self."""
         simcon = self.simcon        
         self.N = simcon.N
-        self.Nm1 = simcon.N - 1
         self.deltat = simcon.deltat
         self.mvlist = simcon.mvlist
         self.dvlist = simcon.dvlist
@@ -450,7 +449,10 @@ class Trndplt(object):
                  valfield="value"):
         """Initialize given axis with variable information and append lines."""
         # Get x vector for everything.
-        xvec = np.arange(0, var.Nf) if forecast else np.arange(-self.N, 0)
+        if forecast:
+            xvec = np.arange(0, var.Nf)
+        else:
+            xvec = np.arange(-self.N, 1)
 
         # Plot value of variable.
         if vallines is not None:
@@ -567,19 +569,19 @@ class Trndplt(object):
             mvline = self.mvlines[mvndx]
             ydata  = mvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = mv.value
+            ydata[self.N] = mv.value
             mvline.set_ydata(ydata)
 
             mvmxline = self.mvmxlines[mvndx]
             ydata  = mvmxline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = mv.maxlim
+            ydata[self.N] = mv.maxlim
             mvmxline.set_ydata(ydata)
 
             mvmnline = self.mvmnlines[mvndx]
             ydata  = mvmnline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = mv.minlim
+            ydata[self.N] = mv.minlim
             mvmnline.set_ydata(ydata)
 
             fomvline = self.fomvlines[mvndx]
@@ -609,7 +611,7 @@ class Trndplt(object):
             dvline = self.dvlines[dvndx]
             ydata  = dvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = dv.value
+            ydata[self.N] = dv.value
             dvline.set_ydata(ydata)
 
             fdvline = self.fdvlines[dvndx]
@@ -629,13 +631,13 @@ class Trndplt(object):
             xvline = self.xvlines[xvndx]
             ydata  = xvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = xv.value
+            ydata[self.N] = xv.value
             xvline.set_ydata(ydata)
 
             xvesline = self.xveslines[xvndx]
             ydata  = xvesline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = xv.est
+            ydata[self.N] = xv.est
             xvesline.set_ydata(ydata)
 
 #            xvspline = self.xvsplines[xvndx]
@@ -687,31 +689,31 @@ class Trndplt(object):
             cvline = self.cvlines[cvndx]
             ydata  = cvline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = cv.value
+            ydata[self.N] = cv.value
             cvline.set_ydata(ydata)
 
             cvesline = self.cveslines[cvndx]
             ydata  = cvesline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = cv.est
+            ydata[self.N] = cv.est
             cvesline.set_ydata(ydata)
 
             cvspline = self.cvsplines[cvndx]
             ydata  = cvspline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = cv.setpoint
+            ydata[self.N] = cv.setpoint
             cvspline.set_ydata(ydata)
 
             cvmxline = self.cvmxlines[cvndx]
             ydata  = cvmxline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = cv.maxlim
+            ydata[self.N] = cv.maxlim
             cvmxline.set_ydata(ydata)
 
             cvmnline = self.cvmnlines[cvndx]
             ydata  = cvmnline.get_ydata()
             ydata  = np.roll(ydata,-1,0)
-            ydata[self.Nm1] = cv.minlim
+            ydata[self.N] = cv.minlim
             cvmnline.set_ydata(ydata)
 
             focvline = self.focvlines[cvndx]
@@ -864,9 +866,8 @@ class MVobj(Updatable):
         self.ref    = value
         self.chflag = 0
         self.Nf     = Nf
-        #TODO: change these next two to remove trailing singleton dimension.
-        self.olpred = value*np.ones((Nf,1))
-        self.clpred = value*np.ones((Nf,1))
+        self.olpred = value*np.ones((Nf,))
+        self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
 
 class DVobj(Updatable):
@@ -885,9 +886,8 @@ class DVobj(Updatable):
         self.ref    = value
         self.chflag = 0
         self.Nf     = Nf
-        #TODO: change these next two to remove trailing singleton dimension.
-        self.olpred = value*np.ones((Nf,1))
-        self.clpred = value*np.ones((Nf,1))
+        self.olpred = value*np.ones((Nf,))
+        self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
 
 class CVobj(Updatable):
@@ -919,9 +919,8 @@ class CVobj(Updatable):
         self.chflag = 0
         self.Nf     = Nf
         self.bias   = bias
-        #TODO: change these next two to remove trailing singleton dimension.
-        self.olpred = value*np.ones((Nf,1))
-        self.clpred = value*np.ones((Nf,1))
+        self.olpred = value*np.ones((Nf,))
+        self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
 
 class XVobj(Updatable):
@@ -956,9 +955,8 @@ class XVobj(Updatable):
         self.chflag = 0
         self.Nf     = Nf
         self.bias   = bias
-        #TODO: change these next two to remove trailing singleton dimension.
-        self.olpred = value*np.ones((Nf,1))
-        self.clpred = value*np.ones((Nf,1))
+        self.olpred = value*np.ones((Nf,))
+        self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
 
 class SimCon(object):
