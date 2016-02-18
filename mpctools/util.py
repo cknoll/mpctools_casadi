@@ -284,34 +284,34 @@ def mtimes(*args, **kwargs):
     Keyword arguments forcedot or forcemtimes can be set to True to pick one
     behavior or another.
     """
+    # Get keyword arguments.
+    forcemtimes = kwargs.pop("forcemtimes", False)
+    forcedot = kwargs.pop("forcedot", False)
+    if len(kwargs) > 0:
+        raise TypeError("Invalid keywords: %s" % kwargs.keys())
+    
     # Pick whether to use mul or dot.
-    useMul = kwargs.get("forcemtimes", None)
-    if useMul is None:
-        useMul = kwargs.get("forcedot", None)
-        if useMul is None:
-            useMul = True
-            for (i,a) in enumerate(args):
-                try:
-                    shape = a.shape
-                except AttributeError:
-                    try:
-                        shape = np.array(a).shape
-                    except:
-                        raise AttributeError("Unable to get shape of "
-                        "argument %d!" % (i,))
-                useMul &= len(shape) == 2
-        else:
-            useMul = not useMul
-    # Now actually do multiplication.
-    if useMul:
-        ans = ctools.mtimes(args)
+    if forcemtimes:
+        if forcedot:
+            raise ValueError("forcemtimes and forcedot can't both be True!")
+        useMul = True
+    elif forcedot:
+        useMul = False
     else:
-        ans = args[0]
-        for (i,a) in enumerate(args[1:]):
+        useMul = True
+        for (i, a) in enumerate(args):
             try:
-                ans = np.dot(ans,a)
-            except ValueError:
-                raise ValueError("Wrong alignment for argument %d!" % (i + 1))
+                shape = a.shape
+            except AttributeError:
+                try:
+                    shape = np.array(a).shape
+                except:
+                    raise AttributeError("Unable to get shape of "
+                                          "argument %d!" % i)
+            useMul &= len(shape) == 2
+
+    # Now actually do multiplication.
+    ans = ctools.mtimes(args) if useMul else reduce(np.dot, args)
     return ans
 
     

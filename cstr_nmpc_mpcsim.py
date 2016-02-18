@@ -405,8 +405,7 @@ def runsim(k, simcon, opnclsd):
 
         # Store values in simulation container
 
-        simcon.proc = []
-        simcon.proc.append(cstr)
+        simcon.proc = [cstr]
         simcon.mod = []
         simcon.mod.append(us)
         simcon.mod.append(xs)

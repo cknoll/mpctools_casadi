@@ -39,8 +39,10 @@ class PID:
             uk   = ukm1 + self.Kc*((self.ek - self.ekm1) 
                    + (self.dt/self.ti)*self.ek
                    + (self.td/self.dt)*(self.ek - 2*self.ekm1 + self.ekm2))
-            if (uk > self.mv.maxlim): uk = uk - (uk - self.mv.maxlim)
-            if (uk < self.mv.minlim): uk = uk + (self.mv.minlim - uk)
+            if uk > self.mv.maxlim:
+                uk = self.mv.maxlim
+            if uk < self.mv.minlim:
+                uk = self.mv.minlim
 
         # shift the error history values
 

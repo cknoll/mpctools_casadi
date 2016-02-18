@@ -464,7 +464,6 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
                     warnings.warn("Extra time points in %s['%s']. "
                         "Ignoring." % (name,v))
                 elif len(vs) > d.shape[0]:
-                    util.keyboard()
                     raise IndexError("Too few time points in %s['%s']!" %
                                      (name, v))
                 o = 1 # Offset multiplier.

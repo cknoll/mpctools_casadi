@@ -13,7 +13,6 @@ def runsim(k, simcon, opnclsd):
     # unpack stuff from simulation container
 
     mvlist = simcon.mvlist
-    dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
     oplist = simcon.oplist
@@ -29,7 +28,6 @@ def runsim(k, simcon, opnclsd):
     vrlist = [mv,cv,xv,nf,av]
 
     # check for changes
-
     chsum = 0
     for var in vrlist:
         chsum += var.chflag
@@ -48,38 +46,38 @@ def runsim(k, simcon, opnclsd):
         Bcont = np.array([[10.0]])
         Nx = Acont.shape[0] # Number of states.
         Nu = Bcont.shape[1] # Number of control elements
-        Nd = None # No disturbances.
 
         # Discretize.
 
         (Adisc,Bdisc) = mpc.util.c2d(Acont,Bcont,deltat)
-        A = [Adisc]
-        B = [Bdisc]
 
         # Define Q and R matrices and q penalty for periodic solution.
 
-        Q = [np.diag([cv.qvalue])]
-        q = [np.zeros((Nx,1))]
-        R = [np.diag([mv.rvalue])]
+        Q = np.diag([cv.qvalue])
+        R = np.diag([mv.rvalue])
 
         # Create discrete process
-
-        Fproc = lambda x,u : (mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u))
+        def Fproc(x, u):
+            return mpc.mtimes(Adisc,x) + mpc.mtimes(Bdisc,u)
         simcon.proc = Fproc
 
         # Create discrete controller (possibly with model mismatch)
 
         Amod = Adisc
         Bmod = Bdisc
-        simcon.gain = Bmod/(1-Amod)
-        Fmod = lambda x,u : (mpc.mtimes(Amod,x) + mpc.mtimes(Bmod,u))
+        simcon.gain = Bmod[0,0]/(1-Amod[0,0])
+        def Fmod(x, u):
+            """Model F function (possibly with mismatch)."""
+            return mpc.mtimes(Amod, x) + mpc.mtimes(Bmod, u)
         simcon.mod = Fmod
-        Fdiscrete = lambda x,u : mpc.mtimes(Amod,x) + mpc.mtimes(Bmod,u)
-        simcon.F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
-        l = lambda x,u : (mpc.mtimes(x.T,Q[0],x)
-                  + mpc.mtimes(u.T,R[0],u))
+        simcon.F = mpc.getCasadiFunc(Fmod,[Nx,Nu],["x","u"],"F")
+        def l(x, u):
+            """Quadratic stage cost."""
+            return mpc.mtimes(x.T, Q, x) + mpc.mtimes(u.T, R, u)
         simcon.l = mpc.getCasadiFunc(l,[Nx,Nu],["x","u"],"l")
-        Pf = lambda x: mpc.mtimes(x.T,Q[0],x)
+        def Pf(x):
+            """Quadratic terminal cost."""
+            return mpc.mtimes(x.T, Q, x)
         simcon.Pf = mpc.getCasadiFunc(Pf,[Nx],["x"],"Pf")
 
         # initialize the state
@@ -171,20 +169,21 @@ def runsim(k, simcon, opnclsd):
 
         # set mv, xv bounds
 
-        ulb = [np.array([mv.minlim - mv.sstarg])]
-        uub = [np.array([mv.maxlim - mv.sstarg])]
-        xlb = [np.array([xv.minlim - xv.sstarg - cv.bias])]
-        xub = [np.array([xv.maxlim - xv.sstarg - cv.bias])]
+        ulb = np.array([mv.minlim - mv.sstarg])
+        uub = np.array([mv.maxlim - mv.sstarg])
+        xlb = np.array([xv.minlim - xv.sstarg - cv.bias])
+        xub = np.array([xv.maxlim - xv.sstarg - cv.bias])
         #bounds = dict(uub=uub,ulb=ulb,xub=xub,xlb=xlb)
         N = {"t" : xv.Nf, "x" : 1, "u" : 1}
-        lb = {"x" : np.tile(xlb[0], (N["t"] + 1, 1)), "u" : np.tile(ulb[0], (N["t"],1))}
-        ub = {"x" : np.tile(xub[0], (N["t"] + 1, 1)), "u" : np.tile(uub[0], (N["t"],1))}
+        lb = {"x" : np.tile(xlb, (N["t"] + 1, 1)),
+              "u" : np.tile(ulb, (N["t"], 1))}
+        ub = {"x" : np.tile(xub, (N["t"] + 1, 1)),
+              "u" : np.tile(uub, (N["t"],1))}
 
         # solve for new input and state
-
-#        alg   = mpc.nmpc(simcon.F,simcon.l,[0],xv.Nf,simcon.Pf,
-#                bounds,verbosity=0,returnTimeInvariantSolver=True)
-        alg = mpc.nmpc(simcon.F,simcon.l,N,[0],Pf=simcon.Pf,lb=lb,ub=ub,verbosity=0,runOptimization=False)
+        x0 = [0]
+        alg = mpc.nmpc(simcon.F, simcon.l, N, x0, Pf=simcon.Pf, lb=lb, ub=ub,
+                       verbosity=0)
         dxss = xmk - xv.sstarg
         alg.fixvar("x",0,dxss)
         alg.solve()

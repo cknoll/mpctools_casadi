@@ -10,7 +10,6 @@
 # - implement a menu for the unmeasured disturbances - tun factors
 # - implement plots for the unmeasured disturbance variables
 # - implement option to show process diagram
-# - finish re-initialize option
 # - refactor Trndplt.plotvals
 
 import Tkinter as tk
@@ -18,6 +17,7 @@ import tkMessageBox as tkmsg
 from tkFileDialog import askopenfilename
 from tkSimpleDialog import askfloat
 import collections
+import copy
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import matplotlib.pyplot as plt
@@ -41,7 +41,7 @@ def makegui(simcon):
     
     # Add the step button and the reset button.
     stepbutton = tk.Button(menubar)
-    stepbutton.configure(text="Manual\nStep")
+    stepbutton.configure(text="Single\nStep")
     stepbutton.pack(side=tk.LEFT)
     
     #TODO: finalize reset button appearence.
@@ -56,8 +56,7 @@ def makegui(simcon):
     fillspace(menubar)
 
     # create the trend plots
-    trndplt = Trndplt(root, simcon, rpanel, cpanel, stepbutton, resetbutton)
-    trndplt.autosim()
+    Trndplt(root, simcon, rpanel, cpanel, stepbutton, resetbutton)
 
     # start the main loop
     root.mainloop()
@@ -68,7 +67,7 @@ def notdone():
 
 def my_add_command(menu, var, desc):
     """Wrapper to add a command to dropdown menus."""    
-    menu.add_command(label='Set ' + desc, command=lambda: setvalue(var, desc),
+    menu.add_command(label='Set ' + desc, command=lambda : setvalue(var, desc),
                      underline=0)
 
 def openfile(simcon):
@@ -143,12 +142,6 @@ def showhelp():
     tkmsg.showinfo('About MPC-Sim', 'MPC-Sim is a GUI for the '
                    'mpc-tools-casadi package (Tom Badgwell)')
 
-def _addmenus(variable, menu, keyandname):
-    """Loops through keyandname, adding to menu if any keys are found."""
-    for (key, name) in keyandname:
-        if key in variable.menu:
-            my_add_command(menu, variable, name)
-
 def makemenus(win, simcon):
 
     mvlist = simcon.mvlist
@@ -170,6 +163,13 @@ def makemenus(win, simcon):
 #    filemenu.add_command(label='Close', command=notdone,  underline=0)
     filemenu.add_command(label='Exit',  command=win.quit, underline=0)
     fbutton.config(menu=filemenu)
+
+    # Helper function.
+    def addmenus(variable, menu, keyandname):
+        """Loops through keyandname, adding to menu if any keys are found."""
+        for (key, name) in keyandname:
+            if key in variable.menu:
+                my_add_command(menu, variable, name)
 
     # build the MV menu
 
@@ -196,8 +196,8 @@ def makemenus(win, simcon):
     ]
     for mv in mvlist:
         mvmenu = tk.Menu(mvsmenu, tearoff=False)
-        _addmenus(mv, mvmenu, mvkeyandname)
-        mvsmenu.add_cascade(label=mv.name, menu=mvmenu, underline = 0)
+        addmenus(mv, mvmenu, mvkeyandname)
+        mvsmenu.add_cascade(label=mv.name, menu=mvmenu, underline=0)
 
     # build the DV menu if there are DVs
 
@@ -216,7 +216,7 @@ def makemenus(win, simcon):
         ]
         for dv in dvlist:
             dvmenu = tk.Menu(dvsmenu, tearoff=False)
-            _addmenus(dv, dvmenu, dvkeyandname) 
+            addmenus(dv, dvmenu, dvkeyandname) 
             dvsmenu.add_cascade(label=dv.name, menu=dvmenu, underline = 0)
 
     # build the XV menu if there are XVs
@@ -243,7 +243,7 @@ def makemenus(win, simcon):
         ]
         for xv in xvlist:
             xvmenu = tk.Menu(xvsmenu, tearoff=False)
-            _addmenus(xv, xvmenu, xvkeyandname)
+            addmenus(xv, xvmenu, xvkeyandname)
             xvsmenu.add_cascade(label=xv.name, menu=xvmenu, underline=0)
 
     # build the CV menu
@@ -269,7 +269,7 @@ def makemenus(win, simcon):
     ]
     for cv in cvlist:
         cvmenu = tk.Menu(cvsmenu, tearoff=False)
-        _addmenus(cv, cvmenu, cvkeyandname)
+        addmenus(cv, cvmenu, cvkeyandname)
         cvsmenu.add_cascade(label=cv.name, menu=cvmenu, underline = 0)
 
     # build the options menu
@@ -298,27 +298,15 @@ class Trndplt(object):
     def __init__(self, parent, simcon, runpause, opnclsd, stepbutton,
                  resetbutton):
         # store inputs
-        self.N = simcon.N
-        self.Nm1 = simcon.N - 1
-        self.deltat = simcon.deltat
         self.simcon = simcon
-        self.mvlist = simcon.mvlist
-        self.dvlist = simcon.dvlist
-        self.cvlist = simcon.cvlist
-        self.xvlist = simcon.xvlist
-        self.oplist = simcon.oplist
+        self.copysimcon()        
         self.runpause = runpause
         self.opnclsd  = opnclsd
         self.stepbutton = stepbutton
         self.resetbutton = resetbutton
-        self.refint = simcon.refint
-        self.runsim = simcon.runsim
         self.k = 0
         self.parent = parent # Save parent to reference later.
-        self.pendingevent = None
-
-        # build the figure
-        self.fig      = plt.Figure()
+        self.pendingsim = None
 
         # determine the subplot dimensions
         self.nmvs      = len(self.mvlist)
@@ -328,39 +316,40 @@ class Trndplt(object):
         self.ninputs   = self.nmvs + self.ndvs
         self.noutputs  = self.ncvs
         self.nrows     = max(self.ninputs, self.nxvs, self.noutputs)
-        self.ncols     = 2
-        if self.nxvs > 0:
-            self.ncols = 3
-        self.submat    = str(self.nrows) + str(self.ncols)
+        self.ncols = 3 if self.nxvs > 0 else 2
+        self.submat = str(self.nrows) + str(self.ncols)
 
-        # set up the subplots.
-        self.initlines()
-        self.mvaxes = self.addaxes(self.mvlist, col=1)
-        self.dvaxes = self.addaxes(self.dvlist, startrow=self.nmvs + 1, col=1)
-        self.xvaxes = self.addaxes(self.xvlist, col=2)
-        self.cvaxes = self.addaxes(self.cvlist, col=3)
-        self.initializeaxes()
+        # build the figure
+        self.fig = plt.Figure()
+        self.resetfigure()
         
-        # attach figure to parent and configure buttons.
-        self.canvas   = FigureCanvasTkAgg(self.fig, master=parent)
+        # attach figure to parent.
+        self.canvas = FigureCanvasTkAgg(self.fig, master=parent)
         self.canvas.get_tk_widget().pack(side=tk.TOP, expand=tk.YES,
                                          fill=tk.BOTH)
         
+        # Configure buttons.
         self.stepbutton.configure(command=self.simulate)
         self.stepbutton.focus_force()
 
         self.resetbutton.configure(command=self.reset)
+        
+        self.runpause.configure(lcommand=self.pausesim, rcommand=self.playsim)
 
-    def autosim(self, repeat=True):
+    def playsim(self, repeat=True):
         """Loop to automatically run simulation."""
         if self.runpause.status.get() == 1:
             self.simulate()
         if repeat:
-            self.pendingevent = self.parent.after(int(self.refint),
-                                                  self.autosim)
+            self.pendingsim = self.parent.after(int(self.refint),
+                                                self.playsim)
+    def pausesim(self):
+        """Cancels any pending simulation step."""
+        if self.pendingsim is not None:
+            self.parent.after_cancel(self.pendingsim)
     
     def simulate(self, i=0):
-        """Run one simulation step if not paused."""
+        """Run one simulation step."""
         # Run step.
         self.simcon.runsim(self.k, self.simcon, self.opnclsd)
 
@@ -370,15 +359,39 @@ class Trndplt(object):
         # increment the iteration count
         self.k += 1
 
+    def copysimcon(self):
+        """Copies attributes from self.simcon to self."""
+        simcon = self.simcon        
+        self.N = simcon.N
+        self.Nm1 = simcon.N - 1
+        self.deltat = simcon.deltat
+        self.mvlist = simcon.mvlist
+        self.dvlist = simcon.dvlist
+        self.cvlist = simcon.cvlist
+        self.xvlist = simcon.xvlist
+        self.oplist = simcon.oplist
+        self.refint = simcon.refint
+        self.runsim = simcon.runsim
+        
     def reset(self):
         """Resets simulation to initial values."""
-        if self.pendingevent is not None:
-            self.parent.after_cancel(self.pendingevent)
+        self.pausesim()
         self.k = 0
-        #TODO: rest all options and variable values.            
+        self.simcon.usedefaults()
+        self.copysimcon()
+        self.resetfigure(clear=True)
+        if self.runpause.status.get() == 1:
+            self.playsim() # Restart automatic loop.
+
+    def resetfigure(self, clear=False):
+        """Removes all axes from the figure and rebuilds them."""
+        self.fig.clear()
         self.initlines()
-        self.initializeaxes(clear=True)
-        self.autosim() # Restart automatic loop.
+        self.mvaxes = self.addaxes(self.mvlist, col=1)
+        self.dvaxes = self.addaxes(self.dvlist, startrow=self.nmvs + 1, col=1)
+        self.xvaxes = self.addaxes(self.xvlist, col=2)
+        self.cvaxes = self.addaxes(self.cvlist, col=self.ncols)
+        self.initializeaxes(clear=clear)
 
     def initlines(self):
         """Sets all line attributes to empty lists."""
@@ -425,7 +438,7 @@ class Trndplt(object):
         axes = []
         for (i, var) in enumerate(varlist):        
             isub = (startrow + i - 1)*self.ncols + col        
-            ax = self.fig.add_subplot(self.nrows, self.ncols ,isub)
+            ax = self.fig.add_subplot(self.nrows, self.ncols, isub)
             ax.set_ylabel("%s %s" % (var.name, var.units))
             ax.set_title(var.desc)
             ax.set_ylim([var.pltmin, var.pltmax])
@@ -731,14 +744,33 @@ class RadioPanel(object):
         self.frame.pack(side=tk.LEFT)
         msg = tk.Label(self.frame, text=title)
         msg.pack(side=tk.TOP)
-        pauseb = tk.Radiobutton(self.frame, text=lbutton, command=self.setbg, 
-                                variable=self.status, value=0)
-        pauseb.pack(side=tk.LEFT)
-        runb = tk.Radiobutton(self.frame, text=rbutton, command=self.setbg,
-                              variable=self.status, value=1)
-        runb.pack(side=tk.LEFT)
+        leftb = tk.Radiobutton(self.frame, text=lbutton,
+                               command=self.leftcommand, variable=self.status,
+                               value=0)
+        leftb.pack(side=tk.LEFT)
+        rightb = tk.Radiobutton(self.frame, text=rbutton,
+                                command=self.rightcommand,
+                                variable=self.status, value=1)
+        rightb.pack(side=tk.LEFT)
         self.status.set(0)
         self.frame.config(bg='red')
+        self.__rcommand = None
+        self.__lcommand = None
+
+    def configure(self, lcommand=None, rcommand=None):
+        """Set commands for left and right buttons."""
+        self.__lcommand = lcommand
+        self.__rcommand = rcommand
+
+    def leftcommand(self):
+        self.setbg()
+        if self.__lcommand is not None:
+            self.__lcommand()
+
+    def rightcommand(self):
+        self.setbg()
+        if self.__rcommand is not None:
+            self.__rcommand()
 
     def setbg(self):
         if self.status.get() == 0:
@@ -762,14 +794,6 @@ class ConPanel(RadioPanel):
     def rframe(self):
         return self.frame
 
-class Option(object):
-    """Struct for dropdown menu options."""
-    def __init__(self, name=' ', desc=' ', value=0.0):
-        self.name   = name
-        self.desc   = desc
-        self.value  = value
-        self.chflag = 0
-
 def makename(parent, simname):
     """Adds name frame to top of UI."""
     nameframe = tk.Frame(parent)
@@ -785,9 +809,34 @@ def fillspace(parent):
     fillframe.config(bg='blue')
     fillframe.pack(side=tk.LEFT, expand=tk.YES, fill=tk.BOTH)
 
-class MVobj(object):
+class Updatable(object):
+    """Object with _update method to to update attributes."""
+    def _update(self, newobj, attributes=None):
+        """
+        Updates self with attributes from newobj.
+
+        By default, attributes is all attributes of newobj that don't start
+        with an underscore. Pass an iterable to only use certain attributes.        
+        
+        newobj must be an instance of type(self).        
+        """
+        if not isinstance(newobj, type(self)):
+            raise TypeError("Incompatible type for newobj.")
+        if attributes is None:
+            attributes = filter(lambda x : not x.startswith("_"), dir(newobj))
+        for a in attributes:
+            setattr(self, a, getattr(newobj, a))
+
+class Option(Updatable):
+    """Struct for dropdown menu options."""
+    def __init__(self, name=' ', desc=' ', value=0.0):
+        self.name   = name
+        self.desc   = desc
+        self.value  = value
+        self.chflag = 0
+
+class MVobj(Updatable):
     """Structure for manipulated variables."""
-    nmvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units= ' ',
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssrval=0.01,
@@ -795,11 +844,9 @@ class MVobj(object):
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, dist=0.0, Nf=0,
-                 menu=["value","sstarg","ssrval","target","rvalue","svalue",
+                 menu=("value","sstarg","ssrval","target","rvalue","svalue",
                        "maxlim","minlim","roclim","pltmax","pltmin","noise",
-                       "dist"]):
-        
-        MVobj.nmvs += 1
+                       "dist")):
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -822,19 +869,15 @@ class MVobj(object):
         self.Nf     = Nf
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
-        self.menu   = menu
+        self.menu   = list(menu)
 
-class DVobj(object):
+class DVobj(Updatable):
     """Structure for disturbance variables."""
-    ndvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, Nf=0,
-                 menu=["value","pltmax","pltmin","noise"]):
-        
-        DVobj.ndvs += 1
-
+                 menu=("value","pltmax","pltmin","noise")):
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -848,11 +891,10 @@ class DVobj(object):
         self.Nf     = Nf
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
-        self.menu   = menu
+        self.menu   = list(menu)
 
-class CVobj(object):
+class CVobj(Updatable):
     """Structure for controlled variables."""
-    ncvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssqval=1.0,
@@ -860,12 +902,9 @@ class CVobj(object):
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
-                 menu=["value","sstarg","ssqval","setpoint","qvalue",
+                 menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
-                       "noise","dist"]):
-        
-        CVobj.ncvs += 1
-
+                       "noise","dist")):
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -888,11 +927,10 @@ class CVobj(object):
         self.bias   = bias
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
-        self.menu   = menu
+        self.menu   = list(menu)
 
-class XVobj(object):
+class XVobj(Updatable):
     """Struct for estimated variables."""
-    nxvs = 0 # Persistent counter.
     def __init__(self, name=' ', desc=' ', units=' ', 
                  value=0.0*np.ones((1,1)),
                  sstarg=0.0, ssqval=1.0,
@@ -903,9 +941,6 @@ class XVobj(object):
                  menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
                        "noise","dist")):
-        
-        XVobj.nxvs += 1
-
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -935,7 +970,8 @@ class SimCon(object):
     def __init__(self, simname="", mvlist=(), dvlist=(), cvlist=(), xvlist=(),
                  oplist=(), N=100, refint=100, runsim=False, deltat=1,
                  alg=None, proc=None, mod=None, F=None, l=None, Pf=None,
-                 xmk=None, gain=None, ydata=(), udata=(), root=None):
+                 xmk=None, gain=None, ydata=(), udata=(), root=None,
+                 savedefaults=True):
         self.simname = simname
         self.mvlist = list(mvlist)
         self.dvlist = list(dvlist)
@@ -961,3 +997,39 @@ class SimCon(object):
         self.ydata = list(ydata)
         self.udata = list(udata)
         self.root = root
+        self.__defaults = None
+        self.__defaultfields = ["refint", "deltat", "ydata", "udata", "N"]
+        self.__updatables = ["mvlist", "dvlist", "cvlist", "xvlist", "oplist"]
+        
+        if savedefaults:
+            self.savedefaults()
+        
+    def savedefaults(self):
+        """
+        Saves current settings as default values.
+        
+        Note that only the fields specified in __defaultfields are stored.        
+        """
+        kwargs = dict(savedefaults=False)
+        for k in self.__defaultfields + self.__updatables:
+            kwargs[k] = copy.deepcopy(getattr(self, k))
+        self.__defaults = SimCon(**kwargs)
+        
+    def usedefaults(self):
+        """
+        Reverts settings to default values.
+        
+        Only settings in __defaultfields are reverted, and fields in
+        self.__updatables have their _update methods called for each element in
+        the list.
+        """
+        if self.__defaults is None:
+            raise ValueError("No defaults have been saved!")
+        for k in self.__defaultfields:
+            val = copy.deepcopy(getattr(self.__defaults, k))
+            setattr(self, k, val)
+        for k in self.__updatables:
+            varanddefault = zip(getattr(self, k), getattr(self.__defaults, k))
+            for (var, defaultvar) in varanddefault:
+                var._update(defaultvar)
+                
