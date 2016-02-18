@@ -838,12 +838,9 @@ class Option(Updatable):
 class MVobj(Updatable):
     """Structure for manipulated variables."""
     def __init__(self, name=' ', desc=' ', units= ' ',
-                 value=0.0*np.ones((1,1)),
-                 sstarg=0.0, ssrval=0.01,
-                 target=0.0, rvalue=0.001, svalue=0.001, 
-                 maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
-                 pltmax=100.0, pltmin=0.0,
-                 noise=0.0, dist=0.0, Nf=0,
+                 value=0.0, sstarg=0.0, ssrval=0.01, target=0.0, rvalue=0.001,
+                 svalue=0.001, maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
+                 pltmax=100.0, pltmin=0.0, noise=0.0, dist=0.0, Nf=0,
                  menu=("value","sstarg","ssrval","target","rvalue","svalue",
                        "maxlim","minlim","roclim","pltmax","pltmin","noise",
                        "dist")):
@@ -867,17 +864,16 @@ class MVobj(Updatable):
         self.ref    = value
         self.chflag = 0
         self.Nf     = Nf
+        #TODO: change these next two to remove trailing singleton dimension.
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
         self.menu   = list(menu)
 
 class DVobj(Updatable):
     """Structure for disturbance variables."""
-    def __init__(self, name=' ', desc=' ', units=' ', 
-                 value=0.0*np.ones((1,1)),
-                 pltmax=100.0, pltmin=0.0,
-                 noise=0.0, Nf=0,
-                 menu=("value","pltmax","pltmin","noise")):
+    def __init__(self, name=' ', desc=' ', units=' ', value=0.0, pltmax=100.0,
+                 pltmin=0.0, noise=0.0, Nf=0, menu=("value","pltmax","pltmin",
+                                                    "noise")):
         self.name   = name
         self.desc   = desc
         self.units  = units
@@ -889,18 +885,16 @@ class DVobj(Updatable):
         self.ref    = value
         self.chflag = 0
         self.Nf     = Nf
+        #TODO: change these next two to remove trailing singleton dimension.
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
         self.menu   = list(menu)
 
 class CVobj(Updatable):
     """Structure for controlled variables."""
-    def __init__(self, name=' ', desc=' ', units=' ', 
-                 value=0.0*np.ones((1,1)),
-                 sstarg=0.0, ssqval=1.0,
-                 setpoint=0.0, qvalue=1.0,
-                 maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
-                 pltmax=100.0, pltmin=0.0,
+    def __init__(self, name=' ', desc=' ', units=' ',  value=0.0, sstarg=0.0,
+                 ssqval=1.0, setpoint=0.0, qvalue=1.0, maxlim=1.0e10,
+                 minlim=-1.0e10, roclim=1.0e10, pltmax=100.0, pltmin=0.0,
                  noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
                  menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
@@ -925,6 +919,7 @@ class CVobj(Updatable):
         self.chflag = 0
         self.Nf     = Nf
         self.bias   = bias
+        #TODO: change these next two to remove trailing singleton dimension.
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
         self.menu   = list(menu)
@@ -932,7 +927,7 @@ class CVobj(Updatable):
 class XVobj(Updatable):
     """Struct for estimated variables."""
     def __init__(self, name=' ', desc=' ', units=' ', 
-                 value=0.0*np.ones((1,1)),
+                 value=0.0,
                  sstarg=0.0, ssqval=1.0,
                  setpoint=0.0, qvalue=1.0,
                  maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
@@ -961,6 +956,7 @@ class XVobj(Updatable):
         self.chflag = 0
         self.Nf     = Nf
         self.bias   = bias
+        #TODO: change these next two to remove trailing singleton dimension.
         self.olpred = value*np.ones((Nf,1))
         self.clpred = value*np.ones((Nf,1))
         self.menu   = list(menu)

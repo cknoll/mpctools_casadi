@@ -360,12 +360,10 @@ def casadiStruct2numpyDict(struct):
     Note that if the struct entry is empty, then there will not be a
     corresponding key in the returned dictonary.
     """ 
-
     npdict = {}
     for k in struct.keys():
         if len(struct[k]) > 0:
-            npdict[k] = listcatfirstdim(struct[k])
-        
+            npdict[k] = listcatfirstdim(struct[k])   
     return npdict
 
 
@@ -373,7 +371,6 @@ def listcatfirstdim(l):
     """
     Takes a list of numpy arrays, prepends a dimension, and concatenates.
     """
-    
     newl = []
     for a in l:
         a = np.array(a)
@@ -381,7 +378,6 @@ def listcatfirstdim(l):
             a.shape = (a.shape[0],)
         a.shape = (1,) + a.shape
         newl.append(a)
-    
     return np.concatenate(newl)
 
 
