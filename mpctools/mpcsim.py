@@ -15,7 +15,7 @@
 import Tkinter as tk
 import tkMessageBox as tkmsg
 from tkFileDialog import askopenfilename
-from tkSimpleDialog import askfloat
+from tkSimpleDialog import askfloat, askinteger
 import collections
 import copy
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -80,10 +80,11 @@ def openfile(simcon):
 def _get_setvalue_options():
     """Returns a dictionary of available setvalue options."""
     SetvalueTuple = collections.namedtuple("SetValue", ["field", "xmin",
-                                                        "xmax", "chflag"])
-    def svo(field, xmin=None, xmax=None, chflag=False):
+                                                        "xmax", "chflag",
+                                                        "askfunc"])
+    def svo(field, xmin=None, xmax=None, chflag=False, askfunc=None):
         """Wrapper for SetvalueTuple with default arguments."""
-        return SetvalueTuple(field, xmin, xmax, chflag)
+        return SetvalueTuple(field, xmin, xmax, chflag, askfunc)
     setvalue_options = util.ReadOnlyDict({
         "Value" : svo("value"),
         "SS Target" : svo("sstarg", chflag=True), 
@@ -104,6 +105,8 @@ def _get_setvalue_options():
         "Process Step Dist." : svo("dist"),
         "Refresh Int." : svo("refint", xmin=10, xmax=10000),
         "Noise Factor" : svo("value", xmin=0),
+        "Open-Loop Predictions" : svo("value", xmin=0, xmax=1,
+                                      askfunc=askinteger),
         "A Value" : svo("value", xmin=-10, xmax=10, chflag=True),
         "Gain Mismatch Factor" : svo("gfac", xmin=0, chflag=True),
         "Disturbance Model" : svo("value", xmin=1, xmax=5, chflag=True),
@@ -129,7 +132,8 @@ def setvalue(var, desc):
                 else:
                     val = lim
                 kwargs[k] = val
-        value = askfloat(var.name, entrytext, **kwargs)
+        askfunc = askfloat if vinfo.askfunc is None else vinfo.askfunc
+        value = askfunc(var.name, entrytext, **kwargs)
         if value is not None:
             setattr(var, vinfo.field, value)
             if vinfo.chflag:
@@ -811,6 +815,51 @@ def fillspace(parent):
     fillframe.config(bg='blue')
     fillframe.pack(side=tk.LEFT, expand=tk.YES, fill=tk.BOTH)
 
+class VarList(list):
+    """Class for list of variable objects."""
+    def __init__(self, iterable):
+        super(VarList, self).__init__(iterable)
+    
+    def valbyname(self, name):
+        """Returns the list element whose name is name (None if not found)."""
+        i = self.indexbyname(name)
+        if i is not None:
+            i = self[i]
+        return i
+    
+    def indexbyname(self, name):
+        """Returns the list index whose name is name (None if not found)."""
+        for (i, val) in enumerate(self):
+            if val.name == name:
+                break
+        else:
+            i = None
+        return i
+    
+    def asvec(self, field="value"):
+        """Returns Numpy vector with item.field for each item."""
+        return np.array([getattr(item, field) for item in self])
+        
+    def vecassign(self, vec, field="value", index=None):
+        """
+        Assigns self[i].field = vec[i].
+            
+        If index is not None, does self[i].field[index] = vec[i].
+        """
+        vec = np.array(vec)
+        if vec.shape != (len(self),):
+            if vec.shape == () and len(self) == 1:
+                vec = np.array([vec])
+            else:
+                raise ValueError("Incorrect size: vec is %r, must be (%d,)."
+                                  % (vec.shape, len(self)))
+        for (i, item) in enumerate(self):
+            if index is None:
+                setattr(item, field, vec[i])
+            else:
+                subitem = getattr(item, field)
+                subitem[index] = vec[i]
+
 class Updatable(object):
     """Object with _update method to to update attributes."""
     def _update(self, newobj, attributes=None):
@@ -967,15 +1016,15 @@ class SimCon(object):
                  xmk=None, gain=None, ydata=(), udata=(), root=None,
                  savedefaults=True):
         self.simname = simname
-        self.mvlist = list(mvlist)
-        self.dvlist = list(dvlist)
-        self.cvlist = list(cvlist)
-        self.xvlist = list(xvlist)
+        self.mvlist = VarList(mvlist)
+        self.dvlist = VarList(dvlist)
+        self.cvlist = VarList(cvlist)
+        self.xvlist = VarList(xvlist)
         self.nmvs = len(self.mvlist)
         self.ndvs = len(self.dvlist)
         self.ncvs = len(self.cvlist)
         self.nxvs = len(self.xvlist)
-        self.oplist = list(oplist)        
+        self.oplist = VarList(oplist)        
         self.N = N
         self.refint = refint
         self.runsim = runsim

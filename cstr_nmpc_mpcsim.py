@@ -21,11 +21,13 @@ def runsim(k, simcon, opnclsd):
     xvlist = simcon.xvlist
     oplist = simcon.oplist
     deltat = simcon.deltat
+    #TODO: remove hard-coded numbers.
     vrlist = [mvlist[0], mvlist[1], dvlist[0], xvlist[0], xvlist[1],
               xvlist[2], cvlist[0], cvlist[1], cvlist[2], oplist[0],
               oplist[1]]
-    nf     = oplist[0]
-    dh     = oplist[1]
+    nf = oplist[0]
+    dh = oplist[1]
+    doolpred = oplist[2]
 
     # check for changes
 
@@ -128,8 +130,7 @@ def runsim(k, simcon, opnclsd):
         xaugs = np.concatenate((xs,np.zeros((Nid,))))
         us = np.array([Tcs,Fs])
         ds = np.array([F0s])
-#            ps = np.concatenate((ds,xs,us))
-
+        
         # Define augmented model for state estimation.    
 
         # We need to define two of these because Ipopt isn't smart enough to throw out
@@ -206,8 +207,6 @@ def runsim(k, simcon, opnclsd):
         ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
         A = ss["A"]
         B = ss["B"]
-#        C = np.eye(Nx)
-
         [K, Pi] = mpc.util.dlqr(A,B,Q,R)
 
         # Define control stage cost
@@ -250,16 +249,11 @@ def runsim(k, simcon, opnclsd):
         # Define stage costs for estimator.
 
         def lest(w,v):
-            return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
-#        def lest(w,v):
-#            d = np.array([w[3], w[4], w[5]])
-#            Qd = np.eye(3)
-            #return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) +  mpc.mtimes(d.T,Qd,d)
+            return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v)
                       
         lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
         # Don't use a prior.
-
         lxest = None
         x0bar = None
 
@@ -281,7 +275,6 @@ def runsim(k, simcon, opnclsd):
         yguess = np.tile(ys,(Nmhe+1,1))
         nmheargs = {
             "f" : ode_estimator_rk4_casadi,
-#            "f" : ode_estimator_casadi,
             "h" : measurement_casadi,
             "u" : uguess,
             "y" : yguess,
@@ -292,7 +285,6 @@ def runsim(k, simcon, opnclsd):
             "p" : np.tile(ds,(Nmhe+1,1)),
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
-#            "wAdditive" : True,
             "timelimit" : 60,
             "casaditype" : "SX" if useCasadiSX else "MX",                       
         }
@@ -383,28 +375,19 @@ def runsim(k, simcon, opnclsd):
         }
         controller = mpc.nmpc(**nmpcargs)
 
-        if (k == 0):
-
+        if k == 0:
             # Initialize variables
-
-            x_k      = np.zeros((Nx))
-            xhat_k   = np.zeros((Nx))
-            dhat_k   = np.zeros((Nid))
+            x_k      = np.zeros(Nx)
+            xhat_k   = np.zeros(Nx)
+            dhat_k   = np.zeros(Nid)
 
             # Store initial values for variables
-
-            xvlist[0].value = xs[0]
-            xvlist[1].value = xs[1]
-            xvlist[2].value = xs[2]
-            xvlist[0].est   = xs[0]
-            xvlist[1].est   = xs[1]
-            xvlist[2].est   = xs[2]
-            mvlist[0].value = us[0]
-            mvlist[1].value = us[1]
-            dvlist[0].est   = dhat_k
+            xvlist.vecassign(xs)
+            xvlist.vecassign(xs, "est")
+            mvlist.vecassign(us)
+            dvlist.vecassign(dhat_k[0], "est")
 
         # Store values in simulation container
-
         simcon.proc = [cstr]
         simcon.mod = []
         simcon.mod.append(us)
@@ -421,7 +404,7 @@ def runsim(k, simcon, opnclsd):
         simcon.udata = udata
 
     # Get stored values
-
+    #TODO: these should be dictionaries.
     cstr          = simcon.proc[0]
     us            = simcon.mod[0]
     xs            = simcon.mod[1]
@@ -446,10 +429,9 @@ def runsim(k, simcon, opnclsd):
     udata         = simcon.udata
 
     # Get variable values
-
-    x_km1    = [xvlist[0].value, xvlist[1].value, xvlist[2].value]
-    u_km1    = [mvlist[0].value, mvlist[1].value]
-    d_km1    = dvlist[0].value
+    x_km1 = xvlist.asvec()
+    u_km1 = mvlist.asvec()
+    d_km1 = dvlist.asvec()    
 
     # Advance the process
 
@@ -484,38 +466,23 @@ def runsim(k, simcon, opnclsd):
     estimator.saveguess()        
 
     # Initialize the input
-
     u_k = u_km1
 
     # Update open and closed-loop predictions
-
-    mvlist[0].olpred[0] = u_k[0]
-    mvlist[1].olpred[0] = u_k[1]
-    dvlist[0].olpred[0] = d_km1 
-    xvlist[0].olpred[0] = xhat_k[0]
-    xvlist[1].olpred[0] = xhat_k[1]
-    xvlist[2].olpred[0] = xhat_k[2]
-    cvlist[0].olpred[0] = yhat_k[0]
-    cvlist[1].olpred[0] = yhat_k[1]
-    cvlist[2].olpred[0] = yhat_k[2]
-
-    mvlist[0].clpred[0] = mvlist[0].olpred[0]
-    mvlist[1].clpred[0] = mvlist[1].olpred[0]
-    dvlist[0].clpred[0] = dvlist[0].olpred[0]
-    xvlist[0].clpred[0] = xvlist[0].olpred[0]
-    xvlist[1].clpred[0] = xvlist[1].olpred[0]
-    xvlist[2].clpred[0] = xvlist[2].olpred[0]
-    cvlist[0].clpred[0] = cvlist[0].olpred[0]
-    cvlist[1].clpred[0] = cvlist[1].olpred[0]
-    cvlist[2].clpred[0] = cvlist[2].olpred[0]
+    for field in ["olpred", "clpred"]:
+        mvlist.vecassign(u_k, field, index=0)
+        dvlist.vecassign(d_km1, field, index=0)
+        xvlist.vecassign(dhat_k, field, index=0)
+        cvlist.vecassign(yhat_k, field, index=0)
 
     xof_km1 = np.concatenate((xhat_k,dhat_k))
 
     # Need to be careful about this forecasting. Temporarily aggressive control
     # could cause the system to go unstable if continued indefinitely, and so
     # this simulation might fail. If the integrator fails at any step, then we
-    # just return NaNs for future predictions.
-    predictionOkay = True
+    # just return NaNs for future predictions. Also, if the user doesn't want
+    # predictions, then we just always skip them.
+    predictionOkay = bool(doolpred.value)
     for i in range(0,(Nf - 1)):
         if predictionOkay:
             try:
@@ -524,30 +491,15 @@ def runsim(k, simcon, opnclsd):
                 predictionOkay = False
         if predictionOkay:
             yof_k = measurement(xof_k)
-#            yof_k = measurement(np.concatenate((xof_k,np.zeros((Nid,)))))
         else:
             xof_k = np.NaN*np.ones((Nx+Nid,))
             yof_k = np.NaN*np.ones((Ny,))
-        
-        mvlist[0].olpred[i+1] = u_k[0]
-        mvlist[1].olpred[i+1] = u_k[1]
-        dvlist[0].olpred[i+1] = d_km1 
-        xvlist[0].olpred[i+1] = xof_k[0]
-        xvlist[1].olpred[i+1] = xof_k[1]
-        xvlist[2].olpred[i+1] = xof_k[2]
-        cvlist[0].olpred[i+1] = yof_k[0]
-        cvlist[1].olpred[i+1] = yof_k[1]
-        cvlist[2].olpred[i+1] = yof_k[2]
 
-        mvlist[0].clpred[i+1] = mvlist[0].olpred[i+1]
-        mvlist[1].clpred[i+1] = mvlist[1].olpred[i+1]
-        dvlist[0].clpred[i+1] = dvlist[0].olpred[i+1]
-        xvlist[0].clpred[i+1] = xvlist[0].olpred[i+1]
-        xvlist[1].clpred[i+1] = xvlist[1].olpred[i+1]
-        xvlist[2].clpred[i+1] = xvlist[2].olpred[i+1]
-        cvlist[0].clpred[i+1] = cvlist[0].olpred[i+1]
-        cvlist[1].clpred[i+1] = cvlist[1].olpred[i+1]
-        cvlist[2].clpred[i+1] = cvlist[2].olpred[i+1]
+        for field in ["olpred", "clpred"]:
+            mvlist.vecassign(u_k, field, index=(i + 1))
+            dvlist.vecassign(d_km1, field, index=(i + 1))
+            xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
+            cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
 
         xof_km1 = xof_k
 
@@ -591,55 +543,31 @@ def runsim(k, simcon, opnclsd):
         # Update closed-loop predictions
 
         sol = mpc.util.casadiStruct2numpyDict(controller.var)
-        sol["u"] = sol["u"].T
-        sol["x"] = sol["x"].T
 
-        mvlist[0].clpred[0] = u_k[0]
-        mvlist[1].clpred[0] = u_k[1]
-        xvlist[0].clpred[0] = xhat_k[0]
-        xvlist[1].clpred[0] = xhat_k[1]
-        xvlist[2].clpred[0] = xhat_k[2]
-        cvlist[0].clpred[0] = yhat_k[0]
-        cvlist[1].clpred[0] = yhat_k[1]
-        cvlist[2].clpred[0] = yhat_k[2]
+        mvlist.vecassign(u_k, "clpred", index=0)
+        xvlist.vecassign(xhat_k, "clpred", index=0)
+        cvlist.vecassign(yhat_k, "clpred", index=0)
 
-        for i in range(0,(Nf - 1)):
-
-            mvlist[0].clpred[i+1] = sol["u"][0,i+1]
-            mvlist[1].clpred[i+1] = sol["u"][1,i+1]
-            xvlist[0].clpred[i+1] = sol["x"][0,i+1]
-            xvlist[1].clpred[i+1] = sol["x"][1,i+1]
-            xvlist[2].clpred[i+1] = sol["x"][2,i+1]
-            xcl_k = sol["x"][:,i+1]
+        for i in range(Nf - 1):
+            mvlist.vecassign(sol["u"][i+1,:], "clpred", index=(i + 1))
+            xvlist.vecassign(sol["x"][i+1,:Nx], "clpred", index=(i + 1))
+            xcl_k = sol["x"][i+1,:]
             ycl_k = measurement(xcl_k)
-            cvlist[0].clpred[i+1] = ycl_k[0]
-            cvlist[1].clpred[i+1] = ycl_k[1]
-            cvlist[2].clpred[i+1] = ycl_k[2]
+            cvlist.vecassign(ycl_k[:Ny], "clpred", index=(i + 1))
 
     else:
-
-        # track the cv setpoints if the control is not on
-
+        # Track the cv setpoints if the control is not on. Can't use vecassign
+        # here because we skip cvlist[1].
         cvlist[0].setpoint = y_k[0]
         cvlist[2].setpoint = y_k[2]
 
     # Store variable values
-
-    mvlist[0].value = u_k[0]
-    mvlist[1].value = u_k[1]
-    xvlist[0].value = x_k[0]
-    xvlist[1].value = x_k[1]
-    xvlist[2].value = x_k[2]
-    xvlist[0].est   = xhat_k[0]
-    xvlist[1].est   = xhat_k[1]
-    xvlist[2].est   = xhat_k[2]
-    dvlist[0].est   = dhat_k
-    cvlist[0].value = y_k[0]
-    cvlist[1].value = y_k[1]
-    cvlist[2].value = y_k[2]
-    cvlist[0].est   = yhat_k[0]
-    cvlist[1].est   = yhat_k[1]
-    cvlist[2].est   = yhat_k[2]
+    mvlist.vecassign(u_k)
+    xvlist.vecassign(x_k)
+    xvlist.vecassign(xhat_k, "est")
+    dvlist.vecassign(dhat_k[0], "est") # Only want the first component.
+    cvlist.vecassign(y_k)
+    cvlist.vecassign(yhat_k, "est")
     simcon.ydata    = ydata
     simcon.udata    = udata
 
@@ -697,14 +625,15 @@ CV3 = sim.XVobj(name='h', desc='cv - level', units='(m)',
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 DH = sim.Option(name='DH', desc='Heat Of Reaction', value=-5e4)
+OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 
 # load up variable lists
 
-MVlist = [MV1,MV2]
+MVlist = [MV1, MV2]
 DVlist = [DV1]
-XVlist = [XV1,XV2,XV3]
-CVlist = [CV1,CV2,CV3]
-OPlist = [NF,DH]
+XVlist = [XV1, XV2, XV3]
+CVlist = [CV1, CV2, CV3]
+OPlist = [NF, DH, OL]
 DeltaT = 0.5
 N      = 120
 refint = 100
