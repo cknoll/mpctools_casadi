@@ -1,10 +1,10 @@
 # mpcsim is a graphical user interface for the mpc-tools-casadi package
 #
 # Tom Badgwell June 2015
+# Michael Risbeck February 2016
 #
 # to do list:
 #
-# - implement option to disable open-loop predictions while closed loop
 # - implement file open/closed options (quit the current window)
 # - disable the menu options depending on mode
 # - implement a menu for the unmeasured disturbances - tun factors

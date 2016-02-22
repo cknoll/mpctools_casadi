@@ -2,7 +2,7 @@
 from distutils.core import setup
 import mpctools
 
-with open("README.txt", "r") as f:
+with open("README.md", "r") as f:
     description = "".join(f)
 
 setup(name="mpc-tools-casadi",
