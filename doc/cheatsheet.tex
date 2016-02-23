@@ -326,13 +326,6 @@ Below we list some common issues that may cause headaches.
     Thus, if both bounds have \lstinline[style=output]@dtype('int64')@, then \lstinline@x0@ will be cast to an integer (by truncating), or if the two bounds have different types, then it may not be strictly enforced.
     Note that \lstinline@mpctools.util.array@ is available as a wrapper to \lstinline@numpy.array@ that forces \lstinline[style=output]@dtype('float64')@ by default, which may be preferable to NumPy's type inference.
     
-    \item Forgetting \casadi{} functions return lists.
-    
-    \casadi{} \texttt{SXFunctions} (e.g., the output of \texttt{getCasadiFunc}) always return lists, and so you will need to index the returned value to get what you want, e.g., \lstinline@z = f([x,y])[0]@.
-    
-    As of \casadi{} version 2.4, functions can also be set up to take a dictionary input and return a dictionary output, e.g. \lstinline@z = f({"x" : x, "y" : y})["z"]@.
-    Consult the \casadi{} user guide for more details about this option.
-    
     \item Poor initial guesses to solvers.
     
     By default, all variables are given guesses of 0.

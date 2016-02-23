@@ -32,8 +32,6 @@ if _getVersion(casadi.__version__) < _getVersion(_MIN_CASADI_VERSION):
 elif _getVersion(casadi.__version__) > _getVersion(_MAX_CASADI_VERSION):
     raise ImportError("casadi version %s is too new (must be <=%s)"
         % (casadi.__version__, _MAX_CASADI_VERSION))
-        
-# Ad-hoc version checking 
 
 # Add modules and some specific functions.
 import tools
