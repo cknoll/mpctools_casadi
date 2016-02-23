@@ -630,6 +630,24 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     return [Pmp1, xhatmp1, P, xhat]
 
 
+def _infercolloc(r, guess):
+    """
+    Infer a guess for collocation states "xc" based on the guess for "x".
+    
+    r should be the first output of colloc.weights, giving the multipliers
+    between 0 and 1 for each collocation time point.
+    """
+    guesskeys = set(guess.keys())
+    if not guesskeys.issuperset(["x", "xc"]):
+        raise ValueError("Missing keys! Must have 'x' and 'xc'.")
+    r = r[np.newaxis,1:-1]
+    x1 = np.array(guess["x",0])
+    for t in xrange(len(guess["x"]) - 1):
+        x0 = x1
+        x1 = np.array(guess["x",t + 1])
+        guess["xc",t] = r*x0 + (1 - r)*x1
+
+
 # Conveinence function for getting derivatives.
 def getScalarDerivative(f, nargs=1, wrt=(0,), vectorize=True):
     """
@@ -649,7 +667,7 @@ def getScalarDerivative(f, nargs=1, wrt=(0,), vectorize=True):
     dfdx_expression = f(*x)
     for i in wrt:
         dfdx_expression = casadi.jacobian(dfdx_expression, x[i])
-    dfcasadi = casadi.SXFunction("dfdx", x, [dfdx_expression])
+    dfcasadi = casadi.Function("dfdx", x, [dfdx_expression])
     def dfdx(*x):
         return dfcasadi(x)[0]
     if len(wrt) > 1:

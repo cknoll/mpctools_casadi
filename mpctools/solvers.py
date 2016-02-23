@@ -434,13 +434,20 @@ class ControlSolver(object):
             for t in range(tmin,tmax):
                 self.guess[k,t-toffset] = newguess[k,t]
     
+    def infercollocguess(self):
+        """Infers a guess for "xc" based on the guess for "x"."""
+        try:
+            r = self.misc["colloc"]["r"]
+        except KeyError:
+            raise ValueError("No collocation variables are present!")
+        util._infercolloc(r, self.guess)
+    
     def fixvar(self,var,t,val,indices=None):
         """
         Fixes variable var at time t to val.
         
         Indices can be specified as a list to fix only a subset of values.
         """
-        
         if indices is None:
             self.lb[var,t] = val
             self.ub[var,t] = val

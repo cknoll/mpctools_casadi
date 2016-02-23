@@ -15,6 +15,8 @@ import os
 import shutil
 import sys
 
+CASADI_SETUP_SCRIPT = "casadisetup.py"
+
 # An argument checking functions.
 def archivefile(f, extensions=(".zip",".tar.gz")):
     """Checks if f is some kind of archive file that exists."""
@@ -45,8 +47,8 @@ casadifolders = ["casadi", "lib", "include"]
 for f in casadifolders:
     if os.path.isdir(f):
         shutil.rmtree(f)
-if os.path.isfile("setup.py"):
-    os.remove("setup.py")
+if os.path.isfile(CASADI_SETUP_SCRIPT):
+    os.remove(CASADI_SETUP_SCRIPT)
 
 # Unzip archive.
 print "*** Unzipping <%s> ***" % (filename,)
@@ -108,7 +110,7 @@ setup(name="CasADi",
     license="LGPL",
 )
 '''.format(packagename="casadi", files=files, version=version)
-with open("casadisetup.py", "w") as setupfile:
+with open(CASADI_SETUP_SCRIPT, "w") as setupfile:
     setupfile.write(setup)
 
 # Finally, tell the user how to actually install things.
@@ -122,6 +124,7 @@ output).
 
 Alternatively, to install systemwide, use
 
+    python casadisetup.py build
     sudo python casadisetup.py install --quiet
 
 For more flexibility, use

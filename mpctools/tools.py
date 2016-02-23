@@ -39,7 +39,7 @@ Functions for solving MPC problems using Casadi and Ipopt.
 def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
          Pf=None, sp={}, p=None, uprev=None, verbosity=5, timelimit=60,
          Delta=None, funcargs={}, extrapar={}, e=None, ef=None, periodic=False,
-         discretel=True, isQP=False, casaditype="SX"):
+         discretel=True, isQP=False, casaditype="SX", infercolloc=None):
     """
     Solves nonlinear MPC problem.
     
@@ -102,6 +102,8 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     guess = util.ArrayDict(guess)
     sp = util.ArrayDict(sp)
     extrapar = util.ArrayDict(extrapar)
+    if infercolloc is None:
+        infercolloc = ("x" in guess and "xc" not in guess)
    
     # Check specified sizes.
     try:
@@ -218,7 +220,8 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     kwargs = dict(f=f, g=g, h=None, l=l, e=e, funcargs=funcargs, Delta=Delta,
                   con=con, conlb=conlb, conub=conub,periodic=periodic,
                   verbosity=verbosity, deltaVars=deltaVars, isQP=isQP,
-                  casaditype=casaditype, discretel=discretel)
+                  casaditype=casaditype, discretel=discretel,
+                  infercolloc=infercolloc)
     return __optimalControlProblem(*args, **kwargs)
 
 def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
@@ -330,7 +333,7 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     """
     Solves nonlinear steady-state target problem.
     
-    N muste be a dictionary with at least entries "x" and "y". If parameters
+    N must be a dictionary with at least entries "x" and "y". If parameters
     are present, you must also specify a "p" entry.
     
     lb and ub should be dictionaries of bounds for the various variables.
@@ -410,7 +413,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         Delta=None, con=None, conlb=None, conub=None, periodic=False,
         discretef=True, deltaVars=None, finalpoint=True, verbosity=5,
         timelimit=60, casaditype="SX", discretel=True, fErrorVars=None,
-        isQP=False):
+        isQP=False, infercolloc=None):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -434,7 +437,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     misc = {"N" : N.copy()}
         
     # Check timestep.
-    if "c" in N and N["c"] > 0:
+    if N.get("c", 0) > 0:
         if Delta is None:
             Delta = 1
             warnings.warn("Using default value Delta = 1.")
@@ -470,7 +473,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
                 
             # Grab data.            
             for t in range(len(structure[v])):
-                structure[v,t] = d[o*t,...]
+                structure[v,t] = d[o*t,...]   
     
     # Smush together variables and parameters to get the constraints.
     struct = {}
@@ -493,8 +496,14 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         Delta=Delta,discretef=discretef,deltaVars=deltaVars,
         finalpoint=finalpoint,e=e,Ne=N["e"],discretel=discretel,
         fErrorVars=fErrorVars)
+        
+    # Save collocation weights and generate a guess for xc if not given.
     if "colloc" in constraints:
         misc["colloc"] = constraints["colloc"]
+        if infercolloc is None:
+            infercolloc = ("xc" not in guess and "x" in guess)
+        if infercolloc:
+            util._infercolloc(misc["colloc"]["r"], varguess)
     
     # Build up constraints.
     if con is None or conlb is None or conub is None:
