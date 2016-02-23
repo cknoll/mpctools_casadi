@@ -130,7 +130,7 @@ for t in range(Nsim):
     if t > 0:
         what[t-1,:] = sol["w"][-1,...]
     # Apply model function to get xhat(t+1 | t )
-    xhat_[t+1,:] = np.squeeze(F([xhat[t,:],usim[t,:],np.zeros((Nw,))])[0])
+    xhat_[t+1,:] = np.squeeze(F(xhat[t,:], usim[t,:], np.zeros((Nw,))))
     
     # Save stuff to use as a guess. Cycle the guess.
     guess = {}

@@ -387,7 +387,7 @@ class ControlSolver(object):
         else:
             printcontext = util.dummy_context
         with printcontext():
-            sol = solver(solverargs)
+            sol = solver(**solverargs)
             stats = solver.stats()            
         self.__varval = self.__var(sol["x"])
         self.__objval = float(sol["f"])

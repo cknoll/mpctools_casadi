@@ -42,10 +42,10 @@ vdp = casadi.integrator("int_ode",
 ode_casadi = casadi.Function(
     "ode",[x,u],[ode(x,u)])
 
-[k1] = ode_casadi([x,u])
-[k2] = ode_casadi([x + Delta/2*k1,u])
-[k3] = ode_casadi([x + Delta/2*k2,u])
-[k4] = ode_casadi([x + Delta*k3,u])
+k1 = ode_casadi(x, u)
+k2 = ode_casadi(x + Delta/2*k1, u)
+k3 = ode_casadi(x + Delta/2*k2, u)
+k4 = ode_casadi(x + Delta*k3,u)
 xrk4 = x + Delta/6*(k1 + 2*k2 + 2*k3 + k4)    
 ode_rk4_casadi = casadi.Function(
     "ode_rk4", [x,u], [xrk4])
@@ -53,11 +53,11 @@ ode_rk4_casadi = casadi.Function(
 #<<ENDCHUNK>>
 
 # Define stage cost and terminal weight.
-lfunc = (casadi.mtimes([x.T,x])
-    + casadi.mtimes([u.T,u]))
+lfunc = (casadi.mtimes(x.T, x)
+    + casadi.mtimes(u.T, u))
 l = casadi.Function("l", [x,u], [lfunc])
 
-Pffunc = casadi.mtimes([x.T,x])
+Pffunc = casadi.mtimes(x.T, x)
 Pf = casadi.Function("Pf", [x], [Pffunc])
 
 #<<ENDCHUNK>>
@@ -89,13 +89,13 @@ for t in range(Nt):
 obj = casadi.SX(0)
 con = []
 for t in range(Nt):
-    con.append(ode_rk4_casadi([var["x",t],
-        var["u",t]])[0] - var["x",t+1])
-    obj += l([var["x",t],var["u",t]])[0]
-obj += Pf([var["x",Nt]])[0]
+    con.append(ode_rk4_casadi(var["x",t],
+        var["u",t]) - var["x",t+1])
+    obj += l(var["x",t], var["u",t])
+obj += Pf(var["x",Nt])
 
 # Build solver object.
-con = casadi.vertcat(con)
+con = casadi.vertcat(*con)
 conlb = np.zeros((Nx*Nt,))
 conub = np.zeros((Nx*Nt,))
 
@@ -132,7 +132,7 @@ for t in range(Nsim):
     #<<ENDCHUNK>>    
     
     # Solve nlp.    
-    sol = solver(args)
+    sol = solver(**args)
     status = solver.stats()["return_status"]
     optvar = var(sol["x"])
     
@@ -147,7 +147,7 @@ for t in range(Nsim):
     # Simulate.
     vdpargs = dict(x0=x[t,:],
                    p=u[t,:])
-    out = vdp(vdpargs)
+    out = vdp(**vdpargs)
     x[t+1,:] = np.array(
         out["xf"]).flatten()
 

@@ -186,9 +186,9 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     # Make initial objective term.    
     if Pf is not None:
         if "x" in sp:
-            obj = Pf([varStruct["x",-1],parStruct["x_sp",-1]])[0]
+            obj = Pf(varStruct["x",-1], parStruct["x_sp",-1])
         else:
-            obj = Pf([varStruct["x",-1]])[0]
+            obj = Pf(varStruct["x",-1])
     else:
         obj = None
     
@@ -197,7 +197,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         if "ef" not in funcargs:
             raise KeyError("Must provide an 'ef' entry in funcargs!")
         args = __getArgs(funcargs["ef"], N["t"], varStruct, parStruct)
-        con = [ef(args)[0]]
+        con = [ef(*args)]
         Nef = np.prod(con[0].shape) # Figure out number of entries.
         conlb = -np.inf*np.ones((Nef,))
         conub = np.zeros((Nef,))
@@ -312,9 +312,9 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
             finallargs.append(varStruct[k,-1])
         else:
             raise KeyError("l argument %s is invalid!" % k)
-    obj = l(finallargs)[0]    
+    obj = l(*finallargs)  
     if lx is not None and x0bar is not None:
-        obj += lx([varStruct["x",0] - x0bar])[0]
+        obj += lx(varStruct["x",0] - x0bar)
     
     # Decide if w is inside the model or additive.
     fErrorVars = []    
@@ -397,7 +397,7 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
         if "phi" not in funcargs:
             raise KeyError("Must provide funcargs['phi'] if phi is given!")
         args = __getArgs(funcargs["phi"], 0, varStruct, parStruct)
-        obj = phi(args)[0]
+        obj = phi(*args)
     else:
         obj = None
     
@@ -519,7 +519,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
             con += util.flattenlist(constraints[f]["con"])
             conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
             conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
-    con = casadi.vertcat(con)
+    con = casadi.vertcat(*con)
     
     if obj is None:
         try:
@@ -691,7 +691,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
             errorargs = __getArgs(fErrorVars,t,var)
             if Ncolloc == 0:
                 # Just use discrete-time equations.
-                thiscon = f(fargs[t])[0]
+                thiscon = f(*fargs[t])
                 if "x" in givenvars and discretef:
                     thiscon -= var["x"][t+1 % len(var["x"])]
                 thiscon = sum(errorargs, thiscon)
@@ -702,7 +702,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
                 for j in range(1,Ncolloc+2):
                     thisargs = getCollocArgs("f",t,j)
                     # Start with function evaluation.
-                    thiscon = Delta*f(thisargs)[0]
+                    thiscon = Delta*f(*thisargs)
                     
                     # Add collocation weights.
                     if "x" in givenvarscolloc:
@@ -722,12 +722,12 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         algebra = []
         for t in tpoints:
             if Ncolloc == 0 or t == Nt:
-                thesecons = [g(gargs[t])[0]]
+                thesecons = [g(*gargs[t])]
             else:
                 thesecons = []
                 for j in range(Ncolloc+1):
                     thisargs = getCollocArgs("g",t,j)
-                    thiscon = g(thisargs)[0]
+                    thiscon = g(*thisargs)
                     thesecons.append(thiscon)
             algebra.append(thesecons)
         lb = np.zeros((len(tpoints),Ncolloc+1,Ng))
@@ -741,7 +741,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         hargs = getArgs("h",tpoints,var)
         measurement = []
         for t in tpoints:
-            thiscon = h(hargs[t])[0]
+            thiscon = h(*hargs[t])
             if "y" in givenvars:
                 thiscon -= var["y"][t]
             if "v" in givenvars:
@@ -774,7 +774,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         if discretel:
             largs = getArgs("l",tintervals,var)
             for t in tintervals:
-                cost.append([l(largs[t])[0]])
+                cost.append([l(*largs[t])])
         else:
             if Ncolloc == 0:
                 raise ValueError("Must use collocation for continuous "
@@ -783,7 +783,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
                 thiscost = []
                 for j in range(Ncolloc+2):
                     thisargs = getCollocArgs("l",t,j)
-                    thiscost.append(Delta*q[j]*l(thisargs)[0])
+                    thiscost.append(Delta*q[j]*l(*thisargs))
                 cost.append(thiscost)
         returnDict["cost"] = cost
     
@@ -794,7 +794,8 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         eargs = getArgs("e",tintervals,var)
         pathconstraints = []
         for t in tintervals:
-            pathconstraints.append([e(eargs[t])[0]])
+            # Need to wrap e() in a list because only one call per timestep.
+            pathconstraints.append([e(*eargs[t])])
         lb = -np.inf*np.ones((len(pathconstraints),Ne))
         ub = np.zeros((len(pathconstraints),Ne))
         returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)    
@@ -1044,9 +1045,7 @@ def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
     fcasadi = casadi.Function(funcname, args, fval)   
     
     if rk4:
-        def wrappedf(*args):
-            return fcasadi(args)[0]
-        frk4 = util.rk4(wrappedf, args[0], args[1:], Delta, M)
+        frk4 = util.rk4(fcasadi, args[0], args[1:], Delta, M)
         fcasadi = casadi.Function(funcname, args, [frk4])
     
     return fcasadi
@@ -1056,26 +1055,24 @@ def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
 # ============
 
 
-def safevertcat(args):
+def safevertcat(x):
     """
-    Safer wrapper for casadi's vertcat.
+    Safer wrapper for Casadi's vertcat.
+    
+    the input x is expected to be an iterable containing multiple things that
+    should be concatenated together. This is in contrast to Casadi 3.0's new
+    version of vertcat that accepts a variable number of arguments. We retain
+    this (old, Casadi 2.4) behavior because it makes it easier to check types.    
     
     If a single SX or MX object is passed, then this doesn't do anything.
     Otherwise, casadi.vertcat is called.
     """
-    try:    
-        val = casadi.vertcat(args)
-    except NotImplementedError as vertcaterr:
-        okay = vertcaterr.message.find("Wrong number or type of arguments for "
-            "overloaded function 'vertcat'.") >= 0
-        if okay:
-            try:
-                val = casadi.vertcat([args])
-            except NotImplementedError as err:
-                raise ValueError("Unable to vertcat arguments:\n%s"
-                    % (err.message,))
-        else:
-            raise vertcaterr
+    symtypes = set(["SX", "MX"])
+    xtype = getattr(x, "type_name", lambda : None)()
+    if xtype in symtypes:
+        val = x
+    else:
+        val = casadi.vertcat(*x)
     return val
 
 
@@ -1103,7 +1100,7 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
     fode = safevertcat(f(x0,*par))   
     
     # Build ODE and integrator.
-    ode = dict(x=x0, p=casadi.vertcat(par), ode=fode)
+    ode = dict(x=x0, p=casadi.vertcat(*par), ode=fode)
     options = {
         "abstol" : abstol,
         "reltol" : reltol,
@@ -1116,11 +1113,13 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
     # Now do the subtle bit. Integrator has arguments x0 and p, but we need
     # arguments as given by the user. First we need MX arguments.
     if wrap:
-        X0 = casadi.MX.sym(argnames[0],argsizes[0])
-        PAR = [casadi.MX.sym(argnames[i],argsizes[i]) for i
-            in range(1,len(argsizes))]    
-        wrappedIntegrator = integrator(x0=X0, p=casadi.vertcat(PAR))["xf"]
-        integrator = casadi.Function(funcname, [X0] + PAR, [wrappedIntegrator])
+        wrappedx0 = casadi.MX.sym(argnames[0],argsizes[0])
+        wrappedpar = [casadi.MX.sym(argnames[i],argsizes[i]) for i
+                      in range(1,len(argsizes))]    
+        wrappedIntegrator = integrator(x0=wrappedx0,
+                                       p=casadi.vertcat(*wrappedpar))["xf"]
+        integrator = casadi.Function(funcname, [wrappedx0] + wrappedpar,
+                                     [wrappedIntegrator])
     return integrator
 
 class DiscreteSimulator(object):
@@ -1172,10 +1171,10 @@ class DiscreteSimulator(object):
                 "%d given; %d expected." % (len(args),self.Nargs))
         integratorargs = dict(x0=args[0])
         if len(args) > 1:
-            integratorargs["p"] = casadi.vertcat(args[1:])
+            integratorargs["p"] = casadi.vertcat(*args[1:])
         
         # Call integrator.
-        nextstep = self.__integrator(integratorargs)
+        nextstep = self.__integrator(**integratorargs)
         xf = nextstep["xf"]
         
         return np.array(xf).flatten()  

@@ -58,10 +58,8 @@ def atleastnd(arr,n=2):
     """
     Adds an initial singleton dimension to arrays with fewer than n dimensions.
     """
-    
     if len(arr.shape) < n:
         arr = arr.reshape((1,) + arr.shape)
-    
     return arr
 
 
@@ -132,13 +130,13 @@ def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
         names = ["A"] + ["B_%d" % (i,) for i in range(1,len(args))]
     
     # Evaluate function.
-    fs = np.array(f(args)[0])    
+    fs = np.array(f(*args))    
     
     # Now do jacobian.
     jacobians = []
     for i in range(len(args)):
         jac = f.jacobian(i,0) # df/d(args[i]).
-        jacobians.append(np.array(jac(args)[0]))
+        jacobians.append(np.array(jac(*args)[0]))
     
     # Decide whether or not to discretize.
     if Delta is not None:
@@ -277,18 +275,18 @@ def mtimes(*args, **kwargs):
     """
     Smarter version casadi.tools.mtimes.
     
-    Matrix multiplies all of the given arguments and returns the result. If all
-    inputs are 2D, then passes straight through to casadi's mul. Otherwise,
+    Matrix multiplies all of the given arguments and returns the result. If any
+    inputs are Casadi's SX or MX data types, uses Casadi's mtimes. Otherwise,
     uses a sequence of np.dot operations.
     
     Keyword arguments forcedot or forcemtimes can be set to True to pick one
     behavior or another.
     """
     # Get keyword arguments.
-    forcemtimes = kwargs.pop("forcemtimes", False)
+    forcemtimes = kwargs.pop("forcemtimes", None)
     forcedot = kwargs.pop("forcedot", False)
     if len(kwargs) > 0:
-        raise TypeError("Invalid keywords: %s" % kwargs.keys())
+        raise TypeError("Invalid keywords: %s" % kwargs.keys())    
     
     # Pick whether to use mul or dot.
     if forcemtimes:
@@ -298,43 +296,17 @@ def mtimes(*args, **kwargs):
     elif forcedot:
         useMul = False
     else:
-        useMul = True
-        for (i, a) in enumerate(args):
-            try:
-                shape = a.shape
-            except AttributeError:
-                try:
-                    shape = np.array(a).shape
-                except:
-                    raise AttributeError("Unable to get shape of "
-                                          "argument %d!" % i)
-            useMul &= len(shape) == 2
+        useMul = False
+        symtypes = set(["SX", "MX"])
+        for a in args:
+            atype = getattr(a, "type_name", lambda : None)()
+            if atype in symtypes:
+                useMul = True
+                break
 
     # Now actually do multiplication.
     ans = ctools.mtimes(args) if useMul else reduce(np.dot, args)
     return ans
-
-    
-def vcat(*args):
-    """
-    Convenience wrapper for np.vstack.
-    
-    Vertically concatenates all arguments and returns the result.
-    
-    Accepts variable number of arguments instead of a single tuple.
-    """
-    return np.vstack(args)
-
-    
-def hcat(*args):
-    """
-    Convenience wrapper for np.hstack.
-    
-    Horizontally concatenates all arguments and returns the result.    
-    
-    Accepts variable number of arguments instead of a single tuple.
-    """
-    return np.hstack(args)
 
 
 def flattenlist(l,depth=1):
@@ -608,8 +580,8 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
         h_jacx = h.jacobian(0)
         
     # Get linearization of measurement.
-    C = np.array(h_jacx([x])[0])
-    yhat = np.array(h([x])[0]).flatten()
+    C = np.array(h_jacx(x)[0])
+    yhat = np.array(h(x)[0]).flatten()
     
     # Advance from x(k | k-1) to x(k | k).
     xhatm = x                                          # This is xhat(k | k-1)    
@@ -620,12 +592,12 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     
     # Now linearize the model at xhat.
     w = np.zeros(w.shape)
-    A = np.array(f_jacx([xhat,u,w])[0])
-    G = np.array(f_jacw([xhat,u,w])[0])
+    A = np.array(f_jacx(xhat, u, w)[0])
+    G = np.array(f_jacw(xhat, u, w)[0])
     
     # Advance.
     Pmp1 = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)       # This is P(k+1 | k)
-    xhatmp1 = np.array(f([xhat,u,w])[0]).flatten()     # This is xhat(k+1 | k)    
+    xhatmp1 = np.array(f(xhat, u, w)).flatten()     # This is xhat(k+1 | k)    
     
     return [Pmp1, xhatmp1, P, xhat]
 

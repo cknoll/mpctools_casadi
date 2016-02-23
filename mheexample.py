@@ -67,10 +67,10 @@ x[0,:] = x0
 y = np.zeros((Nt+1,Ny))
 
 for k in range(Nt+1):
-    thisy = H([x[k,:]])[0]
+    thisy = H(x[k,:])
     y[k,:] = np.squeeze(thisy) + v[k,:]
     if k < Nt:
-        xnext = Fdiscrete([x[k,:],u[k,:],w[k,:]])[0]
+        xnext = Fdiscrete(x[k,:],u[k,:], w[k,:])
         x[k+1,:] = np.squeeze(xnext)
     
 # Plot simulation.
