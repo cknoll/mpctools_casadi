@@ -641,7 +641,7 @@ def getScalarDerivative(f, nargs=1, wrt=(0,), vectorize=True):
         dfdx_expression = casadi.jacobian(dfdx_expression, x[i])
     dfcasadi = casadi.Function("dfdx", x, [dfdx_expression])
     def dfdx(*x):
-        return dfcasadi(x)[0]
+        return dfcasadi(*x)
     if len(wrt) > 1:
         funcstr = "d^%df/%s" % (len(wrt), "".join(["x%d" % (i,) for i in wrt]))
     else:
