@@ -1065,12 +1065,16 @@ def safevertcat(x):
     this (old, Casadi 2.4) behavior because it makes it easier to check types.    
     
     If a single SX or MX object is passed, then this doesn't do anything.
-    Otherwise, casadi.vertcat is called.
+    Otherwise, if all elements are numpy ndarrays, then numpy's concatenate
+    is called. If anything isn't an array, then casadi.vertcat is called.
     """
     symtypes = set(["SX", "MX"])
     xtype = getattr(x, "type_name", lambda : None)()
     if xtype in symtypes:
         val = x
+    elif (not isinstance(x, np.ndarray) and
+            all(isinstance(a, np.ndarray) for a in x)):
+        val = np.concatenate(x)
     else:
         val = casadi.vertcat(*x)
     return val

@@ -42,3 +42,4 @@ import solvers
 from tools import nmpc, nmhe, sstarg, getCasadiFunc, DiscreteSimulator
 from util import keyboard, mtimes, ekf
 from solvers import callSolver
+vcat = tools.safevertcat

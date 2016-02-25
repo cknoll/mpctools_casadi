@@ -1,5 +1,4 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
-import copy
 import collections
 import numpy as np
 import util
@@ -107,13 +106,17 @@ class ControlSolver(object):
     def guess(self):
         return self.__guess    
     
+    @guess.setter
+    def guess(self, g):
+        self.saveguess(g)
+    
     @property
     def defaultguess(self):
-        return copy.deepcopy(self.__defaultguess)
+        return self.__defaultguess
         
     @defaultguess.setter
     def defaultguess(self, g):
-        self.__defaultguess = copy.deepcopy(g)
+        self.__defaultguess = util.ArrayDict(g)
     
     @property
     def conlb(self):
@@ -223,10 +226,11 @@ class ControlSolver(object):
         
         # First store everybody to the object.
         self.__var = var
+        self.__varval = var(np.nan)
         self.__lb = varlb
         self.__ub = varub
         self.__guess = varguess
-        self.defaultguess = varguess
+        self.defaultguess = util.casadiStruct2numpyDict(varguess)
         
         self.__obj = obj
         self.__con = con
@@ -236,6 +240,7 @@ class ControlSolver(object):
         self.__par = par
         self.__parval = parval
         
+        self.__sol = {}
         self.__stats = {}
         self.__settings = {} # Need to initialize this.
         if solver is None:
@@ -245,6 +250,7 @@ class ControlSolver(object):
         if misc is None:
             misc = {}
         self.misc = util.ReadOnlyDict(**misc)
+        #TODO: better way of indicating collocation variables.
         
         # Now initialize the solver object.
         if casadioptions is None:
@@ -388,7 +394,8 @@ class ControlSolver(object):
             printcontext = util.dummy_context
         with printcontext():
             sol = solver(**solverargs)
-            stats = solver.stats()            
+            stats = solver.stats()
+        self.__sol = sol
         self.__varval = self.__var(sol["x"])
         self.__objval = float(sol["f"])
         endtime = time.clock()
@@ -405,34 +412,86 @@ class ControlSolver(object):
         self.stats["status"] = status
         self.stats["time"] = endtime - starttime
          
-    def saveguess(self, toffset=None, default=False):
+    def saveguess(self, newguess=None, toffset=None, default=False,
+                  infercolloc=True):
         """
-        Stores the vales from the from the last optimization as a guess.
+        Stores a given guess in one of three ways.
         
-        This is useful to store the results of the previous step as a guess for
-        the next step. toffset defaults to 1, which means the time indices are
-        shifted by 1, but you can set this to whatever you want.
+        The first way is to pass an array of numpy dicts. Each entry should
+        have time along the first dimension and appropriate variable size in
+        following dimensions. For this case, toffset defaults to zero.
         
-        If default is True, then uses the guess stored in self.defaultguess
-        instead of the current optimization. Note that toffset defaults to 0
-        in this case.
+        The second way is to not pass a guess but instead set default=True.
+        This method will revert to whatever was given as the default guess when
+        the solver was originally created (note that you can manually change
+        self.defaultguess). For this case, toffset defaults to zero.
+        
+        The third and final way is to not specify a guess and to keep
+        default=False. In this case, the guess will be pulled from the previous
+        optimization (i.e., self.var). In this case, toffset defaults to 1,
+        which is useful for using the previous optimization as a guess for the
+        next optimization.
+        
+        In any case, depending on toffset, certain components of the guess
+        will not be touched. E.g., if toffset is 1, then the final values of
+        x and u will not be changed unless the given guess has extra time
+        points.
         """
-        newguess = self.__defaultguess if default else self.var
-        if toffset is None:
-            toffset = 0 if default else 1
-        for k in self.var.keys():
+        getguess = None
+        if newguess is None:
+            if default:
+                # Just use default guess. toffset default is 0.
+                if toffset is None:
+                    toffset = 0
+                newguess = self.__defaultguess
+            else:
+                # Use self.var. toffset default is 1. Need special getguess.
+                newguess = self.var
+                if toffset is None:
+                    toffset = 1
+                def getguess(k, t=None):
+                    """Gets element from casadi struct."""
+                    key = k if t is None else (k, t)
+                    return newguess[key]
+        else:
+            # Guess supplied. toffset default is 0.
+            if toffset is None:
+                toffset = 0 
+        
+        # By default, getguess assumes ArrayDict-like structure.
+        if getguess is None:
+            def getguess(k, t=None):
+                """Gets element from ArrayDict-like."""
+                if t is None:
+                    ret = newguess[k]
+                else:
+                    ret = newguess[k][t,...]
+                return ret
+        
+        # Check for extra fields in guess.
+        extra = set(newguess.keys()).difference(self.guess.keys())
+        if len(extra) > 0:
+            warnings.warn("Ignoring extra fields in guess: %r." % (extra,))
+        
+        # Now actually save guess.
+        for k in self.guess.keys():
             # These values and the guess structure can potentially have a
             # different number of time points. So, we need to figure out
             # what range of times will be valid for both things. The offset
             # makes things a bit weird.
-            tmaxVal = len(newguess[k])
+            tmaxVal = len(getguess(k))
             tmaxGuess = len(self.guess[k]) + toffset
-            tmax = min(tmaxVal,tmaxGuess)
-            tmin = max(toffset,0)
+            tmax = min(tmaxVal, tmaxGuess)
+            tmin = max(toffset, 0)
             
             # Now actually store the stuff.           
-            for t in range(tmin,tmax):
-                self.guess[k,t-toffset] = newguess[k,t]
+            for t in xrange(tmin, tmax):
+                self.guess[k,t-toffset] = getguess(k, t)
+                
+        # Finally, infer a collocation guess.
+        if (infercolloc and "colloc" in self.misc
+                and "xc" not in newguess.keys()): # keys() is important!
+            self.infercollocguess()
     
     def infercollocguess(self):
         """Infers a guess for "xc" based on the guess for "x"."""

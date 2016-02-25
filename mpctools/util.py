@@ -321,7 +321,7 @@ def flattenlist(l,depth=1):
     return l
 
 
-def casadiStruct2numpyDict(struct):
+def casadiStruct2numpyDict(struct, arraydict=False):
     """
     Takes a casadi struct and turns int into a dictionary of numpy arrays.
     
@@ -331,6 +331,9 @@ def casadiStruct2numpyDict(struct):
         
     Note that if the struct entry is empty, then there will not be a
     corresponding key in the returned dictonary.
+    
+    If arraydict=True, then the return value will be an ArrayDict object, which
+    is a dictionary 
     """ 
     npdict = {}
     for k in struct.keys():
@@ -353,7 +356,7 @@ def listcatfirstdim(l):
     return np.concatenate(newl)
 
 
-def smushColloc(t, x, tc, xc, Delta=1, asdict=False):
+def smushColloc(t=None, x=None, tc=None, xc=None, Delta=1, asdict=False):
     """
     Combines point x variables and interior collocation xc variables.
     
@@ -367,6 +370,8 @@ def smushColloc(t, x, tc, xc, Delta=1, asdict=False):
     that if t or tc is None, then they are constructed using a timestep of
     Delta (with default value 1).
     
+    Note that t and tc will be calculated if they are not provided.    
+    
     Returns arrays T with size (Nt*(Nc+1) + 1,) and X with size 
     (Nt*(Nc+1) + 1, Nx) that combine the collocation points and edge points.
     Also return Tc and Xc which only contain the collocation points.
@@ -376,6 +381,10 @@ def smushColloc(t, x, tc, xc, Delta=1, asdict=False):
     "tc" and "xc" with just the inter collocation points, and "tp" and "xp"
     which are only the edge points.         
     """
+    # Make sure at least x and xc were supplied.
+    if x is None or xc is None:
+        raise TypeError("x and xc must both be supplied!")
+    
     # Make copies.
     if t is not None:
         t = t.copy()
@@ -465,6 +474,10 @@ def dummy_context(*args):
     yield
 
 
+# Below, we don't inherit from dict because its methods sometimes don't use
+# __setitem__, and so results can be inconsistent. Instead, we use an abstract
+# base class from the collections module. See Section 8.3.6 in the docs at
+# https://docs.python.org/2/library/collections.html
 class ArrayDict(collections.MutableMapping):
     """
     Python dictionary of numpy arrays.
@@ -484,6 +497,12 @@ class ArrayDict(collections.MutableMapping):
         Wraps v with np.array before setting.
         """
         self.__arraydict__[k] = np.array(v)
+    
+    def copy(self):
+        """
+        Returns a copy of self with each array copied as well.
+        """
+        return {k : v.copy() for (k, v) in self.__arraydict__.iteritems()}
     
     # The rest of the methods just perform the corresponding dict action.
     def __getitem__(self, k):
