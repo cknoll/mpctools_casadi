@@ -93,13 +93,11 @@ def runsim(k, simcon, opnclsd):
                 # Define ode for CSTR simulation
 
         def ode(x,u,d):
-            # Grab the states, controls, and disturbance. We would like to write
-            #    
-            # [c, T, h] = x[0:Nx]
-            # [Tc, F] = u[0:Nu]
-            # [F0] = d[0:Nd]
-            #    
-            # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
+            # Grab the states, controls, and disturbance.    
+            [c, T, h] = x[0:Nx]
+            [Tc, F] = u[0:Nu]
+            [F0] = d[0:Nd]
+            
             c = x[0]
             T = x[1]
             h = x[2]
@@ -140,21 +138,10 @@ def runsim(k, simcon, opnclsd):
         # but we should just be explicit to avoid any bugs.    
         def ode_disturbance(x,u,d=ds):
             # Grab states, estimated disturbances, controls, and actual disturbance.
-            # We would
-            #    
-            # [c, T, h] = x[0:Nx]
-            # dhat = x[Nx:Nx+Nid] # Actually, this guy does work.
-            # [Tc, F] = u[0:Nu]
-            # [F0] = d[0:Nd]
-            #    
-            # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
-            c = x[0]
-            T = x[1]
-            h = x[2]
-            dhat = x[Nx:Nx+Nid]
-            Tc = u[0]
-            F = u[1]
-            F0 = d[0]
+            [c, T, h] = x[0:Nx]
+            dhat = x[Nx:Nx+Nid] # Actually, this guy does work.
+            [Tc, F] = u[0:Nu]
+            [F0] = d[0:Nd]
             
             dxdt = cstrmodel(c,T,h,Tc,F+dhat[2],F0)
             return dxdt
@@ -168,9 +155,7 @@ def runsim(k, simcon, opnclsd):
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 
         def measurement(x,d=ds):
-            c = x[0]
-            T = x[1]
-            h = x[2]
+            [c, T, h] = x[0:Nx]
             dhat = x[Nx:Nx+Nid]
             return np.array([c + dhat[0], T + dhat[1], h])
         ys = measurement(xaugs)
@@ -212,7 +197,6 @@ def runsim(k, simcon, opnclsd):
         # Define control stage cost
 
         def stagecost(x,u,xsp,usp,Deltau):
-
             dx = x[:Nx] - xsp[:Nx]
             du = u - usp
             return (mpc.mtimes(dx.T,Q,dx) + .1*mpc.mtimes(du.T,R,du)
@@ -220,16 +204,15 @@ def runsim(k, simcon, opnclsd):
 
         largs = ["x","u","x_sp","u_sp","Du"]
         l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l")
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l",scalar=False)
 
         # Define cost to go.
 
         def costtogo(x,xsp):
-
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T,Pi,dx)
-
-        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
+        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],
+                               funcname="Pf", scalar=False)
 
         # Build augmented estimator matrices.
 
@@ -251,7 +234,7 @@ def runsim(k, simcon, opnclsd):
         def lest(w,v):
             return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v)
                       
-        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
+        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l",scalar=False)
 
         # Don't use a prior.
         lxest = None
@@ -315,7 +298,8 @@ def runsim(k, simcon, opnclsd):
             return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du)
 
         phiargs = ["y","y_sp","u","u_sp","Q","R"]
-        phi = mpc.getCasadiFunc(sstargobj,[Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],phiargs)
+        phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
+                                phiargs, scalar=False)
 
         uub = [mvlist[0].maxlim, mvlist[1].maxlim]
         ulb = [mvlist[0].minlim, mvlist[1].minlim]

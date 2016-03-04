@@ -63,51 +63,14 @@ def atleastnd(arr,n=2):
     return arr
 
 
-def c2d(Ac,Bc,Delta):
-    """
-    Converts continuous-time model (Ac,Bc) to discrete time (Ad,Bd) with sample time Delta.
-    
-    Inputs Ac and Bc should be numpy matrices of the appropriate size. Delta should be a
-    scalar. Output is a tuple with discretized (Ad,Bd).
-    """
-    n = Ac.shape[0]
-    m = Bc.shape[1]
-    
-    D = scipy.linalg.expm(Delta*np.vstack((np.hstack((Ac, Bc)), np.zeros((m,m+n)))))
-    Ad = D[0:n,0:n];
-    Bd = D[0:n,n:];
-    
-    return (Ad,Bd)
-
-
-def getLinearization(f, xs, us=None, ds=None, Delta=None):
-    """
-    Less general wrapper to getLinearizedModel.    
-    
-    Equivalent to
-    
-        getLinearizedModel(f, [xs,us,ds], ["A","B","Bp"], Delta)
-        
-    with the corresponding entries omitted if us and/or ds are None.
-    """
-    args = [xs]
-    names = ["A"]
-    if us is not None:
-        args.append(us)
-        names.append("B")
-    if ds is not None:
-        args.append(ds)
-        names.append("Bp")
-    return getLinearizedModel(f, args, names, Delta)
+def getLinearization(*args, **kwargs):
+    """DEPRECIATED"""
+    raise NotImplementedError("Depreciated. See getLinearizedModel.")
 
 
 def linearizeModel(*args, **kwargs):
-    """
-    Synonym for getLinearizedModel.
-    
-    Refer to getLinearizedModel for more details.
-    """
-    return getLinearizedModel(*args, **kwargs)
+    """DEPRECIATED"""
+    raise NotImplementedError("Depreciated. See getLinearizedModel.")
 
 
 def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
@@ -151,26 +114,39 @@ def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
     return ss    
 
     
-def c2d_augmented(A,B,Bp,f,Delta):
+def c2d(A, B, Delta, Bp=None, f=None, asdict=False):
     """
-    Discretizes affine system (A,B,Bp,f) with timestep Delta.
+    Discretizes affine system (A, B, Bp, f) with timestep Delta.
     
-    This includes disturbances and a potentially nonzero steady-state.
+    This includes disturbances and a potentially nonzero steady-state, although
+    Bp and f can be omitted if they are not present.
+    
+    If asdict=True, return value will be a dictionary with entries A, B, Bp,
+    and f. Otherwise, the return value will be a 4-element list [A, B, Bp, f]
+    if Bp and f are provided, otherwise a 2-element list [A, B].
     """
-    
     n = A.shape[0]
-    m = B.shape[1]
-    mp = Bp.shape[1]
-    M = m + mp + 1 # Extra 1 is for function column.
+    I = np.eye(n)
+    D = scipy.linalg.expm(Delta*np.vstack((np.hstack([A, I]),
+                                     np.zeros((n, 2*n)))))
+    Ad = D[:n,:n]
+    Id = D[:n,n:]
+    Bd = Id.dot(B)
+    Bpd = None if Bp is None else Id.dot(Bp)
+    fd = None if f is None else I.dot(f)   
     
-    D = scipy.linalg.expm(Delta*np.vstack((np.hstack([A, B, Bp, f]),
-                                     np.zeros((M,M+n)))))
-    Ad = D[0:n,0:n]
-    Bd = D[0:n,n:n+m]
-    Bpd = D[0:n,n+m:n+m+mp]
-    fd = D[0:n,n+m+mp:n+m+mp+1]   
-    
-    return [Ad,Bd,Bpd,fd]
+    if asdict:
+        retval = dict(A=Ad, B=Bd, Bp=Bpd, f=fd)
+    elif Bp is None and f is None:
+        retval = [Ad, Bd]
+    else:
+        retval = [Ad, Bd, Bpd, fd]
+    return retval
+
+
+def c2d_augmented(*args, **kwargs):
+    """DEPRECIATED"""
+    raise NotImplementedError("Depreciated. See c2d.")
 
 
 def c2dObjective(a,b,q,r,Delta):
@@ -689,6 +665,7 @@ def getCasadiPlugins(keep=None):
 
 
 # Functions for turning solver documentation tables into a Python dict.
+# TODO: package these functions into a class.
 _DocCell = collections.namedtuple("DocCell", ["id", "default", "doc"])
 
 def _getDocCell(lines, joins=("", "", "", " ")):

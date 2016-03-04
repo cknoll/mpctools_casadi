@@ -55,19 +55,10 @@ Tcs = 300
 F0s = .1
 
 def ode(x,u,d):
-    # Grab the states, controls, and disturbance. We would like to write
-    #    
-    # [c, T, h] = x[0:Nx]
-    # [Tc, F] = u[0:Nu]
-    # [F0] = d[0:Nd]
-    #    
-    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
-    c = x[0]
-    T = x[1]
-    h = x[2]
-    Tc = u[0]
-    F = u[1]
-    F0 = d[0]
+    # Grab the states, controls, and disturbance. We would like to write   
+    [c, T, h] = x[0:Nx]
+    [Tc, F] = u[0:Nu]
+    [F0] = d[0:Nd]
     return cstrmodel(c,T,h,Tc,F,F0)
 
 # Turn into casadi function and simulator.
@@ -97,21 +88,10 @@ ps = np.concatenate((ds,xs,us))
 # all of the states.    
 def ode_disturbance(x,u,d=ds):
     # Grab states, estimated disturbances, controls, and actual disturbance.
-    # We would
-    #    
-    # [c, T, h] = x[0:Nx]
-    # dhat = x[Nx:Nx+Nid] # Actually, this guy does work.
-    # [Tc, F] = u[0:Nu]
-    # [F0] = d[0:Nd]
-    #    
-    # but this doesn't work in Casadi 3.0. So, we're stuck with the following:
-    c = x[0]
-    T = x[1]
-    h = x[2]
+    [c, T, h] = x[0:Nx]
     dhat = x[Nx:Nx+Nid]
-    Tc = u[0]
-    F = u[1]
-    F0 = d[0]
+    [Tc, F] = u[0:Nu]
+    [F0] = d[0:Nd]
     
     dxdt = cstrmodel(c,T,h,Tc,F+dhat[2],F0)
     return dxdt
@@ -122,10 +102,7 @@ def ode_augmented(x,u,d=ds):
 cstraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                 [Nx+Nid,Nu,Nd], ["xaug","u","d"])
 def measurement(x,d=ds):
-    # [c, T, h] = x[0:Nx] # Doesn't work in Casadi 3.0
-    c = x[0]
-    T = x[1]
-    h = x[2]
+    [c, T, h] = x[0:Nx]
     dhat = x[Nx:Nx+Nid]
     return np.array([c + dhat[0], T, h + dhat[1]])
 ys = measurement(xaugs)
@@ -165,7 +142,7 @@ def stagecost(x,u,xsp,usp,Deltau):
 
 largs = ["x","u","x_sp","u_sp","Du"]
 l = mpc.getCasadiFunc(stagecost,
-    [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l")
+    [Nx+Nid,Nu,Nx+Nid,Nu,Nu], largs, funcname="l", scalar=False)
 
 def costtogo(x,xsp):
     # Deviation variables.
@@ -173,7 +150,8 @@ def costtogo(x,xsp):
     
     # Calculate cost to go.
     return mpc.mtimes(dx.T,Pi,dx)
-Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],funcname="Pf")
+Pf = mpc.getCasadiFunc(costtogo, [Nx+Nid,Nx+Nid], ["x","s_xp"],
+                       funcname="Pf", scalar=False)
 
 # Build augmented estimator matrices.
 Qw = eps*np.eye(Nx + Nid)
@@ -185,7 +163,7 @@ Rvinv = linalg.inv(Rv)
 # Define stage costs for estimator.
 def lest(w,v):
     return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
-lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
+lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l", scalar=False)
 
 # Don't use a prior.
 lxest = None
@@ -298,7 +276,8 @@ def sstargobj(y,y_sp,u,u_sp,Q,R):
     return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du)
 if useSstargObjective:
     phiargs = ["y","y_sp","u","u_sp","Q","R"]
-    phi = mpc.getCasadiFunc(sstargobj,[Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],phiargs)
+    phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
+                            phiargs, scalar=False)
 else:
     phiargs = None
     phi = None

@@ -6,7 +6,7 @@ new (due to backward incompatibility in Casadi).
 """
 
 # Version for mpctools.
-__version__ = "2.3"
+__version__ = "2.3.1"
 
 # Check Casadi version to make sure it's up to date.
 _MIN_CASADI_VERSION = "3.0.0-rc3"
