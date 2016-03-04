@@ -321,7 +321,13 @@ class ControlSolver(object):
             casadioptions.update(solveroptions) #TODO: Verity API difference.
         elif self.solver in availablesolvers["NLP"]:
             if self.isQP:
-                warnings.warn("NLP solver '%s' selected for QP." % self.solver)
+                if self.solver == "ipopt":
+                    for k in ["jac_c_constant", "jac_d_constant",
+                              "hessian_constant"]:                    
+                        solveroptions[k] = "yes"
+                else:
+                    warnings.warn("NLP solver '%s' selected for QP."
+                                  % self.solver)
             solverfunc = casadi.nlpsol
             if "eval_errors_fatal" not in casadioptions:
                 casadioptions["eval_errors_fatal"] = True
