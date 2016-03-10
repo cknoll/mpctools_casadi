@@ -133,7 +133,7 @@ def c2d(A, B, Delta, Bp=None, f=None, asdict=False):
     Id = D[:n,n:]
     Bd = Id.dot(B)
     Bpd = None if Bp is None else Id.dot(Bp)
-    fd = None if f is None else I.dot(f)   
+    fd = None if f is None else Id.dot(f)   
     
     if asdict:
         retval = dict(A=Ad, B=Bd, Bp=Bpd, f=fd)
