@@ -6,10 +6,10 @@ new (due to backward incompatibility in Casadi).
 """
 
 # Version for mpctools.
-__version__ = "2.3.1"
+__version__ = "2.3.2"
 
 # Check Casadi version to make sure it's up to date.
-_MIN_CASADI_VERSION = "3.0.0-rc3"
+_MIN_CASADI_VERSION = "3.0.0"
 _MAX_CASADI_VERSION = "4.0"
 def _getVersion(vstring, N=3):
     """Returns a tuple with version number."""
