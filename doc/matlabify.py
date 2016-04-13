@@ -1,11 +1,13 @@
+import os
 import re
 
 def splitfiles(main,directory):
     """
     Splits all functions defined in main and puts them in directory.
     """
-    
-    mainin = open(main,"r")
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    mainin = open(main, "r")
     mainout = open(directory + "/main.m","w")
     
     startfunc = re.compile(r"^\s*function.*=\s*(\w+)\(")
@@ -49,5 +51,6 @@ def transform_source(src, matlab=True):
         src = re.sub(r'lmpc(\s*\()', r'lmpc_matlab\1', src) # call lmpc_matlab instead of lmpc
         src = re.sub(r"^print.*", "", src)
     return src
-    
-splitfiles("../cstr.m","../cstr-matlab")
+
+if __name__ == "__main__":
+    splitfiles("../cstr.m","../cstr-matlab")

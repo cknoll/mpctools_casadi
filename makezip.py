@@ -15,61 +15,16 @@ group.add_argument("--no-root-folder", action="store_true",
                    help="don't include root folder in zip file")
 parser.add_argument("--name", help="specify name for zip file",
                     default="mpc-tools-casadi.zip")
+parser.add_argument("files", default=[], nargs="*",
+                    help="Files to include")
 kwargs = vars(parser.parse_args(sys.argv[1:]))
 
 # Specify files explicitly. Yes, wildcards would be faster and less prone to
 # accidental omissions, but we want to be very explicit here.
-files = [
-    # Core mpctools files.
-    "mpctools/__init__.py",
-    "mpctools/colloc.py",
-    "mpctools/plots.py",
-    "mpctools/solvers.py",
-    "mpctools/tools.py",
-    "mpctools/util.py",
-    
-    # Example scripts.
-    "airplane.py",
-    "ballmaze.py",
-    "cstr.py",
-    "cstr_startup.py",
-    "cstr_nmpc_nmhe.py",
-    "collocationexample.py",
-    "comparison_casadi.py",
-    "comparison_mtc.py",
-    "econmpc.py",    
-    "example2-8.py",
-    "mheexample.py",
-    "mpcexampleclosedloop.py",
-    "mpcmodelcomparison.py",
-    "nmheexample.py",
-    "nmpcexample.py",
-    "periodicmpcexample.py",
-    "vdposcillator.py",
-    "runall.py",
-    
-    # Documentation.
-    "doc/install.pdf",
-    "doc/cheatsheet.pdf",
-    "doc/introslides.pdf",
-    "doc/octave-vs-python.pdf",
-    
-    # Casadi installer.
-    "installer/casadiinstaller.py",
-    "installer/casadisetup.py",
-    "installer/README.txt",
-    
-    # Matlab/Octave files.
-    "cstr.m",
-    "cstr-matlab/main.m",
-    "cstr-matlab/massenbal.m",
-    "cstr-matlab/massenbalstst.m",
-    "cstr-matlab/partial.m",
-    
-    # Miscellaneous files.
-    "COPYING.txt", # Readme is handled specially.
-    "mpctoolssetup.py",
-]
+files = set(kwargs["files"])
+includereadme = ("README.md" in files)
+if includereadme:
+    files.remove("README.md")
 
 # Get name of zip file and decide if there should be a root folder.
 zipname = kwargs["name"]
@@ -89,5 +44,6 @@ with zipfile.ZipFile(zipname, "w", zipfile.ZIP_DEFLATED) as vizip:
         vizip.write(readfile, writefile)
     
     # Also add readme with txt extension to play nice with Windows.
-    vizip.write("README.md", os.path.join(root, "README.txt"))
+    if includereadme:
+        vizip.write("README.md", os.path.join(root, "README.txt"))
     print "Wrote zip file '%s'." % vizip.filename
