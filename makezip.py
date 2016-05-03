@@ -19,8 +19,7 @@ parser.add_argument("files", default=[], nargs="*",
                     help="Files to include")
 kwargs = vars(parser.parse_args(sys.argv[1:]))
 
-# Specify files explicitly. Yes, wildcards would be faster and less prone to
-# accidental omissions, but we want to be very explicit here.
+# Files are read from command line via make.
 files = set(kwargs["files"])
 includereadme = ("README.md" in files)
 if includereadme:

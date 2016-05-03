@@ -146,7 +146,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
             guess["x"][0,...] = x0
         for d in [lb, ub, guess]:
             if "xf" in d:
-                xf = d.pop()
+                xf = d.pop("xf")
                 if xf.size != (N["x"],):
                     raise ValueError("Incorrect size for xf.")
                 d["x"][-1,...] = xf

@@ -52,6 +52,7 @@ doc/introslides.pdf : cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
                       vdposcillator_nmpc.pdf cstr_startup.pdf
 doc/cheatsheet.pdf : doc/sidebyside.tex
 doc/octave-vs-python.pdf : doc/sidebyside-cstr.tex
+doc/install.pdf : 
 
 # Define rules for intermediate files.
 cstr_octave.pdf : cstr.m
