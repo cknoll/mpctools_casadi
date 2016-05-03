@@ -135,11 +135,13 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
             d["x"] = v*np.ones((N["t"]+1,N["x"]))
     if x0 is not None or any(["xf" in d for d in [lb, ub]]):
         # First, need to check if time-varying bounds were supplied. If not,
-        # we need to make them time-varying.
+        # we need to make them time-varying for x so that we can change x0 and
+        # xf separately. Other vars are handled in __optimalControlProblem.
         for d in [lb, ub, guess]:
-            x = np.squeeze(d["x"])
-            if x.shape == (N["x"],):
-                d["x"] = np.tile(x[np.newaxis,:], (N["t"]+1, 1))
+            x = d["x"]
+            if x.shape in [(N["x"],), (N["x"], 1), (1, N["x"])]:
+                x = np.reshape(x, (1, N["x"]))
+                d["x"] = np.tile(x, (N["t"]+1, 1))
         if x0 is not None:
             lb["x"][0,...] = x0
             ub["x"][0,...] = x0
@@ -147,7 +149,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         for d in [lb, ub, guess]:
             if "xf" in d:
                 xf = d.pop("xf")
-                if xf.size != (N["x"],):
+                if xf.shape != (N["x"],):
                     raise ValueError("Incorrect size for xf.")
                 d["x"][-1,...] = xf
     
@@ -439,8 +441,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     # Check timestep.
     if N.get("c", 0) > 0:
         if Delta is None:
-            Delta = 1
-            warnings.warn("Using default value Delta = 1.")
+            raise ValueError("Must provide Delta to use collocation!")
         misc["Delta"] = Delta
         
     # Sort out bounds and parameters.
