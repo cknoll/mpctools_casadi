@@ -24,33 +24,36 @@ t = np.arange(Nt + 1)*dt
 (Adisc, Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 def F(x, u):
     return mpc.mtimes(Adisc, x) + mpc.mtimes(Bdisc, u)
-Fcasadi = mpc.getCasadiFunc(F, [n,m], ["x","u"], "F")
+Fcasadi = mpc.getCasadiFunc(F, [n,m], ["x","u"], funcname="F", scalar=False)
 
 # Bounds on u.
 umax = 1
 lb = {"u" : -umax*np.ones((Nt, m))}
 ub = {"u" : umax*np.ones((Nt, m))}
 
-# Define Q and R matrices and q penalty for periodic solution.
+# Define Q and R matrices and periodic setpoint.
 R = np.eye(m)
 Q = np.eye(n)
-xp = xpfunc(t)[np.newaxis,:]
-p = -2*Q.dot(xp[:,:-1]).T
-def l(x, u, p):
-    return mpc.mtimes(x.T, Q, x) + mpc.mtimes(u.T, R, u) + mpc.mtimes(p.T, x)
-lcasadi = mpc.getCasadiFunc(l, [n,m,m], ["x","u","p"], "l")
+sp = {"x" : xpfunc(t)[:,np.newaxis], "u" : np.zeros((Nt, m))}
+def l(x, u, xsp, usp):
+    """Stage cost with setpoints."""
+    dx = x - xsp
+    du = u - usp
+    return mpc.mtimes(dx.T, Q, dx) + mpc.mtimes(du.T, R, du)
+lcasadi = mpc.getCasadiFunc(l, [n,m,n,m], ["x","u","x_sp","u_sp"],
+                            funcname= "l")
 
 # Initial condition.
 x0 = np.array([-2])
-N = {"x" : n, "u" : m, "p" : m, "t" : Nt}
-funcargs = {"f" : ["x","u"], "l" : ["x","u","p"]}
+N = {"x" : n, "u" : m, "t" : Nt}
+funcargs = {"f" : ["x","u"], "l" : ["x","u","x_sp","u_sp"]}
 
 # Solve linear MPC problem.
-solution = mpc.callSolver(mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, p=p,
+solution = mpc.callSolver(mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, sp=sp,
                                    funcargs=funcargs, verbosity=3))
 x = solution["x"]
 u = solution["u"]
 
 # Plot things.
-fig = mpcplots.mpcplot(x, u, t, xp.T)
+fig = mpcplots.mpcplot(x, u, t, sp["x"])
 mpcplots.showandsave(fig,"periodicmpcexample.pdf")

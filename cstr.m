@@ -7,6 +7,8 @@
 
 global F F0 r E k0 DeltaH rhoCp T0 c0 U Tc hs
 
+pkg('load', 'control');
+
 %<<ENDCHUNK>>
 
 % parameters and sizes for the nonlinear system

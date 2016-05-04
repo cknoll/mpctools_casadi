@@ -50,6 +50,7 @@ def transform_source(src, matlab=True):
         src = re.sub('!=', '~=', src) # Matlab doesn't know !=.
         src = re.sub(r'lmpc(\s*\()', r'lmpc_matlab\1', src) # call lmpc_matlab instead of lmpc
         src = re.sub(r"^print.*", "", src)
+        src = re.sub(r"^.*pkg\(.*\).*$", "", src) # Don't call pkg.
     return src
 
 if __name__ == "__main__":
