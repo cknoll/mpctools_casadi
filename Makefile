@@ -14,8 +14,7 @@ DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-INSTALLER_FILES := $(addprefix installer/, casadiinstaller.py casadisetup.py \
-                     README.txt)
+INSTALLER_FILES := $(addprefix installer/, casadiinstaller.py README.txt)
 
 CSTR_MATLAB_FILES := $(addprefix cstr-matlab/, main.m massenbal.m \
                        massenbalstst.m partial.m)
