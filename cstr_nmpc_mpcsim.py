@@ -170,16 +170,17 @@ def runsim(k, simcon, opnclsd):
                                      rk4=True,Delta=Delta,M=2)
 
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_rk4_casadi([x,u,d])[0] + w
+            return ode_augmented_rk4_casadi(x, u, d) + w
 
         def ode_estimator(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_casadi([x,u,d])[0] + w
+            return ode_augmented_casadi(x, u, d) + w
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-                                   [Nx+Nid,Nu,Nw,Nd],["xaug","u","w","d"],"ode_estimator_rk4")
+                                   [Nx+Nid,Nu,Nw,Nd], ["xaug","u","w","d"],
+                                   "ode_estimator_rk4", scalar=False)
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
-                             [Nx+Nid,Nd],["xaug","d"],"measurement")
+                             [Nx+Nid,Nd], ["xaug","d"], "measurement")
 
         # Weighting matrices for controller.
 
