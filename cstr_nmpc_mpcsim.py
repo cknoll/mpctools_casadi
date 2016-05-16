@@ -36,7 +36,13 @@ def runsim(k, simcon, opnclsd):
     for var in vrlist:
         chsum += var.chflag
         var.chflag = 0
-        
+    
+    # Grab bounds.
+    uub = [mvlist[0].maxlim, mvlist[1].maxlim]
+    ulb = [mvlist[0].minlim, mvlist[1].minlim]
+    yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
+    ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
+    
     # initialize values on first execution or when something changes
 
     if (k == 0 or chsum > 0):
@@ -302,11 +308,6 @@ def runsim(k, simcon, opnclsd):
         phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
                                 phiargs, scalar=False)
 
-        uub = [mvlist[0].maxlim, mvlist[1].maxlim]
-        ulb = [mvlist[0].minlim, mvlist[1].minlim]
-        yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
-        ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
-
         sstargargs = {
             "f" : ode_disturbance_casadi,
             "h" : measurement_casadi,
@@ -475,7 +476,12 @@ def runsim(k, simcon, opnclsd):
             except RuntimeError: # Integrator failed.
                 predictionOkay = False
         if predictionOkay:
+            # Take measurement.
             yof_k = measurement(xof_k)
+            
+            # Stop forecasting if bounds are exceeded.
+            if np.any(yof_k > yub) or np.any(yof_k < ylb):
+                predictionOkay = False
         else:
             xof_k = np.NaN*np.ones((Nx+Nid,))
             yof_k = np.NaN*np.ones((Ny,))

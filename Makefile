@@ -32,8 +32,8 @@ $(ZIPNAME) : $(MPC_TOOLS_CASADI_FILES)
 	@python makezip.py --name $(ZIPNAME) $(MPC_TOOLS_CASADI_FILES) || rm -f $(ZIPNAME)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
-upload : $(ZIPNAME) bitbucketuser
-	curl -v -u $(shell cat bitbucketuser) -X $(UPLOAD_COMMAND) -F files=@"$(ZIPNAME)"
+upload : $(ZIPNAME)
+	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$(ZIPNAME)"
 .PHONY : upload
 
 # Rules for documentation pdfs.
