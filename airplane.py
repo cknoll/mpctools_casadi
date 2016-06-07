@@ -53,7 +53,7 @@ def ode(x,u):
     gam = u[0]
     phi = u[1]
     T = u[2]
-    w = wind(x, u, z)
+    w = wind(x, y, z)
     wx = w[0]
     wy = w[1]
     wz = w[2]     
@@ -92,9 +92,14 @@ ub = {
 }
 guess = {"x" : np.tile(x0[np.newaxis,:], (Nt+1,1)),
          "xc" : np.tile(x0[np.newaxis,:,np.newaxis],(Nt,1,Nc))}
-def lfunc(x,u):
-    return mpc.mtimes(x[0:3].T,x[0:3])
-l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"])
+def lfunc(x, u, xsp=None, usp=None):
+    if xsp is None:
+        xsp = np.zeros(x.shape)
+    dx = x[0:3] - xsp[0:3]
+    return mpc.mtimes(dx.T, dx)
+ltarg = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], scalar=False)
+l = mpc.getCasadiFunc(lfunc, [Nx,Nu,Nx,Nu], ["x","u","x_sp","u_sp"],
+                      scalar=False)
 
 # First simulate to get a guess.
 x = np.zeros((Nt+1,Nx))
@@ -102,7 +107,7 @@ x[0,:] = x0
 u = np.zeros((Nt,Nu))
 for t in range(Nt):
     u[t,:] = u0
-    x[t+1,:] = plane.sim(x[t,:],u[t,:])
+    x[t+1,:] = plane.sim(x[t,:], u[t,:])
 guess["x"] = x
 guess["u"] = u
 
@@ -110,9 +115,18 @@ guess["u"] = u
 N = {"x":Nx, "u":Nu, "t":Nt}
 if useCollocation:
     N["c"] = Nc
-controller = mpc.nmpc(f=f,l=l,N=N,x0=x0,lb=lb,ub=ub,guess=guess,Delta=Delta,
-                      verbosity=0)
+kwargs = dict(f=f, N=N, lb=lb, ub=ub, guess=guess, Delta=Delta, verbosity=0)
+targetfinder = mpc.nmpc(l=ltarg, periodic=True, **kwargs)
 
+# Find periodic trajectory and set as setpoint.
+targetfinder.solve()
+xtarg = targetfinder.vardict["x"]
+utarg = targetfinder.vardict["u"]
+
+sp = dict(x=xtarg, u=utarg)
+controller = mpc.nmpc(l=l, x0=x0, sp=sp, **kwargs)
+
+# Simulate closed-loop.
 x = np.nan*np.ones((Nsim+1,Nx))
 x[0,:] = x0
 u = np.zeros((Nsim,Nu))
@@ -129,18 +143,26 @@ for t in range(Nsim):
     
     # Now save control input.
     u[t,:] = np.squeeze(controller.var["u",0])
-    x[t+1,:] = plane.sim(x[t,:],u[t,:])    
+    x[t+1,:] = plane.sim(x[t,:], u[t,:])
+
+    # Cycle setpoint.
+    for i in range(t, t + Nt):
+        i = i % Nt
+        controller.par["u_sp",i] = utarg[i,:]
+        controller.par["x_sp",i] = xtarg[i,:]
+    controller.par["x_sp",-1] = xtarg[t % Nt,:]   
 
 # Plot closed loop trajectory with open-loop trajectories.
 t = Delta*np.arange(Nsim+1)
 fig = plt.figure()
-ax = fig.add_subplot(111, projection="3d")
+ax = fig.add_subplot(1, 1, 1, projection="3d")
 for p in traj:
-    ax.plot(p[:,0],p[:,1],p[:,2],color="red",linewidth=.5,alpha=.5)
-ax.plot(x[:,0],x[:,1],x[:,2],color="blue",linewidth=2)
+    ax.plot(p[:,0], p[:,1], p[:,2], color="red", linewidth=.5, alpha=.5)
+ax.plot(x[:,0], x[:,1], x[:,2], color="blue", linewidth=2)
+ax.plot(xtarg[:,0], xtarg[:,1], xtarg[:,2], color="green", linewidth=4,
+        alpha=0.5)
 ax.set_xlabel("$x$ (m)")
 ax.set_ylabel("$y$ (m)")
 ax.set_zlabel("$z$ (m)")
 fig.tight_layout(pad=.5)
-mpc.plots.showandsave(fig,"airplane.pdf")
-
+mpc.plots.showandsave(fig, "airplane.pdf")

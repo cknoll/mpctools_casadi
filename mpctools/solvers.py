@@ -61,7 +61,7 @@ def listAvailableSolvers(asstring=True, front="    "):
     containing the available solvers of each type.
     """
     availablesolvers = util.getCasadiPlugins(["Nlpsol", "Qpsol"])
-    solvers = collections.defaultdict(lambda : [])
+    solvers = dict(NLP=[], QP=[])
     for (k, v) in availablesolvers.iteritems():
         if v == "Nlpsol":
             solvers["NLP"].append(k)

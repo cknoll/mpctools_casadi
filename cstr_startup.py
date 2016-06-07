@@ -4,8 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
-import casadi
-
 # Define some parameters and then the CSTR model.
 Nx = 3
 Nu = 2
@@ -192,7 +190,7 @@ for method in solvers.keys():
     xsp = np.zeros((Nsim+1,Nx))
     usp = np.zeros((Nsim,Nu))    
     
-    ysp[round(Nsim/3):round(2*Nsim/3),:] = xs*np.array([.85,.75,1.15])    
+    ysp[int(Nsim/3):int(2*Nsim/3),:] = xs*np.array([.85,.75,1.15])    
     for t in range(Nsim):
         # Figure out setpoints.
         if t == 0 or not np.all(ysp[t,:] == ysp[t-1,:]):        
