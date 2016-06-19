@@ -458,9 +458,9 @@ def runsim(k, simcon, opnclsd):
     for field in ["olpred", "clpred"]:
         mvlist.vecassign(u_k, field, index=0)
         dvlist.vecassign(d_km1, field, index=0)
-        xvlist.vecassign(dhat_k, field, index=0)
+        xvlist.vecassign(xhat_k, field, index=0)
         cvlist.vecassign(yhat_k, field, index=0)
-
+    
     xof_km1 = np.concatenate((xhat_k,dhat_k))
 
     # Need to be careful about this forecasting. Temporarily aggressive control
@@ -491,9 +491,9 @@ def runsim(k, simcon, opnclsd):
             dvlist.vecassign(d_km1, field, index=(i + 1))
             xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
-
+    
         xof_km1 = xof_k
-
+    
     # calculate mpc input adjustment in control is on
 
     if (opnclsd.status.get() == 1):

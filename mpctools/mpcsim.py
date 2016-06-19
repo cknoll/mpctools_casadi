@@ -113,7 +113,7 @@ def _get_setvalue_options():
         "Control Gain" : svo("value", xmin=-10, xmax=10, chflag=True),
         "Reset Time" : svo("value", xmin=0, xmax=10000, chflag=True),
         "Derivative Time" : svo("value", xmin=0, xmax=100, chflag=True),
-        "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=1e6, chflag=True),
+        "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=-1e-6, chflag=True),
     })
     return setvalue_options
 _setvalue_options = _get_setvalue_options()
@@ -842,7 +842,7 @@ class VarList(list):
         
     def vecassign(self, vec, field="value", index=None):
         """
-        Assigns self[i].field = vec[i].
+        Assigns self[i].field = vec[i] for i in range(len(self)).
             
         If index is not None, does self[i].field[index] = vec[i].
         """
