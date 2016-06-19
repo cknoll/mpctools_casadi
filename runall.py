@@ -22,7 +22,7 @@ files are run individually.
 import sys, traceback
 import matplotlib.pyplot as plt
 import mpctools.solvers, mpctools.plots
-from mpctools.util import stdout_redirected, strcolor
+from mpctools.util import stdout_redirected, strcolor, listAvailableSolvers, dummy_context
 
 # Turn off output
 mpctools.solvers.setMaxVerbosity(0)
@@ -45,13 +45,18 @@ examplefiles = [
     "econmpc.py",    
     "example2-8.py",
     "mheexample.py",
-    "mpcexampleclosedloop.py",
     "mpcmodelcomparison.py",
     "nmheexample.py",
     "nmpcexample.py",
     "periodicmpcexample.py",
     "vdposcillator.py",
 ]
+availablesolvers = listAvailableSolvers()["NLP"]
+if "qpoases" in availablesolvers:
+    examplefiles.append("mpcexampleclosedloop.py")
+if "bonmin" in availablesolvers:
+    examplefiles.append("fishing.py")
+showoutput = set(["fishing.py"])
 
 # Now loop through everybody.
 plt.ioff()
@@ -60,7 +65,8 @@ abort = False
 for f in examplefiles:
     print strcolor("%s ... " % (f,), "blue"),    
     try:
-        with stdout_redirected():
+        context = dummy_context if f in showoutput else stdout_redirected
+        with context():
             execfile(f, {}) # Run files in dummy namespace.
             status = strcolor("succeeded", "green", bold=True)
     except KeyboardInterrupt:

@@ -438,6 +438,7 @@ def stdout_redirected(to=os.devnull):
             try:
                 yield # Allow code to be run with the redirected stdout.
             finally:
+                sys.stdout.flush()
                 sys.stdout = old_stdout # Reset stdout.
 
    
@@ -461,6 +462,8 @@ class ArrayDict(collections.MutableMapping):
     When instantiating or when setting an item, calls np.array to convert
     everything.
     """
+    dtype = float
+    
     def __init__(self, *args, **kwargs):
         """
         Creates a dictionary and then wraps everything in np.array.
@@ -472,7 +475,7 @@ class ArrayDict(collections.MutableMapping):
         """
         Wraps v with np.array before setting.
         """
-        self.__arraydict__[k] = np.array(v)
+        self.__arraydict__[k] = np.array(v, dtype=self.dtype)
     
     def copy(self):
         """

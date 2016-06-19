@@ -52,7 +52,8 @@ def callSolver(solver, verbosity=None):
 
 # Build a dictionary of names for the time limit setting.
 _CPU_TIME_SETTING = util.ReadOnlyDict({"ipopt" : "max_cpu_time",
-                                       "qpoases" : "CPUtime"})
+                                       "qpoases" : "CPUtime",
+                                       "bonmin" : "max_cpu_time"})
 
 class ControlSolver(object):
     """
@@ -94,8 +95,8 @@ class ControlSolver(object):
         self.__defaultguess = util.ArrayDict(g)
     
     @property
-    def vartype(self):
-        return self.__vartype
+    def discretevar(self):
+        return self.__discretevar
     
     @property
     def conlb(self):
@@ -115,7 +116,9 @@ class ControlSolver(object):
     
     @property
     def vardict(self):
-        return util.casadiStruct2numpyDict(self.__varval)
+        if self.__vardict is None:
+            self.__vardict = util.casadiStruct2numpyDict(self.__varval)
+        return self.__vardict
     
     @property
     def obj(self):
@@ -186,7 +189,8 @@ class ControlSolver(object):
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  casaditype="SX", name="ControlSolver", casadioptions=None,
-                 solveroptions=None, misc=None, solver=None, vartype=None):
+                 solveroptions=None, misc=None, solver="ipopt",
+                 discretevar=None):
         """
         Initialize the solver object.
         
@@ -206,11 +210,12 @@ class ControlSolver(object):
         # First store everybody to the object.
         self.__var = var
         self.__varval = var(np.nan)
+        self.__vardict = None # Lazy pudate flag.
         self.__lb = varlb
         self.__ub = varub
-        if vartype is None:
-            vartype = var(False) # Default all continuous variables.
-        self.__vartype = vartype
+        if discretevar is None:
+            discretevar = var(False) # Default all continuous variables.
+        self.__discretevar = discretevar
         self.__guess = varguess
         self.defaultguess = util.casadiStruct2numpyDict(varguess)
         self.__obj = obj
@@ -224,8 +229,6 @@ class ControlSolver(object):
         self.__sol = {}
         self.__stats = {}
         self.__settings = {} # Need to initialize this.
-        if solver is None:
-            solver = "qpoases" if isQP else "ipopt"
         self.__changesettings(isQP=isQP, name=name, verbosity=verbosity,
                               timelimit=timelimit, solver=solver)
         if misc is None:
@@ -269,7 +272,7 @@ class ControlSolver(object):
             nlp["p"] = self.__par
         
         # Print and time limit options.
-        if self.solver == "ipopt":
+        if self.solver in set(["ipopt", "bonmin"]):
             solveroptions["print_level"] =  min(12, max(0, self.verbosity))
         elif self.solver == "qpoases":
             solveroptions["verbose"] = self.verbosity >= 10
@@ -319,8 +322,10 @@ class ControlSolver(object):
         
         # Set discrete variables.
         if self.solver in set(["bonmin", "gurobi", "cplex"]):
-            casadioptions["discrete"] = self.vartype
-        elif np.any(self.vartype.cat):
+            discrete =  np.squeeze(np.array(self.discretevar.cat,
+                                            dtype=bool)).tolist()
+            casadioptions["discrete"] = discrete
+        elif np.any(self.discretevar.cat):
             warnings.warn("Discrete variables not supported in %s!"
                           % self.solver)
         
@@ -376,6 +381,7 @@ class ControlSolver(object):
             stats = solver.stats()
         self.__sol = sol
         self.__varval = self.__var(sol["x"])
+        self.__vardict = None # Laxy update in getter.
         self.__objval = float(sol["f"])
         endtime = time.clock()
         

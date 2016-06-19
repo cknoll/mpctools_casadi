@@ -39,7 +39,8 @@ Functions for solving MPC problems using Casadi and Ipopt.
 def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
          Pf=None, sp={}, p=None, uprev=None, verbosity=5, timelimit=60,
          Delta=None, funcargs={}, extrapar={}, e=None, ef=None, periodic=False,
-         discretel=True, isQP=False, casaditype="SX", infercolloc=None):
+         discretel=True, isQP=False, casaditype="SX", infercolloc=None,
+         solver=None, udiscrete=None):
     """
     Solves nonlinear MPC problem.
     
@@ -85,6 +86,14 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     respectively. These should be Casadi functions, and the feasible region is
     defined by e <= 0 and ef <= 0. If either functions are specified, you must
     also specify the arguments to each in funcargs.    
+    
+    solver is a string specifying which solver to use. By default, the solver
+    is chosen based on the problem type: qpoases if isQP, bonmin if any
+    component of u is discrete, and ipopt otherwise.    
+    
+    udiscrete should be an Nu vector of True and False to say whether u has
+    any discrete components. Note that this setting is not supported for all
+    solvers.    
     
     The return value is a ControlSolver object. To actually solve the
     optimization, use ControlSolver.solve().
@@ -185,6 +194,11 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         N["g"] = None
     N["f"] = N["x"]
     
+    # Decide if u has discrete components.
+    discretevar = dict()
+    if udiscrete is not None:
+        discretevar["u"] = udiscrete
+    
     # Make initial objective term.    
     if Pf is not None:
         if "x" in sp:
@@ -217,13 +231,25 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
             largs.append("u_sp")
         funcargs["l"] = largs
     
+    # Pick solver.
+    if solver is None:
+        if udiscrete is not None and np.any(udiscrete):
+            solver = "bonmin"
+        elif isQP:
+            solver = "qpoases"
+        if solver not in util.listAvailableSolvers()["NLP"]:
+            solver = None
+        if solver is None:
+            solver = "ipopt" # Default choice.
+    
     # Build list of arguments for optimal control type.
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=None, l=l, e=e, funcargs=funcargs, Delta=Delta,
                   con=con, conlb=conlb, conub=conub,periodic=periodic,
                   verbosity=verbosity, deltaVars=deltaVars, isQP=isQP,
                   casaditype=casaditype, discretel=discretel,
-                  infercolloc=infercolloc)
+                  infercolloc=infercolloc, solver=solver,
+                  discretevar=discretevar)
     return __optimalControlProblem(*args, **kwargs)
 
 def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
@@ -415,7 +441,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         Delta=None, con=None, conlb=None, conub=None, periodic=False,
         discretef=True, deltaVars=None, finalpoint=True, verbosity=5,
         timelimit=60, casaditype="SX", discretel=True, fErrorVars=None,
-        isQP=False, infercolloc=None):
+        isQP=False, infercolloc=None, solver="ipopt", discretevar={}):
     """
     General wrapper for an optimal control problem (e.g., mpc or mhe).
     
@@ -429,8 +455,10 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     varlb = var(-np.inf)
     varub = var(np.inf)
     varguess = var(0)
+    vardiscretevar = var(False)
     dataAndStructure = [(guess,varguess,"guess"), (lb,varlb,"lb"),
-                        (ub,varub,"ub")]
+                        (ub,varub,"ub"),
+                        (discretevar,vardiscretevar,"discretevar")]
     if par is not None:
         parval = par(0) # guess dictionary also contains parameter values.
         dataAndStructure.append((guess,parval,"par"))  # See above.
@@ -534,7 +562,8 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     # Build ControlSolver object and return that.
     args = [var, varlb, varub, varguess, obj, con, conlb, conub, par, parval]
     kwargs = dict(verbosity=verbosity, timelimit=timelimit, isQP=isQP,
-                  casaditype=casaditype, misc=misc)
+                  casaditype=casaditype, misc=misc, discretevar=vardiscretevar,
+                  solver=solver)
     solver = solvers.ControlSolver(*args, **kwargs)
     return solver
 
