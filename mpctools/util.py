@@ -790,7 +790,7 @@ def getSolverOptions(solver, display=True):
                 print(k, "[%r]: %s\n" % options[k])
         return options    
 
-def listAvailableSolvers(asstring=False, front="    "):
+def listAvailableSolvers(asstring=False, front="    ", categorize=True):
     """
     Returns available solvers as a string or a dictionary.
     
@@ -810,6 +810,8 @@ def listAvailableSolvers(asstring=False, front="    "):
         types = ["%s : %s" % (s, ", ".join(solvers[s])) for s in ["QP", "NLP"]]
         retval = front + ("\n" + front).join(types)
     else:
-        retval = dict(solvers)
+        if not categorize:
+            solvers = flattenlist(solvers.values())
+        retval = solvers
     return retval
    

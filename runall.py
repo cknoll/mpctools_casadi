@@ -51,7 +51,7 @@ examplefiles = [
     "periodicmpcexample.py",
     "vdposcillator.py",
 ]
-availablesolvers = listAvailableSolvers()["NLP"]
+availablesolvers = listAvailableSolvers(categorize=False)
 if "qpoases" in availablesolvers:
     examplefiles.append("mpcexampleclosedloop.py")
 if "bonmin" in availablesolvers:

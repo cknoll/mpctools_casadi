@@ -237,7 +237,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
             solver = "bonmin"
         elif isQP:
             solver = "qpoases"
-        if solver not in util.listAvailableSolvers()["NLP"]:
+        if solver not in util.listAvailableSolvers(categorize=False):
             solver = None
         if solver is None:
             solver = "ipopt" # Default choice.
