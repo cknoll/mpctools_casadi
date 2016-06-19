@@ -1,5 +1,4 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
-import collections
 import numpy as np
 import util
 import casadi
@@ -51,30 +50,6 @@ def callSolver(solver, verbosity=None):
     return returnDict
 
 
-def listAvailableSolvers(asstring=True, front="    "):
-    """
-    Returns available solvers as a string or a dictionary.
-    
-    If asstring is True, lists solvers as in two categories (QP and NLP) on
-    separate lines with the front string at the beginning of each line. If
-    asstring is false, returns a dictionary with list entries "QP" and "NLP"
-    containing the available solvers of each type.
-    """
-    availablesolvers = util.getCasadiPlugins(["Nlpsol", "Qpsol"])
-    solvers = dict(NLP=[], QP=[])
-    for (k, v) in availablesolvers.iteritems():
-        if v == "Nlpsol":
-            solvers["NLP"].append(k)
-        elif v == "Qpsol":
-            solvers["QP"].append(k)
-    if asstring:
-        types = ["%s : %s" % (s, ", ".join(solvers[s])) for s in ["QP", "NLP"]]
-        retval = front + ("\n" + front).join(types)
-    else:
-        retval = dict(solvers)
-    return retval
-
-
 # Build a dictionary of names for the time limit setting.
 _CPU_TIME_SETTING = util.ReadOnlyDict({"ipopt" : "max_cpu_time",
                                        "qpoases" : "CPUtime"})
@@ -117,6 +92,10 @@ class ControlSolver(object):
     @defaultguess.setter
     def defaultguess(self, g):
         self.__defaultguess = util.ArrayDict(g)
+    
+    @property
+    def vartype(self):
+        return self.__vartype
     
     @property
     def conlb(self):
@@ -185,15 +164,15 @@ class ControlSolver(object):
         
     @solver.setter
     def solver(self, solverstr):
-        availablesolvers = listAvailableSolvers(asstring=False)
+        availablesolvers = util.listAvailableSolvers()
         if solverstr not in availablesolvers["NLP"] + availablesolvers["QP"]:
             errmsg = ("%s is not a valid solver. Available solvers:\n%s" %
-                      (solverstr, listAvailableSolvers()))
+                      (solverstr, util.listAvailableSolvers(asstring=True)))
             raise ValueError(errmsg)
         elif solverstr in availablesolvers["QP"] and not self.isQP:
             errmsg = ("%s is a QP solver and self.isQP is False. Please set "
                       "isQP to True or choose a QP solver. Available solvers:"
-                      "\n%s" % (solverstr, listAvailableSolvers()))
+                      "\n%s" % (solverstr, util.listAvailableSolvers()))
             raise ValueError(errmsg)
         self.__changesettings(solver=solverstr)
     
@@ -207,7 +186,7 @@ class ControlSolver(object):
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  casaditype="SX", name="ControlSolver", casadioptions=None,
-                 solveroptions=None, misc=None, solver=None):
+                 solveroptions=None, misc=None, solver=None, vartype=None):
         """
         Initialize the solver object.
         
@@ -229,9 +208,11 @@ class ControlSolver(object):
         self.__varval = var(np.nan)
         self.__lb = varlb
         self.__ub = varub
+        if vartype is None:
+            vartype = var(False) # Default all continuous variables.
+        self.__vartype = vartype
         self.__guess = varguess
         self.defaultguess = util.casadiStruct2numpyDict(varguess)
-        
         self.__obj = obj
         self.__con = con
         self.__conlb = conlb
@@ -315,7 +296,7 @@ class ControlSolver(object):
              
         # Choose different function whether QP or not.
         #TODO: Specify constant Lagrangian if isQP
-        availablesolvers = listAvailableSolvers(asstring=False)
+        availablesolvers = util.listAvailableSolvers()
         if self.solver in availablesolvers["QP"]:
             solverfunc = casadi.qpsol
             casadioptions.update(solveroptions) #TODO: Verity API difference.
@@ -335,36 +316,28 @@ class ControlSolver(object):
             casadioptions[self.solver] = solveroptions
         else:
             raise ValueError("Invalid choice of solver: %s" % self.solver)
-        solver = solverfunc(self.name, self.solver, nlp, casadioptions)
+        
+        # Set discrete variables.
+        if self.solver in set(["bonmin", "gurobi", "cplex"]):
+            casadioptions["discrete"] = self.vartype
+        elif np.any(self.vartype.cat):
+            warnings.warn("Discrete variables not supported in %s!"
+                          % self.solver)
         
         # Finally, save the solver and unset the changed flag.
+        solver = solverfunc(self.name, self.solver, nlp, casadioptions)        
         self.__solver = solver
         self.__changed = False
     
     def getSolverOptions(self, display=True):
         """
-        Returns a dictionary of solver-specific options.
+        Lists options for the current solver.
         
-        Dictionary keys are option names, and values are tuples with the
-        default value of each option and a text description. Notice that
-        default values are always given, not any values that you may have set.
-        Also, in some cases, the default may be a tuple whose first entry is
-        the value and whose second entry is a type.        
-        
-        If display is True, all options are also printed to the screen.
+        Options can be set using solveroptions in ControlSolver.initialize().
+        See help in util.getSolverOptions for more details.
         """
-        availablesolvers = listAvailableSolvers(asstring=False)
-        if self.solver in availablesolvers["NLP"]:
-            docstring = casadi.doc_nlpsol(self.solver)
-        elif self.solver in availablesolvers["QP"]:
-            docstring = casadi.doc_qpsol(self.solver)
-        else:
-            raise ValueError("Unknown solver: '%s'." % self.solver)
-        options = util._getDocDict(docstring)
+        options = util.getSolverOptions(self.solver, display=display)
         if display:
-            print("Available options [default] for %s:\n" % self.solver)
-            for k in sorted(options.keys()):
-                print(k, " [%r]: %s\n" % options[k])
             print("Options can be set using solveroptions in"
                 " ControlSolver.initialize().\n")
         return options

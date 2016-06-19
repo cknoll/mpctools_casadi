@@ -7,48 +7,74 @@
 \begin{document}
 %
 \begin{frame}[allowframebreaks]{Installation}
-    Install a scientific Python distribution
+    Install a scientific Python 2.7 distribution
     \begin{itemize}
         \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
-        \item For Windows, e.g., Python(x,y): \smallurl{https://code.google.com/p/pythonxy/}
-        \item For Ubuntu/Debian, e.g., Spyder (an IDE): \lstinline[style=shell]@sudo apt-get install spyder@
+        \item Spyder (a Python IDE) is very helpful but not required.
+        \item See next slide for examples.
     \end{itemize}
     
     \medskip
-    
-    Download \casadi{} (Version $\ge$3.0)
-    \begin{itemize}
-        \item Windows/Linux/Mac zip file available at \smallurl{http://files.casadi.org}
-        \item Unzip to a convenient location (e.g., \smallurl{C:/Python2.7/casadi} for Windows or \smallurl{/opt/casadi} for Casadi), or use Python install script (see \texttt{installer} folder)
-    \end{itemize}
-    
-    \framebreak
     
     Download our \texttt{mpctools} Python package
     \begin{itemize}
         \item Download zipped package (see ``Downloads''): \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
         \item Unzip to a convenient location.
-        \item Move the \texttt{mpctools} sub-folder to where you unzipped \texttt{casadi} or use the \texttt{mpctoolssetup.py} Python script; the remaining files (examples and documentation) can be left where they are.
+    \end{itemize}
+    
+    \framebreak
+    
+    Download \casadi{} (Version $\ge$3.0)
+    \begin{itemize}
+        \item Windows/Linux/Mac zip file available at \smallurl{http://files.casadi.org}
+        \item Unzip \texttt{casadi}, \texttt{lib}, and \texttt{include} to the \texttt{mpc-tools-casadi} folder from the previous step.
     \end{itemize}
     
     \medskip
     
-    Add CasADi and \texttt{mpctools} to your Python path
+    Optional: Add CasADi and \texttt{mpctools} to your Python path
     \begin{itemize}
         \item Open a Python interpreter (run \lstinline[style=shell]!python! from a terminal/command prompt)
         \item Run the commands \lstinline[style=python]!import site; print site.getsitepackages()! to see where your site packages are stored
-        \item In one of the site package folders, make a text file called \texttt{casadi.pth}, and type the path to your CasADi installation directory
+        \item Move the \texttt{casadi}, \texttt{lib}, \texttt{include}, and \texttt{mpctools} folders to that location.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Scientific Python Options}
+    Anaconda (Linux, Windows, Mac)
+    \begin{itemize}
+        \item Download from \smallurl{https://www.continuum.io/downloads}
+        \item Perhaps a bit bloated (contains packages we do not need)
+        \item Typically the easiest version to work with.
+    \end{itemize}
+    
+    \medskip
+    
+    APT (Ubuntu/Debian)
+    \begin{itemize}
+        \item Use \lstinline[style=shell]@sudo apt-get install spyder@ to get Spyder and all dependencies.
+        \item Includes \texttt{python-numpy}, \texttt{python-scipy}, and \texttt{python-matplotlib}.
+    \end{itemize}
+    
+    \medskip
+    
+    Python(x,y) (Windows only)
+    \begin{itemize}
+        \item Download from \smallurl{https://code.google.com/p/pythonxy/}
+        \item Only 32 bit is available.
     \end{itemize}
 \end{frame}
 
 \begin{frame}{Making Sure Everything Works}
-    First, open a Python interpreter\footnote{Open a command prompt/terminal in the \smallurl{mpc-tools-casadi} folder and enter \lstinline[style=shell]!python!. You may also be able to right-click and choose ``Open a Python console''.} and run \lstinline[style=python]!import casadi, mpctools!.
+    First, open a Python interpreter\footnote{Open a command prompt/terminal in the \smallurl{mpc-tools-casadi} folder and enter \lstinline[style=shell]!python!.} and run \lstinline[style=python]!import casadi, mpctools!.
     \begin{itemize}
         \item If this doesn't work, make sure your CasADi folder shows up in \lstinline[style=python]!import sys; print sys.path!.
         \item If you have multiple Python distributions on your machine, don't (or at least make sure you're using the one you think you are).
         \item Make sure you are using Python 2.7 (not 3.x).
     \end{itemize}
-        
+    
+    \medskip
+    
     Then, try to run the examples in \smallurl{mpc-tools-casadi}.
     \begin{itemize}
         \item In the Python interpreter, use \lstinline[style=python]!execfile("filename.py")!.
@@ -56,6 +82,24 @@
     \end{itemize}
 \end{frame}
 
+\begin{frame}{Path Considerations}
+    Unless you perform the optional step, \texttt{casadi} and \texttt{mpctools} are only accessible locally.
+    \begin{itemize}
+        \item Avoids cluttering Python system paths
+        \item Doesn't need admin access
+        \item To update, simply delete folders and re-download
+        \item Python interpreter (or IDE) must be started from this folder
+    \end{itemize}
+    
+    \medskip
+    
+    If you preform the optional step, \texttt{casadi} and \texttt{mpctools} will be accessible everywhere on your machine.
+    \begin{itemize}
+        \item Any Python interpreter can load the packages
+        \item May be difficult to keep track of versions
+        \item A local install will override a global install in the local directory
+    \end{itemize}
+\end{frame}
 
 \begin{frame}{Software Relationships}
     \centering
@@ -104,7 +148,7 @@
                 node[python] (casadipy) {casadi\\Python\\API}
                 child
                 {
-                    node[clib] {C Library}
+                    node[clib] {C++\\Library}
                     child
                     {
                         node[clib] {IPOPT}

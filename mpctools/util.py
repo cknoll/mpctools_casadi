@@ -249,7 +249,7 @@ def dlqe(A,C,Q,R):
     
 def mtimes(*args, **kwargs):
     """
-    Smarter version casadi.tools.mtimes.
+    More flexible version casadi.tools.mtimes.
     
     Matrix multiplies all of the given arguments and returns the result. If any
     inputs are Casadi's SX or MX data types, uses Casadi's mtimes. Otherwise,
@@ -760,5 +760,53 @@ def _getDocDict(docstring):
     
     # Now return the dictionary.
     return {c.id : (c.default, c.doc) for c in allcells}
+
+def getSolverOptions(solver, display=True):
+        """
+        Returns a dictionary of solver-specific options.
+        
+        Dictionary keys are option names, and values are tuples with the
+        default value of each option and a text description. Notice that
+        default values are always given, not any values that you may have set.
+        Also, in some cases, the default may be a tuple whose first entry is
+        the value and whose second entry is a type.        
+        
+        If display is True, all options are also printed to the screen.
+        """
+        availablesolvers = listAvailableSolvers(asstring=False)
+        if solver in availablesolvers["NLP"]:
+            docstring = casadi.doc_nlpsol(solver)
+        elif solver in availablesolvers["QP"]:
+            docstring = casadi.doc_qpsol(solver)
+        else:
+            raise ValueError("Unknown solver: '%s'." % solver)
+        options = _getDocDict(docstring)
+        if display:
+            print("Available options [default] for %s:\n" % solver)
+            for k in sorted(options.keys()):
+                print(k, "[%r]: %s\n" % options[k])
+        return options    
+
+def listAvailableSolvers(asstring=False, front="    "):
+    """
+    Returns available solvers as a string or a dictionary.
     
-    
+    If asstring is True, lists solvers as in two categories (QP and NLP) on
+    separate lines with the front string at the beginning of each line. If
+    asstring is false, returns a dictionary with list entries "QP" and "NLP"
+    containing the available solvers of each type.
+    """
+    availablesolvers = getCasadiPlugins(["Nlpsol", "Qpsol"])
+    solvers = dict(NLP=[], QP=[])
+    for (k, v) in availablesolvers.iteritems():
+        if v == "Nlpsol":
+            solvers["NLP"].append(k)
+        elif v == "Qpsol":
+            solvers["QP"].append(k)
+    if asstring:
+        types = ["%s : %s" % (s, ", ".join(solvers[s])) for s in ["QP", "NLP"]]
+        retval = front + ("\n" + front).join(types)
+    else:
+        retval = dict(solvers)
+    return retval
+   
