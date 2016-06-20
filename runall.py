@@ -33,7 +33,13 @@ mpctools.plots.SHOWANDSAVE_DEFAULT_CHOICE = choice
 logfile = open("runall.log","w")
 
 # List of files. We hard-code these so that we explicitly pick everything.
-examplefiles = [
+examplefiles = []
+availablesolvers = listAvailableSolvers(categorize=False)
+if "qpoases" in availablesolvers:
+    examplefiles.append("mpcexampleclosedloop.py")
+if "bonmin" in availablesolvers:
+    examplefiles += ["fishing.py", "cargears.py"]
+examplefiles += [
     "airplane.py",
     "ballmaze.py",
     "cstr.py",
@@ -51,12 +57,7 @@ examplefiles = [
     "periodicmpcexample.py",
     "vdposcillator.py",
 ]
-availablesolvers = listAvailableSolvers(categorize=False)
-if "qpoases" in availablesolvers:
-    examplefiles.append("mpcexampleclosedloop.py")
-if "bonmin" in availablesolvers:
-    examplefiles.append("fishing.py")
-showoutput = set(["fishing.py"])
+showoutput = set(["fishing.py", "cargears.py"])
 
 # Now loop through everybody.
 plt.ioff()

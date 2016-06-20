@@ -3,11 +3,11 @@ import numpy as np
 import mpctools as mpc
 
 # Model parameters.
-Nt = 50
+Nt = 20
 Nx = 1
 Nu = 2
 Ngears = 3
-Delta = 0.1 # s
+Delta = 0.25 # s
 omegamax = 500 # Rad/s
 c = 0.01 # m/s
 r = 0.15 # m
