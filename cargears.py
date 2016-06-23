@@ -26,23 +26,24 @@ def ode(x, u):
     ratio = gear2ratio(gear)
     accel = c*ratio*omega*np.tanh(lam*(r*omega/ratio - velocity))
     return np.array([accel])
-f = mpc.getCasadiFunc(ode, [Nx, Nu], ["Nx", "Nu"], rk4=True, Delta=Delta)
+f = mpc.getCasadiFunc(ode, [Nx, Nu], ["x", "u"], rk4=True, Delta=Delta)
 
 # Steady state and stage cost.
 gearss = Ngears
 omegass = 0.5*omegamax
 uss = np.array([omegass, gearss])
 velocityss = r*omegass/gear2ratio(gearss)
-def stagecost(x, u):
+def stagecost(x, u, du):
     """Quadratic stage cost."""
-    l = (10*(x[0]/velocityss - 1)**2 + 0*(u[0]/omegass - 1)**2
-         + 0*(u[1]/gearss - 1)**2)
+    l = (10*(x[0]/velocityss - 1)**2 + 2*(u[0]/omegass - 1)**2
+         + 5*du[1]**2) # Rate of change for gear.
     return l
-l = mpc.getCasadiFunc(stagecost, [Nx, Nu], ["Nx", "Nu"])
+largs = ["x", "u","Du"]
+l = mpc.getCasadiFunc(stagecost, [Nx, Nu, Nu], largs)
 def termcost(x):
     """Quadratic terminal cost."""
-    return 10*stagecost(x, uss)
-Pf = mpc.getCasadiFunc(termcost, [Nx], ["Nx"])
+    return 10*stagecost(x, uss, np.zeros(Nu))
+Pf = mpc.getCasadiFunc(termcost, [Nx], ["x"])
 
 # Generate a guess.
 x0 = np.array([0]) # Car starts from rest.
@@ -56,11 +57,15 @@ for k in range(Nt):
 N = dict(x=Nx, u=Nu, t=Nt)
 lb = dict(u=np.array([0, 1]))
 ub = dict(u=np.array([omegamax, Ngears]))
+funcargs = dict(l=largs)
 guess = dict(x=x, u=u)
-cont = mpc.nmpc(f, l, N, x0, lb, ub, guess, Pf=Pf, udiscrete=udiscrete)
+cont = mpc.nmpc(f, l, N, x0, lb, ub, guess, Pf=Pf, uprev=lb["u"],
+                udiscrete=udiscrete, funcargs=funcargs)
 cont.solve()
 
 # Make a plot.
 t = Delta*np.arange(Nt + 1)
-fig = mpc.plots.mpcplot(cont.vardict["x"], cont.vardict["u"], t)
+fig = mpc.plots.mpcplot(cont.vardict["x"], cont.vardict["u"], t,
+                        xnames=["Speed (m/s)"],
+                        unames=["Rotation (rad/s)", "Gear"])
 mpc.plots.showandsave(fig, "cargears.pdf")

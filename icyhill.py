@@ -1,6 +1,7 @@
 # Car driving on an icy hill.
 import numpy as np
 import mpctools as mpc
+import matplotlib.pyplot as plt
 
 # Define sizes and hill functions.
 Nx = 2
@@ -56,12 +57,30 @@ ub = dict(u=umax*np.ones((Nt, Nu)))
 
 N = {"t" : Nt, "x" : Nx, "u" : Nu, "c" : Nc}
 
-x0 = np.array([-1, 0])
-
+x0s = [np.array([-x, 0]) for x in np.linspace(0, 2, 21)]
 controller = mpc.nmpc(f=odecasadi, l=lcasadi, Pf=Vfcasadi, N=N, lb=lb, ub=ub,
-                      x0=x0, Delta=Delta, verbosity=4)
+                      Delta=Delta, verbosity=0)
 
-# Solve and plot open-loop trajectory.
-controller.solve()
-t = np.arange(Nt + 1)*Delta
-mpc.plots.mpcplot(controller.vardict["x"], controller.vardict["u"], t)
+# Find open-loop solution for each initial condition.
+xs = []
+us = []
+Vs = []
+for (i, x0) in enumerate(x0s):
+    controller.saveguess(default=True) # Reset guess to default.
+    controller.fixvar("x", 0, x0)
+    controller.solve()
+    print "Step %d of %d: %s" % (i + 1, len(x0s), controller.stats["status"])
+    xs.append(controller.vardict["x"].copy())
+    us.append(controller.vardict["u"].copy())
+    Vs.append(controller.obj)
+
+# Plot trajectories.
+[fig, ax] = plt.subplots()
+for x in xs:
+    ax.plot(x[:,0], x[:,1], color="black")
+    ax.plot(x[0,0], x[0,1], marker="o", markeredgecolor="black",
+            markerfacecolor="black")
+ax.set_xlabel("Position")
+ax.set_ylabel("Velocity")
+fig.tight_layout()
+mpc.plots.showandsave(fig, "icyhill.pdf")

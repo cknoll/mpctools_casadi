@@ -44,5 +44,7 @@ cont.solve()
 
 # Plot solution.
 t = Delta*np.arange(Nt + 1)
-fig = mpc.plots.mpcplot(cont.vardict["x"], cont.vardict["u"], t)
+fig = mpc.plots.mpcplot(cont.vardict["x"], cont.vardict["u"], t,
+                        xnames=["Prey Fish", "Predator Fish"],
+                        unames=["Fishing Rate"])
 mpc.plots.showandsave(fig, "fishing.pdf")

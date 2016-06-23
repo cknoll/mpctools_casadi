@@ -18,8 +18,9 @@ if "--ioff" in sys.argv:
     SHOW_FIGURE_WINDOWS = False
     SHOWANDSAVE_DEFAULT_CHOICE = "y"
 
-def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
-            title=None,timefirst=True,legend=True,returnAxes=False):
+def mpcplot(x, u, t, xsp=None, fig=None, xinds=None, uinds=None, tightness=0.5,
+            title=None, timefirst=True, legend=True, returnAxes=False,
+            xnames=None, unames=None):
     """
     Makes a plot of the state and control trajectories for an mpc problem.
     
@@ -56,6 +57,10 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         xlspec = "-g"
         ulspec = "-b"
         plotxsp = True
+    if xnames is None:
+        xnames = ["State %d" % (i + 1) for i in xinds]
+    if unames is None:
+        unames = ["Control %d" % (i + 1) for i in uinds]
     
     # Figure out how many plots to make.
     numrows = max(len(xinds),len(uinds))
@@ -71,7 +76,7 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
         a = fig.add_subplot(numrows,numcols,numcols*(i+1))
         a.step(t,np.squeeze(u[uind,:]),ulspec,where="post")
         a.set_xlabel("Time")
-        a.set_ylabel("Control %d" % (uind + 1))
+        a.set_ylabel(unames[uind])
         zoomaxis(a,yscale=1.05)
         prettyaxesbox(a)
         prettyaxesbox(a,facecolor="white",front=False)
@@ -88,14 +93,14 @@ def mpcplot(x,u,t,xsp=None,fig=None,xinds=None,uinds=None,tightness=.5,
             if legend:            
                 plt.legend(loc="best")
         a.set_xlabel("Time")
-        a.set_ylabel("State %d" % (xind + 1))
+        a.set_ylabel(xnames[xind])
         zoomaxis(a,yscale=1.05)
         prettyaxesbox(a)
         prettyaxesbox(a,facecolor="white",front=False)
         xax.append(a)
     
     # Layout tightness.
-    if not tightness is None:
+    if tightness is not None:
         fig.tight_layout(pad=tightness)
     if title is not None:
         fig.canvas.set_window_title(title)       
