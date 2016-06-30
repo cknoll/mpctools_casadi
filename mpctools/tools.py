@@ -341,7 +341,9 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
         else:
             raise KeyError("l argument %s is invalid!" % k)
     obj = l(*finallargs)  
-    if lx is not None and x0bar is not None:
+    if lx is not None or x0bar is not None:
+        if lx is None or x0bar is None:
+            raise ValueError("Both or none of lx and x0bar must be given!")
         obj += lx(varStruct["x",0] - x0bar)
     
     # Decide if w is inside the model or additive.

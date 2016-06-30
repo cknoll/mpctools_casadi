@@ -56,6 +56,7 @@ examplefiles += [
     "nmpcexample.py",
     "periodicmpcexample.py",
     "vdposcillator.py",
+    "predatorprey.py",
 ]
 showoutput = set(["fishing.py", "cargears.py"])
 
