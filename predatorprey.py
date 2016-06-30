@@ -46,6 +46,7 @@ model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 f = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], "f", rk4=True, Delta=Delta)
 h = mpc.getCasadiFunc(measurement, [Nx], ["x"], "h")
 x0 = np.array([N0prey, 0, N0pred])
+x0bar = np.array([1.5*N0prey, 0, 0.6*N0pred]) # Initial estimate.
 
 # Simulate dynamics.
 Nsim = 250
@@ -79,7 +80,7 @@ def doplot(t, x, y, xhat, yhat):
         ax[i].plot(t, datahat[:,i], color="red", label="Estimated")
         ax[i].set_ylabel(labels[i])
         if i == 0:
-            ax[i].legend(loc="upper right")
+            ax[i].legend(loc="lower center", bbox_to_anchor=(0.5,1.01), ncol=2)
     ax[i].set_xlabel("Time")
     return fig
 
@@ -97,14 +98,16 @@ Nt = 25 # Window size for MHE.
 N = dict(x=Nx, u=Nu, y=Ny, w=Nx, v=Ny, t=Nt)
 guess = dict(x=np.tile(x0, (Nt + 1, 1)))
 lb = dict(x=0*np.ones((Nt + 1, Nx))) # Lower bounds are ones.
-mhe = mpc.nmhe(f, h, u[:Nt,:], y[:Nt + 1,:], l, N, lx, x0, lb=lb, guess=guess,
-               wAdditive=True, verbosity=0)
+mhe = mpc.nmhe(f, h, u[:Nt,:], y[:Nt + 1,:], l, N, lx, x0bar, lb=lb,
+               guess=guess, wAdditive=True, verbosity=0)
 
 xhat = np.NaN*np.ones((Nsim + 1, Nx))
 for t in xrange(Nsim + 1):
     # Solve current MHE problem.
     mhe.solve()
-    print "Step %d: %s" % (t + 1, mhe.stats["status"])
+    status = mhe.stats["status"]
+    if t % 25 == 0 or status != "Solve_Succeeded":
+        print "Step %d of %d: %s" % (t, Nsim - Nt, status)
     
     # Make a plot for the first step.
     if t == 0:
@@ -125,4 +128,4 @@ yhat = np.array([measurement(xhat[i,:]) for i in xrange(Nsim + 1)])
 t = np.arange(Nsim + 1)*Delta
 fig = doplot(t, x, y, xhat, yhat)
 #mpc.plots.showandsave(firstfig, "predatorprey_first.pdf")
-#mpc.plots.showandsave(fig, "predatorprey.pdf")
+mpc.plots.showandsave(fig, "predatorprey.pdf")

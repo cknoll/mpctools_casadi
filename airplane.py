@@ -36,27 +36,10 @@ def wind(x,y,z):
 # -  phi  : Bank angle (roughly rotation about roll axis)
 # -   T   : Engine thrust
 def ode(x,u):
-    # Extract controls and some states.
-    
-    # I'd like to write
-    #    
-    # [x,y,z,V,psi] = x[:]
-    # [gam,phi,T] = u[:]
-    # [wx, wy, wz] = wind(x,u,z)[:]     
-    #    
-    # But that doesn't work in Casadi 3.0, so we're stuck with the following.
-    y = x[1] # analysis:ignore because we don't happen to use this guy.
-    z = x[2]
-    V = x[3]
-    psi = x[4]
-    x = x[0] # This one has to come last!
-    gam = u[0]
-    phi = u[1]
-    T = u[2]
-    w = wind(x, y, z)
-    wx = w[0]
-    wy = w[1]
-    wz = w[2]     
+    """Continuous-time ODE model."""
+    [x, y, z, V, psi] = x[:]
+    [gam, phi, T] = u[:]
+    [wx, wy, wz] = wind(x,u,z)[:]
     
     dxdt = [
         V*np.cos(psi)*np.cos(gam) + wx,
