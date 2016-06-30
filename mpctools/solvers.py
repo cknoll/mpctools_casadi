@@ -478,6 +478,35 @@ class ControlSolver(object):
                 and "xc" not in newguess.keys()): # keys() is important!
             self.infercollocguess()
     
+    def newmeasurement(self, y, u=None, x0bar=None):
+        """
+        Adds new measurement for MHE.
+        
+        The current u and a new update for the prior x0bar can also be given.
+        """
+        parkeys = self.par.keys()
+        cycles = {}
+        if "y" not in parkeys:
+            raise TypeError("y is missing from par! Not from mhe().")
+        cycles["y"] = y
+        if u is not None:
+            if "u" not in parkeys:
+                raise TypeError("u is missing from par! Not from mhe().")
+            cycles["u"] = u
+        
+        # Actually cycle things.
+        # TODO: split out saveguess and use same logic.
+        for (k, newval) in cycles.iteritems():
+            for t in xrange(len(self.par[k]) - 1):
+                self.par[k,t] = self.par[k,t + 1]
+            self.par[k,-1] = newval
+            
+        # Also do x0bar.
+        if x0bar is not None:
+            if "x0bar" not in parkeys:
+                raise TypeError("Object does not accept x0bar!")
+            self.par["x0bar",0] = x0bar
+    
     def infercollocguess(self):
         """Infers a guess for "xc" based on the guess for "x"."""
         try:

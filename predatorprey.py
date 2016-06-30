@@ -4,20 +4,21 @@ import matplotlib.pyplot as plt
 from numpy import random
 
 random.seed(927)
+MEASURE_PREY = False # Decide whether we know the total number of prey.
 
 # Sizes.
 Nx = 3
 Nu = 1
-Ny = 1
+Ny = 1 + MEASURE_PREY
 Delta = 0.1
 
 # Pick coefficients.
 a = 0.5 # Kill rate for prey.
 b = 1 # Birth rate for prey.
-c = 0.25 # Birth rate for predators.
+c = 0.5 # Birth rate for predators.
 d = 1 # Death rate for predators.
 N0prey = 50 # Scale factor for prey.
-N0pred = 20 # Scale factor for predators.
+N0pred = 25 # Scale factor for predators.
 def ode(x, u):
     """Predator/prey dynamics."""
     [Nprey, Ntag, Npred] = x[:]
@@ -35,7 +36,10 @@ def measurement(x):
     """Returns fraction of tagged animals."""
     Nprey = x[0]
     Ntag = x[1]
-    return np.array([Ntag/(Nprey + Ntag)])
+    y = [Ntag/(Nprey + Ntag)]
+    if MEASURE_PREY:
+        y.append(Nprey + Ntag)
+    return np.array(y)
 
 # Convert to Casadi functions and simulator.    
 model = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
@@ -44,20 +48,40 @@ h = mpc.getCasadiFunc(measurement, [Nx], ["x"], "h")
 x0 = np.array([N0prey, 0, N0pred])
 
 # Simulate dynamics.
-Nt = 100
-x = np.NaN*np.ones((Nt + 1, Nx))
+Nsim = 250
+x = np.NaN*np.ones((Nsim + 1, Nx))
 x[0,:] = x0
-u = 0.1*np.ones((Nt, Nu))
-y = np.NaN*np.ones((Nt + 1, Ny))
-noise = 0.05*random.randn(Nt + 1, Ny) # Multiplicative noise term.
-for t in xrange(Nt + 1):
+u = np.zeros((Nsim, Nu))
+t = Delta*np.arange(Nsim)
+u[:,0] = 0.1*(1 + np.sin(2*np.pi*t/10))
+y = np.NaN*np.ones((Nsim + 1, Ny))
+noise = 0.05*random.randn(Nsim + 1, Nx) # Multiplicative noise term.
+for t in xrange(Nsim + 1):
     # Round x and take measurement.
     x[t,:] = np.maximum(np.round(x[t,:]*(1 + noise[t,:])), 0)
     y[t] = measurement(x[t,:])    
     
     # Simulate step.
-    if t < Nt:
+    if t < Nsim:
         x[t + 1,:] = model.sim(x[t,:], u[t,:])
+
+# Define a plotting function.
+def doplot(t, x, y, xhat, yhat):
+    """Makes a plot of actual and estimated states and outputs."""
+    labels = ["Untagged Prey", "Tagged Prey", "Predators", "Tag Fraction"]
+    if MEASURE_PREY:
+        labels.append("Total Prey")
+    data = np.concatenate((x, y), axis=1)
+    datahat = np.concatenate((xhat, yhat), axis=1)
+    [fig, ax] = plt.subplots(nrows=len(labels))
+    for (i, label) in enumerate(labels):
+        ax[i].plot(t, data[:,i], color="green", label="Actual")
+        ax[i].plot(t, datahat[:,i], color="red", label="Estimated")
+        ax[i].set_ylabel(labels[i])
+        if i == 0:
+            ax[i].legend(loc="upper right")
+    ax[i].set_xlabel("Time")
+    return fig
 
 # Now try MHE.
 def stagecost(w, v):
@@ -65,29 +89,40 @@ def stagecost(w, v):
     return 0.1*mpc.mtimes(w.T, w) + 10*mpc.mtimes(v.T, v)
 def prior(dx):
     """Prior weight function."""
-    return 100*mpc.mtimes(dx.T, dx)
+    return 10*mpc.mtimes(dx.T, dx)
 l = mpc.getCasadiFunc(stagecost, [Nx,Ny], ["w","v"])
 lx = mpc.getCasadiFunc(prior, [Nx], ["dx"])
 
+Nt = 25 # Window size for MHE.
 N = dict(x=Nx, u=Nu, y=Ny, w=Nx, v=Ny, t=Nt)
 guess = dict(x=np.tile(x0, (Nt + 1, 1)))
 lb = dict(x=0*np.ones((Nt + 1, Nx))) # Lower bounds are ones.
-mhe = mpc.nmhe(f, h, u, y, l, N, lx, x0, lb=lb, guess=guess, wAdditive=True)
-mhe.solve()
-xhat = mhe.vardict["x"]
-yhat = np.array([measurement(xhat[i,:]) for i in xrange(Nt + 1)])
+mhe = mpc.nmhe(f, h, u[:Nt,:], y[:Nt + 1,:], l, N, lx, x0, lb=lb, guess=guess,
+               wAdditive=True, verbosity=0)
+
+xhat = np.NaN*np.ones((Nsim + 1, Nx))
+for t in xrange(Nsim + 1):
+    # Solve current MHE problem.
+    mhe.solve()
+    print "Step %d: %s" % (t + 1, mhe.stats["status"])
+    
+    # Make a plot for the first step.
+    if t == 0:
+        firstfig = doplot(Delta*np.arange(Nt + 1), x[:Nt + 1,:], y[:Nt + 1,:],
+                          mhe.vardict["x"], y[:Nt + 1,:] - mhe.vardict["v"])
+    
+    # If at end, save the remaining trajectory. Otherwise, cycle.
+    if t + Nt >= Nsim:
+        xhat[t:,:] = mhe.vardict["x"]
+        break
+    else:
+        xhat[t,:] = mhe.vardict["x"][0,:]
+        mhe.newmeasurement(y[t + Nt,:], u[t + Nt,:], mhe.vardict["x"][1,:])
+        mhe.saveguess()
+yhat = np.array([measurement(xhat[i,:]) for i in xrange(Nsim + 1)])
 
 # Make a plot.
-t = np.arange(Nt + 1)*Delta
-labels = ["Untagged Prey", "Tagged Prey", "Predators", "Tag Fraction"]
-data = np.concatenate((x, y), axis=1)
-datahat = np.concatenate((xhat, yhat), axis=1)
-[fig, ax] = plt.subplots(nrows=len(labels))
-for (i, label) in enumerate(labels):
-    ax[i].plot(t, data[:,i], color="green", label="Actual")
-    ax[i].plot(t, datahat[:,i], color="red", label="Estimated")
-    ax[i].set_ylabel(labels[i])
-    if i == 0:
-        ax[i].legend(loc="upper right")
-ax[i].set_xlabel("Time")
-mpc.plots.showandsave(fig, "predatorprey.pdf")
+t = np.arange(Nsim + 1)*Delta
+fig = doplot(t, x, y, xhat, yhat)
+#mpc.plots.showandsave(firstfig, "predatorprey_first.pdf")
+#mpc.plots.showandsave(fig, "predatorprey.pdf")

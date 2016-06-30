@@ -302,14 +302,28 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
     
+    # Handle prior for x0bar.
+    extrapar = {}    
+    if lx is not None or x0bar is not None:
+        if lx is None or x0bar is None:
+            raise ValueError("Both or none of lx and x0bar must be given!")
+        includeprior = True
+        extrapar["x0bar"] = x0bar
+        guess["x0bar"] = x0bar # Store parameters in guess struct.
+    else:
+        includeprior = False
+    extraparshapes = __getShapes(extrapar)    
+    
+    
     # Now get the shapes of all the variables that are present.
-    allShapes = __generalVariableShapes(N,finalx=True,finaly=True)
+    allShapes = __generalVariableShapes(N, finalx=True, finaly=True,
+                                        extra=extraparshapes)
     if "c" not in N:
         N["c"] = 0    
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
-    parNames = set(["u","p","y"])
+    parNames = set(["u","p","y"] + extrapar.keys())
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
         
     varNames = set(["x","z","w","v","xc","zc"])
@@ -341,10 +355,8 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
         else:
             raise KeyError("l argument %s is invalid!" % k)
     obj = l(*finallargs)  
-    if lx is not None or x0bar is not None:
-        if lx is None or x0bar is None:
-            raise ValueError("Both or none of lx and x0bar must be given!")
-        obj += lx(varStruct["x",0] - x0bar)
+    if includeprior:
+        obj += lx(varStruct["x",0] - parStruct["x0bar",0])
     
     # Decide if w is inside the model or additive.
     fErrorVars = []    
@@ -450,7 +462,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
     var and par must both be casadi sym_structs.
     
     Note that only variable fields are taken from lb and ub, but parameter
-    values must be specified in the guess dictionary
+    values must be specified in the guess dictionary.
     """
 
     # Initialize things.
