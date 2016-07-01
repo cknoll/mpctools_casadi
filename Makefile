@@ -8,7 +8,8 @@ EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             collocationexample.py comparison_casadi.py comparison_mtc.py \
             econmpc.py example2-8.py mheexample.py mpcexampleclosedloop.py \
             mpcmodelcomparison.py nmheexample.py nmpcexample.py \
-            periodicmpcexample.py vdposcillator.py runall.py
+            periodicmpcexample.py vdposcillator.py predatorprey.py \
+            cargears.py fishing.py runall.py
 
 DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
