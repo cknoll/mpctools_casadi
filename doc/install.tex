@@ -10,15 +10,20 @@
     Install a scientific Python 2.7 distribution
     \begin{itemize}
         \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
+        \item Be sure to choose 2.7 and not 3.x
         \item Spyder (a Python IDE) is very helpful but not required.
-        \item See next slide for examples.
+        \item See a few slides later for examples.
     \end{itemize}
     
     \medskip
     
     Download our \texttt{mpctools} Python package
     \begin{itemize}
-        \item Download zipped package (see ``Downloads''): \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
+        \item Download zipped package: \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
+        \begin{itemize}
+            \item Click ``Downloads'' (cloud icon on left)
+            \item Choose \texttt{mpc-tools-casadi.zip}
+        \end{itemize}
         \item Unzip to a convenient location.
     \end{itemize}
     
@@ -27,6 +32,9 @@
     Download \casadi{} (Version $\ge$3.0)
     \begin{itemize}
         \item Windows/Linux/Mac zip file available at \smallurl{http://files.casadi.org}
+            \begin{itemize}
+                \item Choose 3.0.1, pick OS, and download \texttt{casadi-py27-*.zip}
+            \end{itemize}
         \item Unzip \texttt{casadi}, \texttt{lib}, and \texttt{include} to the \texttt{mpc-tools-casadi} folder from the previous step.
     \end{itemize}
     
@@ -35,12 +43,12 @@
     Optional: Add CasADi and \texttt{mpctools} to your Python path
     \begin{itemize}
         \item Open a Python interpreter (run \lstinline[style=shell]!python! from a terminal/command prompt)
-        \item Run the commands \lstinline[style=python]!import site; print site.getsitepackages()! to see where your site packages are stored
+        \item Run the commands \lstinline[style=python]!import site; print site.getusersitepackages()! to see where your user site packages are stored
         \item Move the \texttt{casadi}, \texttt{lib}, \texttt{include}, and \texttt{mpctools} folders to that location.
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Scientific Python Options}
+\begin{frame}[allowframebreaks]{Scientific Python Options}
     Anaconda (Linux, Windows, Mac)
     \begin{itemize}
         \item Download from \smallurl{https://www.continuum.io/downloads}
@@ -56,6 +64,20 @@
         \item Includes \texttt{python-numpy}, \texttt{python-scipy}, and \texttt{python-matplotlib}.
     \end{itemize}
     
+    \framebreak
+    
+    Miniconda (Linux, Windows, Mac)
+    \begin{itemize}
+        \item Smaller version of Anaconda
+        \item Download from \smallurl{http://conda.pydata.org/miniconda.html}
+        \item After install, need to install additional components
+        \begin{itemize}
+            \item Packages: \lstinline[style=shell]@conda install numpy scipy matplotlib@
+            \item IDE: \lstinline[style=shell]@conda install spyder@
+            \item Both commands should be entered in a terminal/command prompt
+        \end{itemize}
+    \end{itemize}
+    
     \medskip
     
     Python(x,y) (Windows only)
@@ -66,7 +88,7 @@
 \end{frame}
 
 \begin{frame}{Making Sure Everything Works}
-    First, open a Python interpreter\footnote{Open a command prompt/terminal in the \smallurl{mpc-tools-casadi} folder and enter \lstinline[style=shell]!python!.} and run \lstinline[style=python]!import casadi, mpctools!.
+    First, open a Python interpreter\footnote{Open a command prompt/terminal in the \smallurl{mpc-tools-casadi} folder and enter \lstinline[style=shell]!python!} and run \lstinline[style=python]!import casadi, mpctools!.
     \begin{itemize}
         \item If this doesn't work, make sure your CasADi folder shows up in \lstinline[style=python]!import sys; print sys.path!.
         \item If you have multiple Python distributions on your machine, don't (or at least make sure you're using the one you think you are).
@@ -98,6 +120,23 @@
         \item Any Python interpreter can load the packages
         \item May be difficult to keep track of versions
         \item A local install will override a global install in the local directory
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Special Notes}
+    The CasADi version you download must match the bitness of your Python installation (i.e., 32 vs. 64 bit).
+    \begin{itemize}
+        \item For 32 bit: \texttt{casadi-py27-np1.9.1-v3.0.1.zip}
+        \item For 64 bit: \texttt{casadi-py27-np1.9.1-v3.0.1-64bit.zip}
+        \item You can check Python bitness in an interpreter with \lstinline[style=python]!import sys; print 64 if sys.maxsize > 2**32 else 32!
+    \end{itemize}
+    
+    \medskip
+    
+    For Windows 64 bit users, the official releases are bugged. You will need a version from the ``commits'' folder on \texttt{files.casadi.org}.
+    \begin{itemize}
+        \item E.g., \smallurl{https://sourceforge.net/projects/casadi/}\smallurl{files/CasADi/commits/de2f632/windows/}
+        \item These are development versions with extra features (but possibly extra bugs)
     \end{itemize}
 \end{frame}
 
