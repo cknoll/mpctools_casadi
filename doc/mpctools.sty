@@ -2,6 +2,9 @@
 \usepackage{listings,booktabs,textcomp}
 \providecommand{\lstinline}{} % This makes my IDE happy.
 
+\usepackage{xcolor}
+\definecolor{codegray}{gray}{0.5}
+
 \lstdefinestyle{makefile}{
     language={[gnu]make},
     numbers=left,
@@ -16,7 +19,7 @@
 
 \lstdefinestyle{shell}{
     language=bash,
-    basicstyle=\ttfamily\footnotesize,
+    basicstyle=\ttfamily\footnotesize\color{codegray},
     upquote=true,
 }
 

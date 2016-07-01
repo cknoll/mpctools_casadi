@@ -1,8 +1,10 @@
 \documentclass[xcolor=dvipsnames]{beamer}
 
 \usepackage{mpctools}
+\usepackage{hyperref}
 
 \setbeamertemplate{navigation symbols}{}
+\newcommand{\clickurl}[1]{\href{#1}{\textcolor{blue}{\smallurl{#1}}}}
 
 \begin{document}
 %
@@ -19,7 +21,7 @@
     
     Download our \texttt{mpctools} Python package
     \begin{itemize}
-        \item Download zipped package: \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
+        \item Download zipped package: \clickurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}
         \begin{itemize}
             \item Click ``Downloads'' (cloud icon on left)
             \item Choose \texttt{mpc-tools-casadi.zip}
@@ -31,7 +33,7 @@
     
     Download \casadi{} (Version $\ge$3.0)
     \begin{itemize}
-        \item Windows/Linux/Mac zip file available at \smallurl{http://files.casadi.org}
+        \item Windows/Linux/Mac zip file available at \clickurl{http://files.casadi.org}
             \begin{itemize}
                 \item Choose 3.0.1, pick OS, and download \texttt{casadi-py27-*.zip}
             \end{itemize}
@@ -51,7 +53,7 @@
 \begin{frame}[allowframebreaks]{Scientific Python Options}
     Anaconda (Linux, Windows, Mac)
     \begin{itemize}
-        \item Download from \smallurl{https://www.continuum.io/downloads}
+        \item Download from \clickurl{https://www.continuum.io/downloads}
         \item Perhaps a bit bloated (contains packages we do not need)
         \item Typically the easiest version to work with.
     \end{itemize}
@@ -69,7 +71,7 @@
     Miniconda (Linux, Windows, Mac)
     \begin{itemize}
         \item Smaller version of Anaconda
-        \item Download from \smallurl{http://conda.pydata.org/miniconda.html}
+        \item Download from \clickurl{http://conda.pydata.org/miniconda.html}
         \item After install, need to install additional components
         \begin{itemize}
             \item Packages: \lstinline[style=shell]@conda install numpy scipy matplotlib@
@@ -82,7 +84,7 @@
     
     Python(x,y) (Windows only)
     \begin{itemize}
-        \item Download from \smallurl{https://code.google.com/p/pythonxy/}
+        \item Download from \clickurl{http://python-xy.github.io/}
         \item Only 32 bit is available.
     \end{itemize}
 \end{frame}
@@ -133,9 +135,9 @@
     
     \medskip
     
-    For Windows 64 bit users, the official releases are bugged. You will need a version from the ``commits'' folder on \texttt{files.casadi.org}.
+    For Windows 64 bit, the official releases are bugged. Use a version from the ``commits'' folder on \clickurl{http://files.casadi.org}.
     \begin{itemize}
-        \item E.g., \smallurl{https://sourceforge.net/projects/casadi/}\smallurl{files/CasADi/commits/de2f632/windows/}
+        \item E.g., commit \texttt{de2f632} from \href{https://sourceforge.net/projects/casadi/files/CasADi/commits/de2f632/windows/}{\textcolor{blue}{here}}
         \item These are development versions with extra features (but possibly extra bugs)
     \end{itemize}
 \end{frame}
