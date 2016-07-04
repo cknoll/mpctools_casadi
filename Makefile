@@ -2,14 +2,14 @@
 
 # List source files here.
 MPCTOOLS_SRC := $(addprefix mpctools/, __init__.py colloc.py plots.py \
-                  solvers.py tools.py util.py)
+                  solvers.py tools.py util.py mpcsim.py)
 
 EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             collocationexample.py comparison_casadi.py comparison_mtc.py \
             econmpc.py example2-8.py mheexample.py mpcexampleclosedloop.py \
             mpcmodelcomparison.py nmheexample.py nmpcexample.py \
             periodicmpcexample.py vdposcillator.py predatorprey.py \
-            cargears.py fishing.py runall.py
+            cargears.py fishing.py runall.py siso_lmpc_mpcsim.py
 
 DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
