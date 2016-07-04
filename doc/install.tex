@@ -14,7 +14,7 @@
         \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
         \item Be sure to choose 2.7 and not 3.x
         \item Spyder (a Python IDE) is very helpful but not required.
-        \item See a few slides later for examples.
+        \item See the \hyperlink{scientificpython}{\textcolor{blue}{Scientific Python Options}} slides for some good choices
     \end{itemize}
     
     \medskip
@@ -36,6 +36,7 @@
         \item Windows/Linux/Mac zip file available at \clickurl{http://files.casadi.org}
             \begin{itemize}
                 \item Choose 3.0.1, pick OS, and download \texttt{casadi-py27-*.zip}
+                \item Windows 64 bit users, see the \hyperlink{specialnotes}{\textcolor{blue}{Special Notes}} slide
             \end{itemize}
         \item Unzip \texttt{casadi}, \texttt{lib}, and \texttt{include} to the \texttt{mpc-tools-casadi} folder from the previous step.
     \end{itemize}
@@ -47,10 +48,14 @@
         \item Open a Python interpreter (run \lstinline[style=shell]!python! from a terminal/command prompt)
         \item Run the commands \lstinline[style=python]!import site; print site.getusersitepackages()! to see where your user site packages are stored
         \item Move the \texttt{casadi}, \texttt{lib}, \texttt{include}, and \texttt{mpctools} folders to that location.
+        \begin{itemize}
+            \item You should make the folders if they do not already exist
+        \end{itemize}
     \end{itemize}
 \end{frame}
 
 \begin{frame}[allowframebreaks]{Scientific Python Options}
+    \label{scientificpython}
     Anaconda (Linux, Windows, Mac)
     \begin{itemize}
         \item Download from \clickurl{https://www.continuum.io/downloads}
@@ -125,7 +130,9 @@
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Special Notes}
+% Need this macro to split link across two lines.
+\newcommand{\winsixtyfour}[1]{\href{https://sourceforge.net/projects/casadi/files/CasADi/commits/de2f632/windows/}{\textcolor{blue}{\footnotesize \texttt{#1}}}}
+\begin{frame}[label=specialnotes]{Special Notes}
     The CasADi version you download must match the bitness of your Python installation (i.e., 32 vs. 64 bit).
     \begin{itemize}
         \item For 32 bit: \texttt{casadi-py27-np1.9.1-v3.0.1.zip}
@@ -137,7 +144,7 @@
     
     For Windows 64 bit, the official releases are bugged. Use a version from the ``commits'' folder on \clickurl{http://files.casadi.org}.
     \begin{itemize}
-        \item E.g., commit \texttt{de2f632} from \href{https://sourceforge.net/projects/casadi/files/CasADi/commits/de2f632/windows/}{\textcolor{blue}{here}}
+        \item E.g., commit \texttt{de2f632} from \winsixtyfour{https://sourceforge.net/}\hspace{0pt}\winsixtyfour{projects/casadi/files/CasADi/commits/de2f632/windows/}
         \item These are development versions with extra features (but possibly extra bugs)
     \end{itemize}
 \end{frame}

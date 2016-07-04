@@ -11,7 +11,7 @@ EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             periodicmpcexample.py vdposcillator.py predatorprey.py \
             cargears.py fishing.py runall.py siso_lmpc_mpcsim.py \
             cstr_lqg_mpcsim.py cstr_nmpc_mpcsim.py heater_pid_mpcsim.py \
-            template.py
+            template.py icyhill.py
 
 DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
