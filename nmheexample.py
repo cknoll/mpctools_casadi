@@ -9,7 +9,7 @@ from numpy import random
 random.seed(927) # Seed random number generator.
 
 doPlots = True
-fullInformation = False # Whether to use full information estimation or MHE.
+fullInformation = False # True for full information estimation, False for MHE.
 
 # Problem parameters.
 Nt = 10 # Horizon length
@@ -43,16 +43,20 @@ k_2 = 0.01
 RT = 32.84
 
 # Continuous-time models.
-def ode(x,u,w=[0,0,0]): # We define the model with u, but there isn't one.
-    # [cA, cB, cC] = x[:Nx] # Doesn't work in Casadi 3.0.
-    cA = x[0]
-    cB = x[1]
-    cC = x[2]
+def ode(x, u, w=[0,0,0]): # We define the model with u, but there isn't one.
+    """ODE for reactor species evolution."""
+    [cA, cB, cC] = x[:]
     rate1 = k1*cA - k_1*cB*cC    
     rate2 = k2*cB**2 - k_2*cC
-    return np.array([-rate1 + w[0], rate1 - 2*rate2 + w[1], rate1 + rate2 + w[2]])    
+    dxdt = [
+        -rate1 + w[0],
+        rate1 - 2*rate2 + w[1],
+        rate1 + rate2 + w[2],
+    ]
+    return np.array(dxdt)    
 
 def measurement(x):
+    """Pressure measurement."""
     return RT*(x[0] + x[1] + x[2])
 
 ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nw],["x","u","w"],"F")
@@ -79,24 +83,18 @@ v = sigma_v*random.randn(Nsim,Nv)
 usim = np.zeros((Nsim,Nu)) # This is just a dummy input.
 xsim = np.zeros((Nsim+1,Nx))
 xsim[0,:] = x0
-ysim = np.zeros((Nsim,Ny))
+yclean = np.zeros((Nsim, Ny))
+ysim = np.zeros((Nsim, Ny))
 
 for t in range(Nsim):
-    ysim[t] = measurement(xsim[t]) + v[t,:]    
+    yclean[t,:] = measurement(xsim[t]) # Get zero-noise measurement.
+    ysim[t,:] = yclean[t,:] + v[t,:] # Add noise to measurement.    
     xsim[t+1,:] = model.sim(xsim[t,:],usim[t,:],w[t,:])
-    
-# Plots.
-colors = ["red","blue","green"]
-fig = plt.figure()
-ax = fig.add_subplot(1,1,1)
-for i in range(Nx):
-    ax.plot(tplot,xsim[:,i],color=colors[i])
-ax.set_xlabel("Time")
-ax.set_ylabel("Concentration")    
 
 # Now do estimation. We're just going to use full-information estimation.
 xhat_ = np.zeros((Nsim+1,Nx))
 xhat = np.zeros((Nsim,Nx))
+yhat = np.zeros((Nsim,Ny))
 vhat = np.zeros((Nsim,Nv))
 what = np.zeros((Nsim,Nw))
 x0bar = x_0
@@ -115,7 +113,7 @@ for t in range(Nsim):
     tmax = t+1        
     lb = {"x":np.zeros((N["t"] + 1,Nx))}  
 
-    # Call solver. WOuld be baster to reuse a single solver object, but we
+    # Call solver. Would be faster to reuse a single solver object, but we
     # can't because the horizon is changing.
     starttime = time.clock()
     sol = mpc.callSolver(mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
@@ -126,9 +124,11 @@ for t in range(Nsim):
     if sol["status"] != "Solve_Succeeded":
         break
     xhat[t,:] = sol["x"][-1,...] # This is xhat( t  | t )
+    yhat[t,:] = measurement(xhat[t,:])    
     vhat[t,:] = sol["v"][-1,...]
     if t > 0:
         what[t-1,:] = sol["w"][-1,...]
+    
     # Apply model function to get xhat(t+1 | t )
     xhat_[t+1,:] = np.squeeze(F(xhat[t,:], usim[t,:], np.zeros((Nw,))))
     
@@ -157,9 +157,33 @@ for t in range(Nsim):
                 
 print "Simulation took %.5g s." % (time.clock() - initialtime)
 
-# Add to plots.
-for i in range(Nx):
-    ax.plot(tplot[:-1],xhat[:,i], marker="o", color=colors[i],
-            markeredgecolor=colors[i], markersize=3, linestyle="")
-mpc.plots.zoomaxis(ax, xscale=1.05,yscale=1.05)
-mpc.plots.showandsave(fig,"nmhe_exercise.pdf")
+# Plots.
+if doPlots:
+    [fig, ax] = plt.subplots(nrows=2)
+    xax = ax[0]
+    yax = ax[1]
+
+    # Plot states.    
+    colors = ["red","blue","green"]
+    species = ["A", "B", "C"]    
+    for (i, (c, s)) in enumerate(zip(colors, species)):
+        xax.plot(tplot, xsim[:,i], color=c, label="$c_%s$" % s)
+        xax.plot(tplot[:-1], xhat[:,i], marker="o", color=c, markersize=3, 
+             markeredgecolor=c, linestyle="", label=r"$\hat{c}_%s$" % s)
+    mpc.plots.zoomaxis(xax, xscale=1.05, yscale=1.05)
+    xax.set_ylabel("Concentration")
+    xax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
+    
+    # Plot measurements.
+    yax.plot(tplot[:-1], yclean[:,0], color="black", label="$P$")
+    yax.plot(tplot[:-1], yhat[:,0], marker="o", markersize=3, linestyle="",
+             markeredgecolor="black", markerfacecolor="black",
+             label=r"$\hat{P}$")
+    yax.plot(tplot[:-1], ysim[:,0], color="gray", label="$P + v$")
+    yax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
+    yax.set_ylabel("Pressure")
+    yax.set_xlabel("Time")
+
+    # Tweak layout and save.
+    fig.subplots_adjust(left=0.1, right=0.8)
+    mpc.plots.showandsave(fig,"nmheexample.pdf")
