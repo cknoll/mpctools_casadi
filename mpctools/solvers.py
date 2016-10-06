@@ -266,7 +266,7 @@ class ControlSolver(object):
         nlp = {
             "x" : self.__var,
             "f" : self.__obj,
-            "g" : self.__con
+            "g" : self.__con,
         }
         if self.__par is not None:
             nlp["p"] = self.__par

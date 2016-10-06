@@ -9,7 +9,7 @@ from numpy import random
 random.seed(927) # Seed random number generator.
 
 doPlots = True
-fullInformation = False # True for full information estimation, False for MHE.
+fullInformation = True # True for full information estimation, False for MHE.
 
 # Problem parameters.
 Nt = 10 # Horizon length
@@ -91,7 +91,7 @@ for t in range(Nsim):
     ysim[t,:] = yclean[t,:] + v[t,:] # Add noise to measurement.    
     xsim[t+1,:] = model.sim(xsim[t,:],usim[t,:],w[t,:])
 
-# Now do estimation. We're just going to use full-information estimation.
+# Now do estimation.
 xhat_ = np.zeros((Nsim+1,Nx))
 xhat = np.zeros((Nsim,Nx))
 yhat = np.zeros((Nsim,Ny))
@@ -100,7 +100,7 @@ what = np.zeros((Nsim,Nw))
 x0bar = x_0
 xhat[0,:] = x0bar
 guess = {}
-initialtime = time.clock()
+totaltime = -time.time()
 for t in range(Nsim):
     # Define sizes of everything.    
     N = {"x":Nx, "y":Ny, "u":Nu}
@@ -115,12 +115,17 @@ for t in range(Nsim):
 
     # Call solver. Would be faster to reuse a single solver object, but we
     # can't because the horizon is changing.
-    starttime = time.clock()
-    sol = mpc.callSolver(mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
-                                  y=ysim[tmin:tmax,:], l=l, N=N, lx=lx,
-                                  x0bar=x0bar, verbosity=0, guess=guess,
-                                  lb=lb))
-    print "%3d (%10.5g s): %s" % (t,time.clock() - starttime,sol["status"])
+    buildtime = -time.time()
+    solver = mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
+                      y=ysim[tmin:tmax,:], l=l, N=N, lx=lx,
+                      x0bar=x0bar, verbosity=0, guess=guess,
+                      lb=lb)
+    buildtime += time.time()
+    solvetime = -time.time()
+    sol = mpc.callSolver(solver)
+    solvetime += time.time()
+    print ("%3d (%5.3g s build, %5.3g s solve): %s"
+           % (t, buildtime, solvetime, sol["status"]))
     if sol["status"] != "Solve_Succeeded":
         break
     xhat[t,:] = sol["x"][-1,...] # This is xhat( t  | t )
@@ -149,13 +154,14 @@ for t in range(Nsim):
         # Need to redefine arrival cost.
         def lxfunc(x):
             return mpc.mtimes(x.T,linalg.inv(P),x)
-        lx = mpc.getCasadiFunc(lxfunc,[Nx],["x"],"lx")      
+        lx = mpc.getCasadiFunc(lxfunc,[Nx],["x"],"lx")
     
      # Add final guess state for new time point.
     for k in guess.keys():
         guess[k] = np.concatenate((guess[k],guess[k][-1:,...]))
-                
-print "Simulation took %.5g s." % (time.clock() - initialtime)
+
+totaltime += time.time()
+print "Simulation took %.5g s." % totaltime
 
 # Plots.
 if doPlots:
