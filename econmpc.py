@@ -4,6 +4,7 @@ import numpy as np
 import mpctools as mpc
 import matplotlib.pyplot as plt
 from matplotlib import cm, gridspec
+import time
 
 # Sizes.
 Nx = 2
@@ -107,6 +108,7 @@ fig.tight_layout(pad=.5)
 mpc.plots.showandsave(fig,"duality.pdf")
 
 # Build controller.
+buildtime = -time.time()
 contargs = dict(
     f=f,
     l=l,
@@ -127,6 +129,8 @@ contargs = dict(
     discretel=False,
 )
 controller = mpc.nmpc(**contargs)
+buildtime += time.time()
+print "Building controller took %.4g s." % buildtime
 
 # Pick different initial conditions and get open-loop profiles.
 x0vals = [np.array([(.7*np.cos(t) + 1)*cAs, (.7*np.sin(t)+1)*cBs])
