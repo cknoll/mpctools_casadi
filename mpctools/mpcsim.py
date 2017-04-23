@@ -144,7 +144,7 @@ def setvalue(var, desc):
 def showhelp():
     """Tk dialog box with simulation information."""
     tkmsg.showinfo('About MPC-Sim', 'MPC-Sim is a GUI for the '
-                   'mpc-tools-casadi package (Tom Badgwell)')
+                   'mpc-tools-casadi package (Tom Badgwell and Michael Risbeck)')
 
 def makemenus(win, simcon):
 
