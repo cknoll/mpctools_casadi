@@ -381,7 +381,7 @@ class ControlSolver(object):
             stats = solver.stats()
         self.__sol = sol
         self.__varval = self.__var(sol["x"])
-        self.__vardict = None # Laxy update in getter.
+        self.__vardict = None # Lazy update in getter.
         self.__objval = float(sol["f"])
         endtime = time.clock()
         

@@ -1066,12 +1066,14 @@ def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
     fexpr = symbols["fexpr"]
     
     # Evaluate function and make a Casadi object.  
-    fcasadi = casadi.Function(funcname, args, [fexpr])
+    fcasadi = casadi.Function(funcname, args, [fexpr], symbols["names"],
+                              [funcname])
     
     # Wrap with rk4 if requested.
     if rk4:
         frk4 = util.rk4(fcasadi, args[0], args[1:], Delta, M)
-        fcasadi = casadi.Function(funcname, args, [frk4])
+        fcasadi = casadi.Function(funcname, args, [frk4], symbols["names"],
+                                  [funcname])
     
     return fcasadi
 
@@ -1118,7 +1120,8 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
         wrappedIntegrator = integrator(x0=wrappedx0,
                                        p=casadi.vertcat(*wrappedpar))["xf"]
         integrator = casadi.Function(funcname, [wrappedx0] + wrappedpar,
-                                     [wrappedIntegrator])
+                                     [wrappedIntegrator], symbols["names"],
+                                     [funcname])
     return integrator
 
 
