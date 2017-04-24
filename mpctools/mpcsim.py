@@ -23,7 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import util
 
-def makegui(simcon):
+def makegui(simcon, **kwargs):
     """Build Tk window and plots; then start simulation."""
     # create main window
     root = tk.Tk()
@@ -56,7 +56,7 @@ def makegui(simcon):
     fillspace(menubar)
 
     # create the trend plots
-    Trndplt(root, simcon, rpanel, cpanel, stepbutton, resetbutton)
+    Trndplt(root, simcon, rpanel, cpanel, stepbutton, resetbutton, **kwargs)
 
     # start the main loop
     root.mainloop()
@@ -300,7 +300,7 @@ def makemenus(win, simcon):
 class Trndplt(object):
     """Strip chart using matplotlib."""
     def __init__(self, parent, simcon, runpause, opnclsd, stepbutton,
-                 resetbutton):
+                 resetbutton, plotspacing=None):
         # store inputs
         self.simcon = simcon
         self.copysimcon()        
@@ -322,6 +322,9 @@ class Trndplt(object):
         self.nrows     = max(self.ninputs, self.nxvs, self.noutputs)
         self.ncols = 3 if self.nxvs > 0 else 2
         self.submat = str(self.nrows) + str(self.ncols)
+        if plotspacing is None:
+            plotspacing = {}
+        self.plotspacing = plotspacing
 
         # build the figure
         self.fig = plt.Figure()
@@ -390,11 +393,13 @@ class Trndplt(object):
         """Removes all axes from the figure and rebuilds them."""
         self.fig.clear()
         self.initlines()
+        self.axes = makeaxes(self.fig, self.nrows, self.ncols, sharex=True)
         self.mvaxes = self.addaxes(self.mvlist, col=1)
         self.dvaxes = self.addaxes(self.dvlist, startrow=self.nmvs + 1, col=1)
         self.xvaxes = self.addaxes(self.xvlist, col=2)
         self.cvaxes = self.addaxes(self.cvlist, col=self.ncols)
         self.initializeaxes(clear=clear)
+        self.fig.subplots_adjust(**self.plotspacing)
 
     def initlines(self):
         """Sets all line attributes to empty lists."""
@@ -439,12 +444,12 @@ class Trndplt(object):
     def addaxes(self, varlist, col=1, startrow=1):
         """Adds an axis in the given column for each variable."""
         axes = []
-        for (i, var) in enumerate(varlist):        
-            isub = (startrow + i - 1)*self.ncols + col        
-            ax = self.fig.add_subplot(self.nrows, self.ncols, isub)
+        for (i, var) in enumerate(varlist):       
+            ax = self.axes[startrow - 1 + i, col - 1]
             ax.set_ylabel("%s %s" % (var.name, var.units))
             ax.set_title(var.desc)
             ax.set_ylim([var.pltmin, var.pltmax])
+            ax.margins(x=0)
             axes.append(ax)
         return axes
 
@@ -1076,3 +1081,25 @@ class SimCon(object):
             for (var, defaultvar) in varanddefault:
                 var._update(defaultvar)
                 
+def makeaxes(fig, rows, cols, sharex=True):
+    """
+    Returns a numpy array of axes arranged in a grid.
+    
+    Note that we can't use plt.subplots because we clear the axes but not the
+    figure.
+    """
+    axes = np.empty((rows, cols), dtype=object)
+    for j in xrange(cols):
+        xax = None
+        for i in xrange(rows):
+            ax = fig.add_subplot(rows, cols, i*cols + j + 1, sharex=xax)
+            axes[i, j] = ax
+            if sharex:
+                xax = ax
+    
+    # Shut off ticks for all axes except the bottom one.            
+    if sharex:
+        for ax in axes[:-1,:].flat:
+            for label in ax.get_xticklabels():
+                label.set_visible(False)
+    return axes
