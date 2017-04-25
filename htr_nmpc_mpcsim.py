@@ -133,19 +133,19 @@ def runsim(k, simcon, opnclsd):
 
             # For this case there are no input disturbances.
 
-            dxdt = htr.sim(x,u,d)
+            dxdt = ode(x, u, d)
             return dxdt
 
         def ode_augmented(x,u,d=ds):
 
             # Need to add extra zeros for derivative of disturbance states.
 
-            dxdt = np.concatenate((ode_disturbance(x[0:Nx],u,d),np.zeros((Nid,))))
+            dxdt = mpc.vcat([ode_disturbance(x[0:Nx],u,d), np.zeros((Nid,))])
             return dxdt
  
         htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
-
+        
         def measurement(x,d=ds):
 
             # For this case all of the disturbances are output disturbances.

@@ -1250,7 +1250,8 @@ class DiscreteSimulator(object):
     def args(self):
         return self.__argnames
         
-    def __init__(self,ode,Delta,argsizes,argnames=None,verbosity=1):
+    def __init__(self, ode, Delta, argsizes, argnames=None, verbosity=1,
+                 casaditype=None, scalar=True):
         """
         Initialize by specifying model and sizes of everything.
         """
@@ -1269,12 +1270,17 @@ class DiscreteSimulator(object):
         # Store names and Casadi Integrator object.
         self.__argnames = argnames
         self.verbosity = verbosity
-        self.__integrator = getCasadiIntegrator(ode,Delta,argsizes,argnames,
-                                                wrap=False,verbosity=verbosity)
+        self.__integrator = getCasadiIntegrator(ode, Delta, argsizes, argnames,
+                                                wrap=False, scalar=scalar,
+                                                casaditype=casaditype,
+                                                verbosity=verbosity)
 
-    def sim(self,*args):
+    def call(self, *args):
         """
-        Simulate one timestep.
+        Simulates one timestep and returns a Casadi vector (DM, SX, or MX).
+        
+        Useful if you are using this object to construct a new symbolic
+        function. If you are just simulating with numeric values, see self.sim.
         """
         # Check arguments.
         if len(args) != self.Nargs:
@@ -1287,6 +1293,17 @@ class DiscreteSimulator(object):
         # Call integrator.
         nextstep = self.__integrator(**integratorargs)
         xf = nextstep["xf"]
-        
-        return np.array(xf).flatten()  
+        return xf
+
+    def __call__(self, *args):
+        """
+        Interface to self.call.
+        """
+        return self.call(*args)
+    
+    def sim(self, *args):
+        """
+        Simulate one timestep and returns a Numpy array.
+        """
+        return np.array(self.call(*args)).flatten()
     
