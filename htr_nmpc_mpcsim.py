@@ -120,6 +120,7 @@ def runsim(k, simcon, opnclsd):
         xs = x0
         us = u0
         ds = d0
+        xaugs = np.concatenate((xs,np.zeros((Nid,))))
         
         # Define augmented model for state estimation.    
 
@@ -133,14 +134,14 @@ def runsim(k, simcon, opnclsd):
 
             # For this case there are no input disturbances.
 
-            dxdt = ode(x, u, d)
+            dxdt = ode(x[:Nx], u, d)
             return dxdt
 
         def ode_augmented(x,u,d=ds):
 
             # Need to add extra zeros for derivative of disturbance states.
 
-            dxdt = mpc.vcat([ode_disturbance(x[0:Nx],u,d), np.zeros((Nid,))])
+            dxdt = mpc.vcat([ode_disturbance(x,u,d), np.zeros((Nid,))])
             return dxdt
  
         htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
@@ -150,7 +151,7 @@ def runsim(k, simcon, opnclsd):
 
             # For this case all of the disturbances are output disturbances.
 
-            deltax = x - x0
+            deltax = x[:Nx] - x0
             dhat   = x[Nx:Nx+Nid]
             deltay = np.dot(Cx,deltax) + dhat
             ym     = deltay + y0
@@ -181,21 +182,22 @@ def runsim(k, simcon, opnclsd):
 
         # Weighting matrices for controller.
 
-        Q = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue,
-                     cvlist[3].qvalue, cvlist[4].qvalue])
-        R = np.diag([mvlist[0].rvalue, mvlist[1].rvalue, mvlist[2].rvalue])
-        S = np.diag([mvlist[0].svalue, mvlist[1].svalue, mvlist[2].svalue])
+        Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue,
+                      cvlist[3].qvalue, cvlist[4].qvalue])
+        Qx  = mpc.mtimes(Cx.T,Qy,Cx)
+        R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue, mvlist[2].rvalue])
+        S   = np.diag([mvlist[0].svalue, mvlist[1].svalue, mvlist[2].svalue])
 
         # Now calculate the cost-to-go.
 
-        [K, Pi] = mpc.util.dlqr(Ax,Bu,Q,R)
+        [K, Pi] = mpc.util.dlqr(Ax,Bu,Qx,R)
 
         # Define control stage cost.
 
         def stagecost(x,u,xsp,usp,Deltau):
             dx = x[:Nx] - xsp[:Nx]
             du = u - usp
-            return (mpc.mtimes(dx.T,Q,dx) + .1*mpc.mtimes(du.T,R,du)
+            return (mpc.mtimes(dx.T,Qx,dx) + .1*mpc.mtimes(du.T,R,du)
                 + mpc.mtimes(Deltau.T,S,Deltau))
 
         largs = ["x","u","x_sp","u_sp","Du"]
@@ -278,7 +280,7 @@ def runsim(k, simcon, opnclsd):
 
         # Make steady-state target selector.
 
-        contVars = [0,2]
+        contVars = [0,1,2,3,4]
         Rss = np.zeros((Nu,Nu))
         Qss = np.zeros((Ny,Ny))
         Qss[contVars,contVars] = 1 # Only care about controlled variables.
