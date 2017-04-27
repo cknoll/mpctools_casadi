@@ -281,9 +281,10 @@ def runsim(k, simcon, opnclsd):
         # Make steady-state target selector.
 
         contVars = [0,1,2,3,4]
-        Rss = np.zeros((Nu,Nu))
-        Qss = np.zeros((Ny,Ny))
-        Qss[contVars,contVars] = 1 # Only care about controlled variables.
+        Rss  = np.zeros((Nu,Nu))
+        Qyss = np.zeros((Ny,Ny))
+        Qyss[contVars,contVars] = 1 # We want to control all outputs
+#        Qxss = mpc.mtimes(Cx.T,Qyss,Cx)
 
         def sstargobj(y,y_sp,u,u_sp,Q,R):
             dy = y - y_sp
@@ -308,7 +309,7 @@ def runsim(k, simcon, opnclsd):
             "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
             "phi" : phi,
             "funcargs" : dict(phi=phiargs),
-            "extrapar" : {"R" : Rss, "Q" : Qss, "y_sp" : ys, "u_sp" : us},
+            "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
             "casaditype" : "SX" if useCasadiSX else "MX",
