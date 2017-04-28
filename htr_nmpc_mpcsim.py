@@ -17,6 +17,7 @@ def runsim(k, simcon, opnclsd):
     mvlist = simcon.mvlist
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
+    xvlist = simcon.xvlist
     oplist = simcon.oplist
     deltat = simcon.deltat
     nf = oplist[0]
@@ -303,7 +304,7 @@ def runsim(k, simcon, opnclsd):
             "guess" : {
                 "u" : np.tile(us, (1,1)),
                 "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
-                "y" : np.tile(xs, (1,1)),
+                "y" : np.tile(ys, (1,1)),
             },
             "p" : np.tile(ds, (1,1)), # Parameters for system.
             "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
@@ -358,7 +359,9 @@ def runsim(k, simcon, opnclsd):
             xvlist.vecassign(xs)
             xvlist.vecassign(xs, "est")
             mvlist.vecassign(us)
-            dvlist.vecassign(dhat_k[0], "est")
+            ds[0] = dhat_k[0]
+            ds[1] = dhat_k[1]
+            dvlist.vecassign(ds, "est")
 
         # Store values in simulation container
         simcon.proc = [htr]
@@ -602,6 +605,47 @@ CV5 = sim.XVobj(name='t2s', desc='cv - pass 2 tubeskin temp', units='(degf)',
             pltmin=850, pltmax=950, minlim=800.0, maxlim=920.0, noise=0.5,
             value=900.0, setpoint=900.0, Nf=60, menu=CVmenu)
 
+XV1 = sim.XVobj(name='x1', desc='state 1', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV2 = sim.XVobj(name='x2', desc='state 2', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV3 = sim.XVobj(name='x3', desc='state 3', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV4 = sim.XVobj(name='x4', desc='state 4', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV5 = sim.XVobj(name='x5', desc='state 5', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV6 = sim.XVobj(name='x6', desc='state 6', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV7 = sim.XVobj(name='x7', desc='state 7', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV8 = sim.XVobj(name='x8', desc='state 8', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV9 = sim.XVobj(name='x9', desc='state 9', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+XV10 = sim.XVobj(name='x10', desc='state 10', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
+
+
 # define options
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
@@ -611,7 +655,7 @@ OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 
 MVlist = [MV1, MV2, MV3]
 DVlist = [DV1, DV2]
-XVlist = []
+XVlist = [XV1, XV2, XV3, XV4, XV5, XV6, XV7, XV8, XV9, XV10]
 CVlist = [CV1, CV2, CV3, CV4, CV5]
 OPlist = [NF, OL]
 DeltaT = 1.0
