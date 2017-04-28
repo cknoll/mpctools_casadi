@@ -359,9 +359,8 @@ def runsim(k, simcon, opnclsd):
             xvlist.vecassign(xs)
             xvlist.vecassign(xs, "est")
             mvlist.vecassign(us)
-            ds[0] = dhat_k[0]
-            ds[1] = dhat_k[1]
-            dvlist.vecassign(ds, "est")
+            dvlist.vecassign(ds)
+            dvlist.vecassign(dhat_k, "est")
 
         # Store values in simulation container
         simcon.proc = [htr]
