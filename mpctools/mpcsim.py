@@ -1,6 +1,6 @@
 # mpcsim is a graphical user interface for the mpc-tools-casadi package
 #
-# Tom Badgwell June 2015
+# Tom Badgwell April 2017
 # Michael Risbeck February 2016
 #
 # to do list:
@@ -521,6 +521,7 @@ class Trndplt(object):
             self.initplot(dvaxis, dv, vallines=self.fdvlines, forecast=True)
 
         for (xv, xvaxis) in zip(self.xvlist, self.xvaxes):
+
             # Value history for states with vertical line at t = 0.
             self.initplot(xvaxis, xv, vallines=self.xvlines, vlinex=0,
                           valcolor="k")
@@ -983,7 +984,7 @@ class XVobj(Updatable):
                  value=0.0,
                  sstarg=0.0, ssqval=1.0,
                  setpoint=0.0, qvalue=1.0,
-                 maxlim=1.0e10, minlim=-1.0e10, roclim=1.0e10,
+                 maxlim=1.0e10, minlim=-1.0e10,
                  pltmax=100.0, pltmin=0.0,
                  noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
                  menu=("value","sstarg","ssqval","setpoint","qvalue",
@@ -1013,10 +1014,23 @@ class XVobj(Updatable):
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
 
+class XIobj(Updatable):
+    """Struct for invisible (not plotted) estimated states."""
+    def __init__(self, name=' ', desc=' ', units=' ', 
+                 value=0.0, Nf = 0,
+                 menu=("value")):
+        self.value  = value
+        self.est    = value
+        self.clpred = value*np.ones((Nf,))
+        self.olpred = value*np.ones((Nf,))
+        self.name   = name
+        self.desc   = desc
+        self.menu   = list(menu)
+
 class SimCon(object):
     """Struct for simulation contents."""
     def __init__(self, simname="", mvlist=(), dvlist=(), cvlist=(), xvlist=(),
-                 oplist=(), N=100, refint=100, runsim=False, deltat=1,
+                 xilist=(), oplist=(), N=100, refint=100, runsim=False, deltat=1,
                  alg=None, proc=None, mod=None, F=None, l=None, Pf=None,
                  xmk=None, gain=None, ydata=(), udata=(), root=None,
                  savedefaults=True):
@@ -1025,6 +1039,7 @@ class SimCon(object):
         self.dvlist = VarList(dvlist)
         self.cvlist = VarList(cvlist)
         self.xvlist = VarList(xvlist)
+        self.xilist = VarList(xilist)
         self.nmvs = len(self.mvlist)
         self.ndvs = len(self.dvlist)
         self.ncvs = len(self.cvlist)
@@ -1047,7 +1062,7 @@ class SimCon(object):
         self.root = root
         self.__defaults = None
         self.__defaultfields = ["refint", "deltat", "ydata", "udata", "N"]
-        self.__updatables = ["mvlist", "dvlist", "cvlist", "xvlist", "oplist"]
+        self.__updatables = ["mvlist", "dvlist", "cvlist", "xvlist", "xilist", "oplist"]
         
         if savedefaults:
             self.savedefaults()

@@ -1,6 +1,11 @@
 # This is a fired heater example.
 #
 
+# ToDo:
+# (1) Create a .pltflg on the XV class to disable state plotting if desired
+# (2) Create a IDV class for the integrating disturbances
+
+
 from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
@@ -18,6 +23,7 @@ def runsim(k, simcon, opnclsd):
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
+    xilist = simcon.xilist
     oplist = simcon.oplist
     deltat = simcon.deltat
     nf = oplist[0]
@@ -91,12 +97,20 @@ def runsim(k, simcon, opnclsd):
         x0 = np.zeros((Nx,))
         u0 = np.zeros((Nu,))
         d0 = np.zeros((Nd,))
-        for i in range(0,Ny-1):
+        for i in range(Ny):
+#            print "cvlist[i] = ", cvlist[i].value
             y0[i] = cvlist[i].value
-        for i in range(0,Nu-1):
+        for i in range(Nu):
+#            print "mvlist[i] = ", mvlist[i].value
             u0[i] = mvlist[i].value
-        for i in range(0,Nd-1):
+        for i in range(Nd):
+#            print "dvlist[i] = ", dvlist[i].value
             d0[i] = dvlist[i].value
+            
+#        print "y0 = ", y0
+#        print "x0 = ", x0
+#        print "u0 = ", u0
+#        print "d0 = ", d0
             
         # Define ode for the fired heater simulation.
 
@@ -184,7 +198,7 @@ def runsim(k, simcon, opnclsd):
         # Weighting matrices for controller.
 
         Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue,
-                      cvlist[3].qvalue, cvlist[4].qvalue])
+                       0.0001, 0.0001])
         Qx  = mpc.mtimes(Cx.T,Qy,Cx)
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue, mvlist[2].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue, mvlist[2].svalue])
@@ -356,11 +370,12 @@ def runsim(k, simcon, opnclsd):
             dhat_k   = np.zeros(Nid)
 
             # Store initial values for variables
-            xvlist.vecassign(xs)
-            xvlist.vecassign(xs, "est")
+            xilist.vecassign(xs)
+            xilist.vecassign(xs, "est")
             mvlist.vecassign(us)
             dvlist.vecassign(ds)
-            dvlist.vecassign(dhat_k, "est")
+            cvlist.vecassign(dhat_k, "dist")
+            #            dvlist[0].est = dhat_k
 
         # Store values in simulation container
         simcon.proc = [htr]
@@ -404,9 +419,12 @@ def runsim(k, simcon, opnclsd):
     udata         = simcon.udata
 
     # Get variable values
-    x_km1 = xvlist.asvec()
+    x_km1 = xilist.asvec()
     u_km1 = mvlist.asvec()
     d_km1 = dvlist.asvec()    
+
+#    print "d_km1 = ", d_km1
+#    print "u_km1 = ", u_km1
 
     # Advance the process
 
@@ -447,7 +465,7 @@ def runsim(k, simcon, opnclsd):
     for field in ["olpred", "clpred"]:
         mvlist.vecassign(u_k, field, index=0)
         dvlist.vecassign(d_km1, field, index=0)
-        xvlist.vecassign(xhat_k, field, index=0)
+        xilist.vecassign(xhat_k, field, index=0)
         cvlist.vecassign(yhat_k, field, index=0)
     
     xof_km1 = np.concatenate((xhat_k,dhat_k))
@@ -478,7 +496,7 @@ def runsim(k, simcon, opnclsd):
         for field in ["olpred", "clpred"]:
             mvlist.vecassign(u_k, field, index=(i + 1))
             dvlist.vecassign(d_km1, field, index=(i + 1))
-            xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
+            xilist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
     
         xof_km1 = xof_k
@@ -492,7 +510,7 @@ def runsim(k, simcon, opnclsd):
         ysp_k = [cvlist[0].setpoint, cvlist[1].setpoint, cvlist[2].setpoint,
                  cvlist[3].setpoint, cvlist[4].setpoint]
         usp_k = [mvlist[0].target, mvlist[1].target, mvlist[2].target]
-        xtarget = np.concatenate((ysp_k,dhat_k))
+        xtarget = np.concatenate((x_km1,dhat_k))
 
         # Previously had targetfinder.par["p",0] = d_km1, but this shouldn't
         # be because the target finder should be using the same model as the
@@ -526,12 +544,12 @@ def runsim(k, simcon, opnclsd):
         sol = mpc.util.casadiStruct2numpyDict(controller.var)
 
         mvlist.vecassign(u_k, "clpred", index=0)
-        xvlist.vecassign(xhat_k, "clpred", index=0)
+        xilist.vecassign(xhat_k, "clpred", index=0)
         cvlist.vecassign(yhat_k, "clpred", index=0)
 
         for i in range(Nf - 1):
             mvlist.vecassign(sol["u"][i+1,:], "clpred", index=(i + 1))
-            xvlist.vecassign(sol["x"][i+1,:Nx], "clpred", index=(i + 1))
+            xilist.vecassign(sol["x"][i+1,:Nx], "clpred", index=(i + 1))
             xcl_k = sol["x"][i+1,:]
             ycl_k = measurement(xcl_k)
             cvlist.vecassign(ycl_k[:Ny], "clpred", index=(i + 1))
@@ -544,11 +562,12 @@ def runsim(k, simcon, opnclsd):
 
     # Store variable values
     mvlist.vecassign(u_k)
-    xvlist.vecassign(x_k)
-    xvlist.vecassign(xhat_k, "est")
-    dvlist.vecassign(dhat_k, "est")
+    xilist.vecassign(x_k)
+    xilist.vecassign(xhat_k, "est")
+#    dvlist[0].est = dhat_k
     cvlist.vecassign(y_k)
     cvlist.vecassign(yhat_k, "est")
+    cvlist.vecassign(dhat_k, "dist")
     simcon.ydata    = ydata
     simcon.udata    = udata
 
@@ -604,46 +623,56 @@ CV5 = sim.XVobj(name='t2s', desc='cv - pass 2 tubeskin temp', units='(degf)',
             pltmin=850, pltmax=950, minlim=800.0, maxlim=920.0, noise=0.5,
             value=900.0, setpoint=900.0, Nf=60, menu=CVmenu)
 
-XV1 = sim.XVobj(name='x1', desc='state 1', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
+XI1  = sim.XIobj(name='x1',  desc='state 1',  value=0.0, Nf=60)
+XI2  = sim.XIobj(name='x2',  desc='state 2',  value=0.0, Nf=60)
+XI3  = sim.XIobj(name='x3',  desc='state 3',  value=0.0, Nf=60)
+XI4  = sim.XIobj(name='x4',  desc='state 4',  value=0.0, Nf=60)
+XI5  = sim.XIobj(name='x5',  desc='state 5',  value=0.0, Nf=60)
+XI6  = sim.XIobj(name='x6',  desc='state 6',  value=0.0, Nf=60)
+XI7  = sim.XIobj(name='x7',  desc='state 7',  value=0.0, Nf=60)
+XI8  = sim.XIobj(name='x8',  desc='state 8',  value=0.0, Nf=60)
+XI9  = sim.XIobj(name='x9',  desc='state 9',  value=0.0, Nf=60)
+XI10 = sim.XIobj(name='x10', desc='state 10', value=0.0, Nf=60)
 
-XV2 = sim.XVobj(name='x2', desc='state 2', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV3 = sim.XVobj(name='x3', desc='state 3', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV4 = sim.XVobj(name='x4', desc='state 4', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV5 = sim.XVobj(name='x5', desc='state 5', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV6 = sim.XVobj(name='x6', desc='state 6', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV7 = sim.XVobj(name='x7', desc='state 7', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV8 = sim.XVobj(name='x8', desc='state 8', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV9 = sim.XVobj(name='x9', desc='state 9', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
-XV10 = sim.XVobj(name='x10', desc='state 10', units='', 
-               pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
-
+#XV1 = sim.XVobj(name='x1', desc='state 1', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV2 = sim.XVobj(name='x2', desc='state 2', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV3 = sim.XVobj(name='x3', desc='state 3', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV4 = sim.XVobj(name='x4', desc='state 4', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV5 = sim.XVobj(name='x5', desc='state 5', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV6 = sim.XVobj(name='x6', desc='state 6', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV7 = sim.XVobj(name='x7', desc='state 7', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV8 = sim.XVobj(name='x8', desc='state 8', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV9 = sim.XVobj(name='x9', desc='state 9', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
+#
+#XV10 = sim.XVobj(name='x10', desc='state 10', units='', 
+#               pltmin=-100, pltmax=100, 
+#               value=0.0, Nf=60, menu=XVmenu)
 
 # define options
 
@@ -654,7 +683,9 @@ OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 
 MVlist = [MV1, MV2, MV3]
 DVlist = [DV1, DV2]
-XVlist = [XV1, XV2, XV3, XV4, XV5, XV6, XV7, XV8, XV9, XV10]
+#XVlist = [XV1, XV2, XV3, XV4, XV5, XV6, XV7, XV8, XV9, XV10]
+XVlist = []
+XIlist = [XI1, XI2, XI3, XI4, XI5, XI6, XI7, XI8, XI9, XI10]
 CVlist = [CV1, CV2, CV3, CV4, CV5]
 OPlist = [NF, OL]
 DeltaT = 1.0
@@ -662,6 +693,7 @@ N      = 120
 refint = 100
 simcon = sim.SimCon(simname=simname,
                     mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
+                    xilist=XIlist,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # Define state-space matrices.
