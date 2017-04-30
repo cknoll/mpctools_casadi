@@ -198,7 +198,7 @@ def runsim(k, simcon, opnclsd):
         # Weighting matrices for controller.
 
         Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue,
-                       0.0001, 0.0001])
+                       cvlist[3].qvalue, cvlist[4].qvalue])
         Qx  = mpc.mtimes(Cx.T,Qy,Cx)
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue, mvlist[2].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue, mvlist[2].svalue])
@@ -296,9 +296,11 @@ def runsim(k, simcon, opnclsd):
         # Make steady-state target selector.
 
         contVars = [0,1,2,3,4]
-        Rss  = np.zeros((Nu,Nu))
-        Qyss = np.zeros((Ny,Ny))
-        Qyss[contVars,contVars] = 1 # We want to control all outputs
+        Rss = R;
+#        Rss  = np.zeros((Nu,Nu))
+        Qyss = Qy
+#        Qyss = np.zeros((Ny,Ny))
+#        Qyss[contVars,contVars] = 1 # We want to control all outputs
 #        Qxss = mpc.mtimes(Cx.T,Qyss,Cx)
 
         def sstargobj(y,y_sp,u,u_sp,Q,R):
@@ -584,15 +586,15 @@ CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"
 FVmenu=["mnoise","noise","pltmax","pltmin"]
 
 MV1 = sim.MVobj(name='f1sp', desc='mv - pass 1 flow setpoint', units='(bph)',
-            pltmin=0.0, pltmax=200.0, minlim=5.0, maxlim=195.0,
+            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=1.0,
             value=100.0, target=100.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='f2sp', desc='mv - pass 2 flow setpoint', units='(bph)', 
-            pltmin=0.0, pltmax=200.0, minlim=5.0, maxlim=195.0,
+            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=1.0,
             value=100.0, target=100.0, Nf=60, menu=MVmenu)
 
 MV3 = sim.MVobj(name='fgsp', desc='fg - fuel gas flow setpoint', units='(scfh)', 
-            pltmin=0.0, pltmax=200.0, minlim=5.0, maxlim=195.0,
+            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=5.0,
             value=100.0, target=100.0, Nf=60, menu=MVmenu)
 
 DV1 = sim.MVobj(name='t1in', desc='dv - pass 1 inlet temp', units='(degf)', 
@@ -608,20 +610,20 @@ CV1 = sim.XVobj(name='toc', desc='cv - combined outlet temp', units='(degf)',
             value=750.0, setpoint=750.0, Nf=60, menu=CVmenu)
 
 CV2 = sim.XVobj(name='foc', desc='cv - combined outlet flow', units='(bph)', 
-            pltmin=0.0, pltmax=400.0, minlim=10.0, maxlim=390.0, noise=1.0,
+            pltmin=150.0, pltmax=250.0, minlim=155.0, maxlim=245.0, noise=1.0,
             value=200.0, setpoint=200.0, Nf=60, menu=CVmenu)
 
 CV3 = sim.XVobj(name='dpt', desc='cv - delta pass temp', units='(degf)', 
             pltmin=-10.0, pltmax=10.0, minlim=-9.5, maxlim=9.5, noise=0.1,
-            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
+                value=0.0, setpoint=0.0, qvalue=0.1, Nf=60, menu=CVmenu)
 
 CV4 = sim.XVobj(name='t1s', desc='cv - pass 1 tubeskin temp', units='(degf)', 
-            pltmin=850, pltmax=950, minlim=800.0, maxlim=920.0, noise=0.5,
-            value=900.0, setpoint=900.0, Nf=60, menu=CVmenu)
+            pltmin=870, pltmax=930, minlim=800.0, maxlim=920.0, noise=0.5,
+                value=900.0, setpoint=900.0, qvalue=0.0, Nf=60, menu=CVmenu)
 
 CV5 = sim.XVobj(name='t2s', desc='cv - pass 2 tubeskin temp', units='(degf)', 
-            pltmin=850, pltmax=950, minlim=800.0, maxlim=920.0, noise=0.5,
-            value=900.0, setpoint=900.0, Nf=60, menu=CVmenu)
+            pltmin=870, pltmax=930, minlim=800.0, maxlim=920.0, noise=0.5,
+                value=900.0, setpoint=900.0, qvalue=0.0, Nf=60, menu=CVmenu)
 
 XI1  = sim.XIobj(name='x1',  desc='state 1',  value=0.0, Nf=60)
 XI2  = sim.XIobj(name='x2',  desc='state 2',  value=0.0, Nf=60)
