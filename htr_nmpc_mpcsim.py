@@ -163,7 +163,7 @@ def runsim(k, simcon, opnclsd):
 
             deltax = x[:Nx] - x0
             dhat   = x[Nx:Nx+Nid]
-            deltay = np.dot(Cx,deltax) + dhat
+            deltay = mpc.mtimes(Cx, deltax) + dhat
             ym     = deltay + y0
             return ym
 
@@ -221,6 +221,18 @@ def runsim(k, simcon, opnclsd):
             return mpc.mtimes(dx.T,Pi,dx)
         Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],
                                funcname="Pf", scalar=False)
+
+        # Define output constraints for the controller.
+        
+        def outputconstraints(xaug):
+            y = measurement(xaug)
+            terms = [
+                y - np.array(yub),        
+                np.array(ylb) - y,
+            ]
+            return mpc.vcat(terms)
+        e = mpc.getCasadiFunc(outputconstraints, [Nx + Nid], ["x"],
+                              funcname="e", scalar=False)
 
         # Build augmented estimator matrices.
 
@@ -332,11 +344,9 @@ def runsim(k, simcon, opnclsd):
 
         duub = [ mvlist[0].roclim,  mvlist[1].roclim,  mvlist[2].roclim]
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim, -mvlist[2].roclim]
-        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
-              "y" : np.tile(ylb, (Nf,1))}
-        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1)),
-              "y" : np.tile(yub, (Nf,1))}
-        N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nf}
+        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1))}
+        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
+        N = {"x": Nx+Nid, "u": Nu, "p": Nd, "t": Nf, "e": 2*Ny}
         p = np.tile(ds, (Nf,1)) # Parameters for system.
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
         guess = sp.copy()
@@ -344,7 +354,8 @@ def runsim(k, simcon, opnclsd):
         nmpcargs = {
             "f" : ode_augmented_rk4_casadi,
             "l" : l,
-            "funcargs" : dict(l=largs),
+            "funcargs" : dict(l=largs, e=["x"]),
+            "e" : e,
             "N" : N,
             "x0" : xaug0,
             "uprev" : us,
