@@ -1,4 +1,4 @@
-# This is a fired heater example.
+# This is a hot-air balloon example
 #
 
 from mpctools import mpcsim as sim
@@ -18,13 +18,10 @@ def runsim(k, simcon, opnclsd):
     dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
-    xilist = simcon.xilist
     oplist = simcon.oplist
     deltat = simcon.deltat
     nf = oplist[0]
     doolpred = oplist[1]
-
-    #TODO:  change this to not reinitialize - just change stuff
 
     # Check for changes.
 
@@ -34,7 +31,7 @@ def runsim(k, simcon, opnclsd):
         chsum += var.chflag
         var.chflag = 0
     
-    for var in dvlist:
+    for var in xvlist:
         chsum += var.chflag
         var.chflag = 0
     
@@ -48,10 +45,10 @@ def runsim(k, simcon, opnclsd):
     
     # Grab bounds.
 
-    uub = [mvlist[0].maxlim, mvlist[1].maxlim, mvlist[2].maxlim]
-    ulb = [mvlist[0].minlim, mvlist[1].minlim, mvlist[2].minlim]
-    yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim, cvlist[3].maxlim, cvlist[4].maxlim]
-    ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim, cvlist[3].minlim, cvlist[4].minlim]
+    uub = [mvlist[0].maxlim, mvlist[1].maxlim]
+    ulb = [mvlist[0].minlim, mvlist[1].minlim]
+    yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
+    ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
     
     # Initialize values on first execution or when something changes.
 
@@ -61,10 +58,10 @@ def runsim(k, simcon, opnclsd):
 
         # Define problem size parameters.
 
-        Nx   = 10           # number of states
-        Nu   = 3            # number of inputs
-        Nd   = 2            # number of measured disturbances
-        Ny   = 5            # number of outputs
+        Nx   = 4           # number of states
+        Nu   = 2            # number of inputs
+        Nd   = 1            # number of measured disturbances
+        Ny   = 3            # number of outputs
         Nid  = Ny           # number of integrating disturbances
 
         Nw   = Nx + Nid     # number of augmented states
@@ -78,14 +75,6 @@ def runsim(k, simcon, opnclsd):
         
         Delta = deltat
 
-        # Read in the fired heater model continuous state-space matrices.
-        # The matrices were generate in Matlab.
-        
-        Ax = ssfhtr_Ax
-        Bu = ssfhtr_Bu
-        Bd = ssfhtr_Bd
-        Cx = ssfhtr_Cx
-
         # Set the initial values.
 
         y0 = np.zeros((Ny,))
@@ -93,30 +82,45 @@ def runsim(k, simcon, opnclsd):
         u0 = np.zeros((Nu,))
         d0 = np.zeros((Nd,))
         for i in range(Ny):
-#            print "cvlist[i] = ", cvlist[i].value
             y0[i] = cvlist[i].value
         for i in range(Nu):
-#            print "mvlist[i] = ", mvlist[i].value
             u0[i] = mvlist[i].value
         for i in range(Nd):
-#            print "dvlist[i] = ", dvlist[i].value
             d0[i] = dvlist[i].value
             
-#        print "y0 = ", y0
-#        print "x0 = ", x0
-#        print "u0 = ", u0
-#        print "d0 = ", d0
+        # Define scaling factors
             
-        # Define ode for the fired heater simulation.
+        h0 = 1.1e4         # altitude scaling factor            (m)
+        T0 = 288.2         # air temperature at takeoff         (K)
+        f0 = 3672          # fuel flowrate at takeoff           (sccm)
+        p0 = 100.0         # vent position                      (%)
+        t0 = 33.49         # time scale factor                  (s)
+        tc = 100.0         # reference trajectory time constant (s)
+        
+        # Define parameters for hot-air balloon
+
+        alpha  = 2.549     # balloon number
+        omega  = 20.0      # drag coefficient
+        beta   = 0.1116    # heat transfer coefficient
+        gamma  = 5.257     # atmosphere number
+        delta  = 0.2481    # temperature drop-off coefficient
+        lambde = 1.00      # vent coefficient
+        eps    = t0/tc     # reference trajectory factory
+
+        # Define ode for the hot-air balloon .
 
         def ode(x,u,d):
-
-            # ODE for fired heater.
-
-            deltax = x - x0
-            deltau = u - u0
-            deltad = d - d0
-            dxdt = np.dot(Ax,deltax) + np.dot(Bu,deltau) + np.dot(Bd,deltad)  
+            f     = (1 + u[0] + d[0])*100/f0;
+            term1 = alpha*(1 - delta*x[0])**(gamma -1);
+            term2 = (1 - (1 - delta*x[0])/x[2]);
+            term3 = beta*(x[2] -1 + delta*x[0]);
+            term4 = (1 + lambde*u[1]);
+            term5 = omega*x[1]*np.fabs(x[1]);
+            dx1dt = x[1]; 
+            dx2dt = term1*term2 - 0.5 - term5;
+            dx3dt = -term3*term4 + f;
+            dx4dt = -eps*x[3];
+            dxdt = np.array([dx1dt, dx2dt, dx3dt, dx4dt]);
             return dxdt
 
         # Create casadi function and simulator.
@@ -157,14 +161,20 @@ def runsim(k, simcon, opnclsd):
         htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
         
+
+        # Only the first three states are measured
+
+        Cx = np.array([[1, 0, 0, 0],
+                       [0, 1, 0, 0],
+                       [0, 0, 1, 0]])
+
         def measurement(x,d=ds):
 
             # For this case all of the disturbances are output disturbances.
 
-            deltax = x[:Nx] - x0
-            dhat   = x[Nx:Nx+Nid]
-            deltay = np.dot(Cx,deltax) + dhat
-            ym     = deltay + y0
+            xc   = x[:Nx]
+            dhat = x[Nx:Nx+Nid]
+            ym   = np.dot(Cx,xc) + dhat
             return ym
 
         # Turn into casadi functions.
@@ -192,15 +202,17 @@ def runsim(k, simcon, opnclsd):
 
         # Weighting matrices for controller.
 
-        Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue,
-                       cvlist[3].qvalue, cvlist[4].qvalue])
+        Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue])
         Qx  = mpc.mtimes(Cx.T,Qy,Cx)
-        R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue, mvlist[2].rvalue])
-        S   = np.diag([mvlist[0].svalue, mvlist[1].svalue, mvlist[2].svalue])
+        R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
+        S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
-        # Now calculate the cost-to-go.
+        # Now get a linearization at this steady state and calculate Riccati cost-to-go.
 
-        [K, Pi] = mpc.util.dlqr(Ax,Bu,Qx,R)
+        ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+        A = ss["A"]
+        B = ss["B"]
+        [K, Pi] = mpc.util.dlqr(A,B,Qx,R)
 
         # Define control stage cost.
 
@@ -224,9 +236,8 @@ def runsim(k, simcon, opnclsd):
 
         # Build augmented estimator matrices.
 
-        Qw = np.diag([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-        Rv = np.diag([cvlist[0].mnoise, cvlist[1].mnoise, cvlist[2].mnoise,
-                      cvlist[3].mnoise, cvlist[4].mnoise])
+        Qw = np.diag([1, 1, 1, 1, 1, 1, 1])
+        Rv = np.diag([cvlist[0].mnoise, cvlist[1].mnoise, cvlist[2].mnoise])
         Qwinv = linalg.inv(Qw)
         Rvinv = linalg.inv(Rv)
 
@@ -392,7 +403,7 @@ def runsim(k, simcon, opnclsd):
 
     # Get stored values
     #TODO: these should be dictionaries.
-    htr          = simcon.proc[0]
+    htr           = simcon.proc[0]
     us            = simcon.mod[0]
     xs            = simcon.mod[1]
     ys            = simcon.mod[2]
@@ -570,106 +581,54 @@ def runsim(k, simcon, opnclsd):
 
 # set up htr mpc example
 
-simname = 'Fired Heater NMPC Example'
+simname = 'Hot-Air Ballon Example'
 
 # define variables
 
 MVmenu=["value","rvalue","svalue","maxlim","minlim","roclim","pltmax","pltmin"]
-DVmenu=["value","pltmax","pltmin"]
 XVmenu=["mnoise","noise","pltmax","pltmin"]
 CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"]
-FVmenu=["mnoise","noise","pltmax","pltmin"]
+DVmenu=["value","pltmax","pltmin"]
 
-MV1 = sim.MVobj(name='f1sp', desc='mv - pass 1 flow setpoint', units='(bph)',
-            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=1.0,
-            value=100.0, target=100.0, Nf=60, menu=MVmenu)
+MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
+            pltmin=100.0, pltmax=200.0, minlim=105.0, maxlim=195.0, svalue=1.0,
+            value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
-MV2 = sim.MVobj(name='f2sp', desc='mv - pass 2 flow setpoint', units='(bph)', 
-            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=1.0,
-            value=100.0, target=100.0, Nf=60, menu=MVmenu)
+MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
+            pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0,
+            value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
-MV3 = sim.MVobj(name='fgsp', desc='fg - fuel gas flow setpoint', units='(scfh)', 
-            pltmin=80.0, pltmax=120.0, minlim=81.0, maxlim=119.0, svalue=5.0,
-            value=100.0, target=100.0, Nf=60, menu=MVmenu)
+DV1 = sim.MVobj(name='fd', desc='fuel flow disturbance', units='(sccm)', 
+            pltmin=0.0, pltmax=100.0,
+            value=100.0, Nf=60, menu=DVmenu)
 
-DV1 = sim.MVobj(name='t1in', desc='dv - pass 1 inlet temp', units='(degf)', 
-            pltmin=520.0, pltmax=560.0,
-            value=540.0, Nf=60, menu=DVmenu)
+CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
+            pltmin=0.0, pltmax=3500.0, minlim=0.0, maxlim=3500.0, qvalue=1.0, noise=1.0,
+            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 
-DV2 = sim.MVobj(name='t2in', desc='dv - pass 2 inlet temp', units='(degf)', 
-            pltmin=520.0, pltmax=560.0,
-            value=540.0, Nf=60, menu=DVmenu)
+CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
+            pltmin=-25.0, pltmax=25.0, minlim=-23.0, maxlim=23.0, qvalue=1.0, noise=1.0,
+            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 
-CV1 = sim.XVobj(name='toc', desc='cv - combined outlet temp', units='(degf)', 
-            pltmin=700.0, pltmax=800.0, minlim=705.0, maxlim=795.0, noise=1.0,
-            value=750.0, setpoint=750.0, Nf=60, menu=CVmenu)
+CV3 = sim.XVobj(name='T', desc='bag temperature', units='(degC)', 
+            pltmin=60.0, pltmax=110.0, minlim=61.0, maxlim=109.0, qvalue=0.0, noise=0.1,
+            value=85.0, setpoint=85.0, Nf=60, menu=CVmenu)
 
-CV2 = sim.XVobj(name='foc', desc='cv - combined outlet flow', units='(bph)', 
-            pltmin=150.0, pltmax=250.0, minlim=155.0, maxlim=245.0, noise=1.0,
-            value=200.0, setpoint=200.0, Nf=60, menu=CVmenu)
+XV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
+            pltmin=0, pltmax=3500, 
+            value=0.0, Nf=60, menu=XVmenu)
 
-CV3 = sim.XVobj(name='dpt', desc='cv - delta pass temp', units='(degf)', 
-            pltmin=-10.0, pltmax=10.0, minlim=-9.5, maxlim=9.5, noise=0.1,
-                value=0.0, setpoint=0.0, qvalue=0.1, Nf=60, menu=CVmenu)
+XV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
+            pltmin=-25.0, pltmax=25.0, 
+            value=0.0, Nf=60, menu=XVmenu)
 
-CV4 = sim.XVobj(name='t1s', desc='cv - pass 1 tubeskin temp', units='(degf)', 
-            pltmin=870, pltmax=930, minlim=800.0, maxlim=920.0, noise=0.5,
-                value=900.0, setpoint=900.0, qvalue=0.0, Nf=60, menu=CVmenu)
+XV3 = sim.XVobj(name='t', desc='bag temperature', units='(degC)', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
 
-CV5 = sim.XVobj(name='t2s', desc='cv - pass 2 tubeskin temp', units='(degf)', 
-            pltmin=870, pltmax=930, minlim=800.0, maxlim=920.0, noise=0.5,
-                value=900.0, setpoint=900.0, qvalue=0.0, Nf=60, menu=CVmenu)
-
-XI1  = sim.XIobj(name='x1',  desc='state 1',  value=0.0, Nf=60)
-XI2  = sim.XIobj(name='x2',  desc='state 2',  value=0.0, Nf=60)
-XI3  = sim.XIobj(name='x3',  desc='state 3',  value=0.0, Nf=60)
-XI4  = sim.XIobj(name='x4',  desc='state 4',  value=0.0, Nf=60)
-XI5  = sim.XIobj(name='x5',  desc='state 5',  value=0.0, Nf=60)
-XI6  = sim.XIobj(name='x6',  desc='state 6',  value=0.0, Nf=60)
-XI7  = sim.XIobj(name='x7',  desc='state 7',  value=0.0, Nf=60)
-XI8  = sim.XIobj(name='x8',  desc='state 8',  value=0.0, Nf=60)
-XI9  = sim.XIobj(name='x9',  desc='state 9',  value=0.0, Nf=60)
-XI10 = sim.XIobj(name='x10', desc='state 10', value=0.0, Nf=60)
-
-#XV1 = sim.XVobj(name='x1', desc='state 1', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV2 = sim.XVobj(name='x2', desc='state 2', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV3 = sim.XVobj(name='x3', desc='state 3', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV4 = sim.XVobj(name='x4', desc='state 4', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV5 = sim.XVobj(name='x5', desc='state 5', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV6 = sim.XVobj(name='x6', desc='state 6', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV7 = sim.XVobj(name='x7', desc='state 7', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV8 = sim.XVobj(name='x8', desc='state 8', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV9 = sim.XVobj(name='x9', desc='state 9', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
-#
-#XV10 = sim.XVobj(name='x10', desc='state 10', units='', 
-#               pltmin=-100, pltmax=100, 
-#               value=0.0, Nf=60, menu=XVmenu)
+XV4 = sim.XVobj(name='r', desc='reference trajectory state', units='', 
+               pltmin=-100, pltmax=100, 
+               value=0.0, Nf=60, menu=XVmenu)
 
 # define options
 
@@ -678,68 +637,17 @@ OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 
 # load up variable lists
 
-MVlist = [MV1, MV2, MV3]
-DVlist = [DV1, DV2]
-#XVlist = [XV1, XV2, XV3, XV4, XV5, XV6, XV7, XV8, XV9, XV10]
-XVlist = []
-XIlist = [XI1, XI2, XI3, XI4, XI5, XI6, XI7, XI8, XI9, XI10]
-CVlist = [CV1, CV2, CV3, CV4, CV5]
+MVlist = [MV1, MV2]
+XVlist = [XV1, XV2, XV3, XV4]
+CVlist = [CV1, CV2, CV3]
+DVlist = [DV1]
 OPlist = [NF, OL]
-DeltaT = 1.0
+DeltaT = 0.5
 N      = 120
 refint = 100
 simcon = sim.SimCon(simname=simname,
-                    mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
-                    xilist=XIlist,
+                    mvlist=MVlist, cvlist=CVlist, xvlist=XVlist, dvlist=DVlist,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
-
-# Define state-space matrices.
-ssfhtr_Ax = np.array([
-    [-3.0355482e-01, -9.4687895e-03, -2.5058438e-02, -7.0840563e-02, -5.0403247e-02, -1.8009285e-01, 1.1615073e-01, -2.5449122e-02, -6.7227306e-02, -4.6340924e-02],
-    [4.2311708e-02, -7.3733419e-01, -4.6395958e-01, 6.6167445e-02, -4.0390266e-02, -3.3079095e-01, -8.3244322e-02, -3.9568920e-01, -2.4187538e-02, 4.1467954e-01],
-    [-1.3299723e-02, 1.2621385e-02, -6.6231486e-01, 1.8486721e-03, 2.0530459e-01, 2.5768956e-01, -1.3697364e-01, -3.2933144e-03, -4.8252458e-02, -3.2291359e-01],
-    [-7.2852359e-02, 3.2653051e-03, -1.6760562e-02, -2.5214563e-01, -3.5984133e-02, 2.1724470e-01, -1.2213044e-01, 2.5433870e-02, 4.5180118e-02, 1.2883216e-01],
-    [-6.0323166e-02, 2.8840844e-01, 5.1406874e-01, -8.8476112e-02, -3.9102929e-01, 4.0722413e-01, 1.0124434e-01, -4.0870947e-02, 1.3927141e-01, -1.3936518e-01],
-    [5.2782090e-02, -2.5659089e-01, -3.0062301e-01, 7.3552546e-02, -2.6303223e-01, -1.1588637e+00, 8.9395526e-02, 3.0668870e-01, -1.8727076e-01, 6.4019085e-02],
-    [4.6386856e-02, -2.2522432e-01, -2.7396142e-01, 6.4893510e-02, -2.1866248e-01, -1.3865560e-01, -7.0756655e-01, 4.0031819e-01, -4.6027020e-02, 2.1779572e-01],
-    [-2.0127948e-02, 9.9231876e-02, 6.5929159e-02, -2.6787203e-02, 1.5400933e-01, 6.1381712e-02, 9.6442036e-02, -1.0005813e+00, 6.8391056e-02, 7.1099606e-02],
-    [-4.4841417e-02, 2.1285325e-01, 4.3622234e-01, -6.7169602e-02, 1.9979247e-02, 1.3009674e-01, 1.8128800e-01, -2.7544823e-01, -3.4747581e-01, 1.5897158e-01],
-    [-7.9940997e-03, 4.1808992e-02, -5.8239471e-02, -8.4527513e-03, 1.5544784e-01, 2.6319107e-02, 4.7392659e-02, 7.9361893e-02, -1.1922762e-01, -9.7246722e-01],
-])
-            
-ssfhtr_Bu = np.array([
-    [9.3662232e-02, -7.8203259e-02, -3.5269595e-01],
-    [-2.8832883e-01, -8.1735306e-02, -1.5928428e+00],
-    [-5.8112677e-01, -2.1531239e-01, -1.1842419e+00],
-    [-6.8495670e-02, 1.0765663e-01, 1.4634518e-02],
-    [7.5756563e-02, 1.1694449e-01, 1.9691788e-01],
-    [6.1514014e-01, -4.0972591e-01, -2.3744012e+00],
-    [-7.9899097e-01, 1.4099062e-01, -9.3913025e-01],
-    [-3.6762570e-01, -7.0357056e-01, 9.2546105e-01],
-    [1.2768712e-01, -1.8466076e-01, 1.8963478e-01],
-    [-2.0174781e-01, -9.2070482e-01, 6.8093529e-01],
-])
-
-ssfhtr_Bd = np.array([
-    [4.4194612e-03, -5.4186514e-03],
-    [5.6831596e-02, -2.6778227e-01],
-    [2.5537917e-01, 4.0678375e-01],
-    [-8.4833809e-03, -2.2615464e-02],
-    [-4.9774661e-01, -4.5753829e-01],
-    [1.9748539e-02, -1.1690683e-01],
-    [-1.9320783e-01, 3.9676095e-02],
-    [6.6823598e-01, -6.1718808e-01],
-    [1.9161547e-01, 2.2758691e-01],
-    [-5.6162635e-01, 5.0761204e-01],
-])
-
-ssfhtr_Cx = np.array([
-    [1.3396477e+00, -3.6878574e-01, -6.8114063e-01, 8.7606379e-01, -4.6768349e-01, 1.3993241e-01, 7.3406388e-01, 1.3067031e-01, 1.8262439e-01, 3.4929682e-02],
-    [-9.2186016e-04, 2.6716492e-02, -3.5855690e-02, 5.3214858e-04, -5.5698826e-02, -5.2814796e-02, -4.6559706e-01, -3.3686752e-01, -2.3554643e-01, -2.8711349e-01],
-    [5.7258761e-01, -2.6913153e-01, 1.2789075e-01, -8.8485981e-01, 8.4953612e-02, -4.0000104e-02, 1.0430771e-01, 2.8622374e-02, -1.9509270e-01, -9.6295469e-02],
-    [-4.3176751e-01, 2.3635803e-01, -2.6210683e-01, -4.0091055e-01, -1.4456333e+00, -3.2105879e-01, 8.7805840e-01, 5.4458178e-01, -7.2190928e-01, -1.4753603e-01],
-    [-4.0975288e-01, 6.8432380e-02, -5.6246447e-01, -3.6622004e-01, -1.4926083e+00, 4.1723975e-01, 1.8132373e-01, 1.0962275e-01, -3.1289443e-01, 1.0522818e+00],
-])            
 
 # build the GUI and start it up.
 plotspacing = dict(left=0.075, top=0.95, bottom=0.05, right=0.99, hspace=0.5)
