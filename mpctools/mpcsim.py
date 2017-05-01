@@ -446,6 +446,7 @@ class Trndplt(object):
         axes = []
         for (i, var) in enumerate(varlist):       
             ax = self.axes[startrow - 1 + i, col - 1]
+            ax.set_visible(True)
             ax.set_ylabel("%s %s" % (var.name, var.units))
             ax.set_title(var.desc)
             ax.set_ylim([var.pltmin, var.pltmax])
@@ -1108,6 +1109,7 @@ def makeaxes(fig, rows, cols, sharex=True):
         xax = None
         for i in xrange(rows):
             ax = fig.add_subplot(rows, cols, i*cols + j + 1, sharex=xax)
+            ax.set_visible(False)
             axes[i, j] = ax
             if sharex:
                 xax = ax

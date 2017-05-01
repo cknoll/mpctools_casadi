@@ -57,6 +57,7 @@ examplefiles += [
     "periodicmpcexample.py",
     "vdposcillator.py",
     "predatorprey.py",
+    "softconstraints.py",
 ]
 showoutput = set(["fishing.py", "cargears.py"])
 

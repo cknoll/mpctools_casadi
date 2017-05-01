@@ -462,12 +462,11 @@ class ArrayDict(collections.MutableMapping):
     When instantiating or when setting an item, calls np.array to convert
     everything.
     """
-    dtype = float
-    
     def __init__(self, *args, **kwargs):
         """
         Creates a dictionary and then wraps everything in np.array.
         """
+        self.dtype = float
         self.__arraydict__ = dict() # This is where we actually store things.
         self.update(dict(*args, **kwargs)) # We get this method for free.      
     
@@ -799,12 +798,12 @@ def listAvailableSolvers(asstring=False, front="    ", categorize=True):
     asstring is false, returns a dictionary with list entries "QP" and "NLP"
     containing the available solvers of each type.
     """
-    availablesolvers = getCasadiPlugins(["Nlpsol", "Qpsol"])
+    availablesolvers = getCasadiPlugins(["Nlpsol", "Qpsol", "Conic"])
     solvers = dict(NLP=[], QP=[])
     for (k, v) in availablesolvers.iteritems():
         if v == "Nlpsol":
             solvers["NLP"].append(k)
-        elif v == "Qpsol":
+        elif v == "Qpsol" or v == "Conic":
             solvers["QP"].append(k)
     if asstring:
         types = ["%s : %s" % (s, ", ".join(solvers[s])) for s in ["QP", "NLP"]]
