@@ -394,7 +394,7 @@ class Trndplt(object):
         self.fig.clear()
         self.initlines()
         self.axes = makeaxes(self.fig, self.nrows, self.ncols, sharex=True)
-        self.mvaxes = self.addaxes(self.mvlist, col=1)
+        self.mvaxes = self.addaxes(self.mvlist, col=1, xticks=False)
         self.dvaxes = self.addaxes(self.dvlist, startrow=self.nmvs + 1, col=1)
         self.xvaxes = self.addaxes(self.xvlist, col=2)
         self.cvaxes = self.addaxes(self.cvlist, col=self.ncols)
@@ -441,8 +441,9 @@ class Trndplt(object):
         self.fxvmxlines = []
         self.fxvmnlines = []
 
-    def addaxes(self, varlist, col=1, startrow=1):
+    def addaxes(self, varlist, col=1, startrow=1, xticks=True):
         """Adds an axis in the given column for each variable."""
+        # Label and scale axes.
         axes = []
         for (i, var) in enumerate(varlist):       
             ax = self.axes[startrow - 1 + i, col - 1]
@@ -452,6 +453,11 @@ class Trndplt(object):
             ax.set_ylim([var.pltmin, var.pltmax])
             ax.margins(x=0)
             axes.append(ax)
+            
+        # Add xticks for bottom plot.
+        if len(axes) > 0 and xticks:
+            for label in ax.get_xticklabels():
+                label.set_visible(True)
         return axes
 
     def initplot(self, ax, var, vallines=None, maxlines=None, minlines=None,
@@ -1114,9 +1120,9 @@ def makeaxes(fig, rows, cols, sharex=True):
             if sharex:
                 xax = ax
     
-    # Shut off ticks for all axes except the bottom one.            
+    # Shut off ticks for all axes. Will be added back later.
     if sharex:
-        for ax in axes[:-1,:].flat:
+        for ax in axes.flat:
             for label in ax.get_xticklabels():
                 label.set_visible(False)
     return axes

@@ -5,6 +5,7 @@ from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg
+import casadi
 
 useCasadiSX = True
 
@@ -155,7 +156,7 @@ def runsim(k, simcon, opnclsd):
             return dxdt
  
         htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
-                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"])
+                                        [Nx+Nid,Nu,Nd], ["x","u","p"])
         
         def measurement(x,d=ds):
 
@@ -170,11 +171,11 @@ def runsim(k, simcon, opnclsd):
         # Turn into casadi functions.
 
         ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
-                                   [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_disturbance")
+                                   [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_disturbance")
         ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
-                               [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
+                               [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_augmented")
         ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
-                                   [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",
+                                   [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
 
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
@@ -184,7 +185,7 @@ def runsim(k, simcon, opnclsd):
             return ode_augmented_casadi(x, u, d) + w
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-                                   [Nx+Nid,Nu,Nw,Nd], ["xaug","u","w","d"],
+                                   [Nx+Nid,Nu,Nw,Nd], ["x","u","w","d"],
                                    "ode_estimator_rk4", scalar=False)
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
@@ -204,34 +205,34 @@ def runsim(k, simcon, opnclsd):
 
         # Define control stage cost.
 
-        def stagecost(x,u,xsp,usp,Deltau):
+        def stagecost(x, u, xsp, usp, Deltau, s):
             dx = x[:Nx] - xsp[:Nx]
             du = u - usp
             return (mpc.mtimes(dx.T,Qx,dx) + .1*mpc.mtimes(du.T,R,du)
-                + mpc.mtimes(Deltau.T,S,Deltau))
+                + mpc.mtimes(Deltau.T,S,Deltau) + 1000*casadi.sum1(s))
 
-        largs = ["x","u","x_sp","u_sp","Du"]
+        largs = ["x", "u", "x_sp", "u_sp", "Du", "s"]
         l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l",scalar=False)
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,Ny], largs, funcname="l", scalar=False)
 
         # Define cost to go.
 
         def costtogo(x,xsp):
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T,Pi,dx)
-        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],
+        Pf = mpc.getCasadiFunc(costtogo, [Nx+Nid,Nx+Nid], ["x", "x_sp"],
                                funcname="Pf", scalar=False)
 
         # Define output constraints for the controller.
         
-        def outputconstraints(xaug):
+        def outputconstraints(xaug, s):
             y = measurement(xaug)
             terms = [
-                y - np.array(yub),        
-                np.array(ylb) - y,
+                y - np.array(yub) - s,
+                np.array(ylb) - y - s,
             ]
             return mpc.vcat(terms)
-        e = mpc.getCasadiFunc(outputconstraints, [Nx + Nid], ["x"],
+        e = mpc.getCasadiFunc(outputconstraints, [Nx + Nid, Ny], ["x", "s"],
                               funcname="e", scalar=False)
 
         # Build augmented estimator matrices.
@@ -257,9 +258,9 @@ def runsim(k, simcon, opnclsd):
         # Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
 
         Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us, ds],
-                                       ["A","B","Bp"], Delta)["A"]
+                                       ["A","B","Bd"], Delta)["A"]
         Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs, ds],
-                                       ["C","Cp"])["C"]
+                                       ["C","Cd"])["C"]
         Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
         svds = linalg.svdvals(Oaug)
         rank = sum(svds > 1e-8)
@@ -346,7 +347,7 @@ def runsim(k, simcon, opnclsd):
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim, -mvlist[2].roclim]
         lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1))}
         ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
-        N = {"x": Nx+Nid, "u": Nu, "p": Nd, "t": Nf, "e": 2*Ny}
+        N = {"x": Nx+Nid, "u": Nu, "p": Nd, "t": Nf, "e": 2*Ny, "s": Ny}
         p = np.tile(ds, (Nf,1)) # Parameters for system.
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
         guess = sp.copy()
@@ -354,7 +355,7 @@ def runsim(k, simcon, opnclsd):
         nmpcargs = {
             "f" : ode_augmented_rk4_casadi,
             "l" : l,
-            "funcargs" : dict(l=largs, e=["x"]),
+            "inferargs" : True,
             "e" : e,
             "N" : N,
             "x0" : xaug0,
