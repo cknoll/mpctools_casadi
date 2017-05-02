@@ -80,11 +80,13 @@ def runsim(k, simcon, opnclsd):
         Delta = deltat
 
         # Read in the fired heater model continuous state-space matrices.
-        # The matrices were generate in Matlab.
+        # The matrices were generated in Matlab.
         
-        Ax = ssfhtr_Ax
-        Bu = ssfhtr_Bu
-        Bd = ssfhtr_Bd
+        sys = mpc.util.c2d(A=ssfhtr_Ax, B=ssfhtr_Bu, Bp=ssfhtr_Bd, Delta=Delta,
+                           asdict=True)
+        Ax = sys["A"]
+        Bu = sys["B"]
+        Bd = sys["Bp"]
         Cx = ssfhtr_Cx
 
         # Set the initial values.
@@ -110,20 +112,20 @@ def runsim(k, simcon, opnclsd):
             
         # Define ode for the fired heater simulation.
 
-        def ode(x,u,d):
+        def model(x, u, d):
 
-            # ODE for fired heater.
+            # Discrete-time evolution for for fired heater.
 
             deltax = x - x0
             deltau = u - u0
             deltad = d - d0
-            dxdt = np.dot(Ax,deltax) + np.dot(Bu,deltau) + np.dot(Bd,deltad)  
-            return dxdt
+            xplus = (mpc.mtimes(Ax, deltax) + mpc.mtimes(Bu, deltau)
+                     + mpc.mtimes(Bd, deltad))  
+            return xplus
 
-        # Create casadi function and simulator.
+        # Create a DummySimulator.
 
-        ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
-        htr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+        htr = mpc.tools.DummySimulator(model, [Nx, Nu, Nd], ["x", "u", "d"])
 
         # Initialize the steady-state values
 
@@ -141,55 +143,66 @@ def runsim(k, simcon, opnclsd):
         # all of the states. It's possible that Ipopt may figure this out by itself,
         # but we should just be explicit to avoid any bugs.    
 
-        def ode_disturbance(x,u,d=ds):
+        def model_augmented(x, u, d=ds):
 
-            # For this case there are no input disturbances.
-
-            dxdt = ode(x[:Nx], u, d)
-            return dxdt
-
-        def ode_augmented(x,u,d=ds):
-
-            # Need to add extra zeros for derivative of disturbance states.
-
-            dxdt = mpc.vcat([ode_disturbance(x,u,d), np.zeros((Nid,))])
-            return dxdt
- 
-        htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
-                                        [Nx+Nid,Nu,Nd], ["x","u","p"])
+            # Need to add identity for integrating disturbance evolution.
+            xnom = x[:Nx]
+            dhat = x[Nx:]
+            xaugplus = mpc.vcat([model(xnom, u, d), dhat])
+            return xaugplus
         
-        def measurement(x,d=ds):
+        def model_estimator(x, u, w=np.zeros(Nx + Nid), d=ds):
+            
+            # Model with additive state noise.
+            return model_augmented(x, u, d) + w
 
-            # For this case all of the disturbances are output disturbances.
+        def model_sstarg(x, u, d=ds):
+            
+            # Model for steady state in terms of nominal states.
+            xaugplus = model_augmented(x, u, d)
+            return xaugplus[:Nx] - x[:Nx]
+
+
+        # Turn into casadi functions.
+        
+        model_augmented_casadi = mpc.getCasadiFunc(model_augmented,
+                                                   [Nx+Nid,Nu,Nd],
+                                                   ["x","u","p"], "faug",
+                                                   scalar=False)
+
+        model_estimator_casadi = mpc.getCasadiFunc(model_estimator,
+                                                   [Nx+Nid,Nu,Nx+Nid,Nd],
+                                                   ["x","u","w","p"], "fest",
+                                                   scalar=False)
+        
+        model_sstarg_casadi = mpc.getCasadiFunc(model_sstarg,
+                                                [Nx+Nid,Nu,Nd],
+                                                ["x","u","p"], "fdist",
+                                                scalar=False)
+        
+        # Also define DummySimulator object.
+        
+        htraug = mpc.tools.DummySimulator(model_augmented, [Nx + Nid, Nu, Nd],
+                                          ["x", "u", "d"])
+        
+        
+        # Define measurement function.
+        
+        def measurement_augmented(x, d=ds):
+
+            # For this case all of the integrating disturbances are output
+            # disturbances.
 
             deltax = x[:Nx] - x0
-            dhat   = x[Nx:Nx+Nid]
+            dhat   = x[Nx:]
             deltay = mpc.mtimes(Cx, deltax) + dhat
             ym     = deltay + y0
             return ym
-
-        # Turn into casadi functions.
-
-        ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
-                                   [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_disturbance")
-        ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
-                               [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_augmented")
-        ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
-                                   [Nx+Nid,Nu,Nd], ["x","u","p"], "ode_augmented_rk4",
-                                     rk4=True,Delta=Delta,M=2)
-
-        def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_rk4_casadi(x, u, d) + w
-
-        def ode_estimator(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_casadi(x, u, d) + w
-
-        ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-                                   [Nx+Nid,Nu,Nw,Nd], ["x","u","w","d"],
-                                   "ode_estimator_rk4", scalar=False)
-
-        measurement_casadi = mpc.getCasadiFunc(measurement,
-                             [Nx+Nid,Nd], ["xaug","d"], "measurement")
+        
+        measurement_augmented_casadi = mpc.getCasadiFunc(measurement_augmented,
+                                                         [Nx+Nid,Nd],
+                                                         ["x","p"],
+                                                         "measurement")
 
         # Weighting matrices for controller.
 
@@ -201,7 +214,7 @@ def runsim(k, simcon, opnclsd):
 
         # Now calculate the cost-to-go.
 
-        [K, Pi] = mpc.util.dlqr(Ax,Bu,Qx,R)
+        [K, Pi] = mpc.util.dlqr(Ax, Bu, Qx, R)
 
         # Define control stage cost.
 
@@ -212,21 +225,21 @@ def runsim(k, simcon, opnclsd):
                 + mpc.mtimes(Deltau.T,S,Deltau) + 1000*casadi.sum1(s))
 
         largs = ["x", "u", "x_sp", "u_sp", "Du", "s"]
-        l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,Ny], largs, funcname="l", scalar=False)
+        l = mpc.getCasadiFunc(stagecost, [Nx+Nid,Nu,Nx+Nid,Nu,Nu,Ny], largs,
+                              funcname="l", scalar=False)
 
         # Define cost to go.
 
         def costtogo(x,xsp):
             dx = x[:Nx] - xsp[:Nx]
-            return mpc.mtimes(dx.T,Pi,dx)
+            return mpc.mtimes(dx.T, Pi, dx)
         Pf = mpc.getCasadiFunc(costtogo, [Nx+Nid,Nx+Nid], ["x", "x_sp"],
                                funcname="Pf", scalar=False)
 
         # Define output constraints for the controller.
         
         def outputconstraints(xaug, s):
-            y = measurement(xaug)
+            y = measurement_augmented(xaug)
             terms = [
                 y - np.array(yub) - s,
                 np.array(ylb) - y - s,
@@ -245,10 +258,11 @@ def runsim(k, simcon, opnclsd):
 
         # Define stage costs for estimator.
 
-        def lest(w,v):
-            return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v)
+        def lest(w, v):
+            return mpc.mtimes(w.T, Qwinv, w) + mpc.mtimes(v.T, Rvinv, v)
                       
-        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l",scalar=False)
+        lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l",
+                                 scalar=False)
 
         # Don't use a prior.
 
@@ -257,10 +271,12 @@ def runsim(k, simcon, opnclsd):
 
         # Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
 
-        Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us, ds],
-                                       ["A","B","Bd"], Delta)["A"]
-        Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs, ds],
-                                       ["C","Cd"])["C"]
+        Aaug = mpc.util.getLinearizedModel(model_augmented_casadi,
+                                           [xaugs, us, ds],
+                                           ["A", "B", "Bd"])["A"]
+        Caug = mpc.util.getLinearizedModel(measurement_augmented_casadi,
+                                           [xaugs, ds],
+                                           ["C", "Cd"])["C"]
         Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
         svds = linalg.svdvals(Oaug)
         rank = sum(svds > 1e-8)
@@ -273,12 +289,12 @@ def runsim(k, simcon, opnclsd):
         xguess = np.tile(xaugs,(Nmhe+1,1))
         yguess = np.tile(ys,(Nmhe+1,1))
         nmheargs = {
-            "f" : ode_estimator_rk4_casadi,
-            "h" : measurement_casadi,
+            "f" : model_estimator_casadi,
+            "h" : measurement_augmented_casadi,
             "u" : uguess,
             "y" : yguess,
             "l" : lest,
-            "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":Nmhe},
+            "N" : {"x":Nx + Nid,"u":Nu, "y":Ny, "p":Nd, "t":Nmhe},
             "lx" : lxest,
             "x0bar" : x0bar,
             "p" : np.tile(ds,(Nmhe+1,1)),
@@ -302,27 +318,26 @@ def runsim(k, simcon, opnclsd):
             udata = simcon.udata
 
         # Make steady-state target selector.
-
-        contVars = [0,1,2,3,4]
-        Rss = R;
+        
+        Rss = R
 #        Rss  = np.zeros((Nu,Nu))
         Qyss = Qy
 #        Qyss = np.zeros((Ny,Ny))
 #        Qyss[contVars,contVars] = 1 # We want to control all outputs
 #        Qxss = mpc.mtimes(Cx.T,Qyss,Cx)
 
-        def sstargobj(y,y_sp,u,u_sp,Q,R):
+        def sstargobj(y, y_sp, u, u_sp):
             dy = y - y_sp
             du = u - u_sp
-            return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du)
+            return mpc.mtimes(dy.T, Qyss, dy) + mpc.mtimes(du.T, Rss, du)
 
-        phiargs = ["y","y_sp","u","u_sp","Q","R"]
-        phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
+        phiargs = ["y", "y_sp", "u", "u_sp"]
+        phi = mpc.getCasadiFunc(sstargobj, [Ny, Ny, Nu, Nu],
                                 phiargs, scalar=False)
 
         sstargargs = {
-            "f" : ode_disturbance_casadi,
-            "h" : measurement_casadi,
+            "f" : model_sstarg_casadi,
+            "h" : measurement_augmented_casadi,
             "lb" : {"u" : np.tile(ulb, (1,1)), "y" : np.tile(ylb, (1,1))},
             "ub" : {"u" : np.tile(uub, (1,1)), "y" : np.tile(yub, (1,1))},
             "guess" : {
@@ -333,8 +348,8 @@ def runsim(k, simcon, opnclsd):
             "p" : np.tile(ds, (1,1)), # Parameters for system.
             "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
             "phi" : phi,
-            "funcargs" : dict(phi=phiargs),
-            "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
+            "inferargs" : True,
+            "extrapar" : {"y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
             "casaditype" : "SX" if useCasadiSX else "MX",
@@ -353,7 +368,7 @@ def runsim(k, simcon, opnclsd):
         guess = sp.copy()
         xaug0 = xaugs
         nmpcargs = {
-            "f" : ode_augmented_rk4_casadi,
+            "f" : model_augmented_casadi,
             "l" : l,
             "inferargs" : True,
             "e" : e,
@@ -364,8 +379,8 @@ def runsim(k, simcon, opnclsd):
             "ub" : ub,
             "guess" : guess,
             "Pf" : Pf,
-            "sp" : sp,
             "p" : p,
+            "sp" : sp,
             "verbosity" : 0,
             "timelimit" : 60,
             "casaditype" : "SX" if useCasadiSX else "MX",
@@ -397,7 +412,7 @@ def runsim(k, simcon, opnclsd):
         simcon.mod.append(targetfinder)
         simcon.mod.append(controller)
         simcon.mod.append(htraug)
-        simcon.mod.append(measurement)
+        simcon.mod.append(measurement_augmented)
         simcon.mod.append(psize)
         simcon.ydata = ydata
         simcon.udata = udata

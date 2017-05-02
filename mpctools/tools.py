@@ -270,7 +270,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
 
 def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
          p=None, verbosity=5, largs=None, funcargs={}, timelimit=60, Delta=None,
-         wAdditive=False, casaditype="SX"):
+         wAdditive=False, casaditype="SX", inferargs=False):
     """
     Solves nonlinear MHE problem.
     
@@ -314,7 +314,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
                 N["t"] = 0
         if "w" not in N:
             N["w"] = N["x"]
-        N["v"] = N["y"] 
+        N["v"] = N["y"]
     except KeyError:
         raise KeyError("Invalid or missing entries in N dictionary!")
     
@@ -359,7 +359,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     
     # Make initial objective term.
     if "l" not in funcargs:
-        funcargs["l"] = ["w", "v"]
+        funcargs["l"] = __getargnames(l) if inferargs else ["w", "v"]
     finallargs = []   
     for k in funcargs["l"]:
         if k == "w":
@@ -381,13 +381,13 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, l=l, funcargs=funcargs, Delta=Delta,
                   verbosity=verbosity, casaditype=casaditype,
-                  fErrorVars=fErrorVars)
+                  fErrorVars=fErrorVars, inferargs=inferargs)
     return __optimalControlProblem(*args, **kwargs)
 
 
 def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
            funcargs={}, extrapar={}, discretef=True, verbosity=5, timelimit=60,
-           casaditype="SX"):
+           casaditype="SX", inferargs=False):
     """
     Solves nonlinear steady-state target problem.
     
@@ -453,7 +453,11 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     # Make objective term.
     if phi is not None:
         if "phi" not in funcargs:
-            raise KeyError("Must provide funcargs['phi'] if phi is given!")
+            if inferargs:
+                funcargs["phi"] = __getargnames(phi)
+            else:
+                raise KeyError("Must provide funcargs['phi'] or set inferargs"
+                               "=Trueif phi is given!")
         args = __getArgs(funcargs["phi"], 0, varStruct, parStruct)
         obj = phi(*args)
     else:
@@ -462,7 +466,8 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     # Get controller arguments.    
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, funcargs=funcargs, verbosity=verbosity,
-                  discretef=discretef, finalpoint=False, casaditype=casaditype)
+                  discretef=discretef, finalpoint=False, casaditype=casaditype,
+                  inferargs=inferargs)
     return __optimalControlProblem(*args, **kwargs)
 
 
@@ -1287,8 +1292,57 @@ def safevertcat(x):
         val = casadi.vertcat(*x)
     return val
 
+class DummySimulator(object):
+    """
+    Wrapper class to simulate a generic discrete-time function.
+    """
+    @property
+    def Nargs(self):
+        return self.__Nargs
+        
+    @property
+    def args(self):
+        return self.__argnames
+    
+    def __init__(self, model, argsizes, argnames=None):
+        """Initilize the simulator using a model function."""
+        # Decide argument names.
+        if argnames is None:
+            argnames = ["x"] + ["p_%d" % (i,) for i in range(1,self.Nargs)]
+        
+        # Store names and model.
+        self.__argnames = argnames
+        self.__integrator = model
+        self.__argsizes = argsizes
+        self.__Nargs = len(argsizes)
+    
+    def call(self, *args):
+        """
+        Simulates one timestep and returns a vector.
+        """
+        self._checkargs(args)
+        return self.__integrator(*args)
 
-class DiscreteSimulator(object):
+    def _checkargs(self, args):
+        """Checks that the right number of arguments have been given."""
+        if len(args) != self.Nargs:
+            raise ValueError("Wrong number of arguments: %d given; %d "
+                             "expected." % (len(args), self.Nargs))
+
+    def __call__(self, *args):
+        """
+        Interface to self.call.
+        """
+        return self.call(*args)
+    
+    def sim(self, *args):
+        """
+        Simulate one timestep and returns a Numpy array.
+        """
+        return np.array(self.call(*args)).flatten()
+    
+
+class DiscreteSimulator(DummySimulator):
     """
     Simulates one timestep of a continuous-time system.
     """
@@ -1297,33 +1351,16 @@ class DiscreteSimulator(object):
     def Delta(self):
         return self.__Delta
         
-    @property
-    def Nargs(self):
-        return self.__Nargs
-        
-    @property
-    def args(self):
-        return self.__argnames
-        
     def __init__(self, ode, Delta, argsizes, argnames=None, verbosity=1,
                  casaditype=None, scalar=True):
         """
         Initialize by specifying model and sizes of everything.
         """
-        # Make sure there is at least one argument.
-        if len(argsizes) == 0:
-            raise ValueError("Model must have at least 1 argument.")
-        
-        # Save sizes.
-        self.__Delta = Delta
-        self.__Nargs = len(argsizes)        
-        
-        # Decide argument names.
-        if argnames is None:
-            argnames = ["x"] + ["p_%d" % (i,) for i in range(1,self.Nargs)]
+        # Call subclass constructor.
+        super(DiscreteSimulator, self).__init__(None, argsizes, argnames)
         
         # Store names and Casadi Integrator object.
-        self.__argnames = argnames
+        self.__Delta = Delta
         self.verbosity = verbosity
         self.__integrator = getCasadiIntegrator(ode, Delta, argsizes, argnames,
                                                 wrap=False, scalar=scalar,
@@ -1338,27 +1375,13 @@ class DiscreteSimulator(object):
         function. If you are just simulating with numeric values, see self.sim.
         """
         # Check arguments.
-        if len(args) != self.Nargs:
-            raise ValueError("Wrong number of arguments: "
-                "%d given; %d expected." % (len(args),self.Nargs))
+        self._checkargs(args)
         integratorargs = dict(x0=args[0])
         if len(args) > 1:
-            integratorargs["p"] = casadi.vertcat(*args[1:])
+            integratorargs["p"] = safevertcat(args[1:])
         
         # Call integrator.
         nextstep = self.__integrator(**integratorargs)
         xf = nextstep["xf"]
         return xf
-
-    def __call__(self, *args):
-        """
-        Interface to self.call.
-        """
-        return self.call(*args)
-    
-    def sim(self, *args):
-        """
-        Simulate one timestep and returns a Numpy array.
-        """
-        return np.array(self.call(*args)).flatten()
     
