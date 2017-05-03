@@ -1,5 +1,8 @@
 # This is a hot-air balloon example
 #
+# ToDo:
+# (1) Add slider for vent and button for fuel.
+# (2) Write up a script.
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
@@ -15,7 +18,6 @@ def runsim(k, simcon, opnclsd):
     # Unpack stuff from simulation container.
 
     mvlist = simcon.mvlist
-    dvlist = simcon.dvlist
     cvlist = simcon.cvlist
     xvlist = simcon.xvlist
     oplist = simcon.oplist
@@ -60,7 +62,7 @@ def runsim(k, simcon, opnclsd):
 
         Nx   = 4           # number of states
         Nu   = 2            # number of inputs
-        Nd   = 1            # number of measured disturbances
+        Nd   = 0            # number of measured disturbances
         Ny   = 3            # number of outputs
         Nid  = Ny           # number of integrating disturbances
 
@@ -83,10 +85,12 @@ def runsim(k, simcon, opnclsd):
         d0 = np.zeros((Nd,))
         for i in range(Ny):
             y0[i] = cvlist[i].value
+        for i in range(Nx):
+            x0[i] = xvlist[i].value
         for i in range(Nu):
             u0[i] = mvlist[i].value
-        for i in range(Nd):
-            d0[i] = dvlist[i].value
+#        for i in range(Nd):
+#            d0[i] = dvlist[i].value
             
         # Define scaling factors
             
@@ -109,8 +113,8 @@ def runsim(k, simcon, opnclsd):
 
         # Define ode for the hot-air balloon .
 
-        def ode(x,u,d):
-            f     = (1 + u[0] + d[0])*100/f0;
+        def ode(x,u):
+            f     = (1 + u[0])*100/f0;
             term1 = alpha*(1 - delta*x[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
@@ -208,6 +212,44 @@ def runsim(k, simcon, opnclsd):
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
         # Now get a linearization at this steady state and calculate Riccati cost-to-go.
+
+#        a11  = 0
+#        a12  = 1
+#        a13  = 0
+#        a14  = 0
+#        a21a = -delta*alpha*(gamma**-1)*((1-delta*x0[0])**(gamma-2))
+#        a21b = 1-(gamma**2)*(1-delta*x0[0])/x0[2]
+#        a21  = a21a*a21b
+#        a22  = 0
+#        a23  = (1-delta*x0[0])*(x0[2]**-2)
+#        a24  = 0
+#        a31  = -beta*delta
+#        a32  = 0
+#        a33  = -beta
+#        a34  = 0
+#        a41  = 0
+#        a42  = 0
+#        a43  = 0
+#        a44  = -eps
+#        A    = np.array([[a11, a12, a13, a14],
+#                [a21, a22, a23, a24],
+#                [a31, a31, a33, a34],
+#                [a41, a42, a43, a44]])
+#        b11 = 0
+#        b12 = 0
+#        b21 = 0
+#        b22 = 0
+#        b31 = 100.0/f0
+#        b32 = beta*lambde
+#        b41 = 0
+#        b42 = 0
+#        B   = np.array([[b11, b12],
+#                        [b21, b22],
+#                        [b31, b32],
+#                        [b41, b42]])
+#
+#        print "A = ", A
+#        print "B = ", B
 
         ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
         A = ss["A"]
@@ -341,8 +383,8 @@ def runsim(k, simcon, opnclsd):
 
         # Make NMPC solver.
 
-        duub = [ mvlist[0].roclim,  mvlist[1].roclim,  mvlist[2].roclim]
-        dulb = [-mvlist[0].roclim, -mvlist[1].roclim, -mvlist[2].roclim]
+        duub = [ mvlist[0].roclim,  mvlist[1].roclim]
+        dulb = [-mvlist[0].roclim, -mvlist[1].roclim]
         lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
               "y" : np.tile(ylb, (Nf,1))}
         ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1)),
@@ -378,10 +420,10 @@ def runsim(k, simcon, opnclsd):
             dhat_k   = np.zeros(Nid)
 
             # Store initial values for variables
-            xilist.vecassign(xs)
-            xilist.vecassign(xs, "est")
+            xvlist.vecassign(xs)
+            xvlist.vecassign(xs, "est")
             mvlist.vecassign(us)
-            dvlist.vecassign(ds)
+#            dvlist.vecassign(ds)
             cvlist.vecassign(dhat_k, "dist")
             #            dvlist[0].est = dhat_k
 
@@ -427,10 +469,10 @@ def runsim(k, simcon, opnclsd):
     udata         = simcon.udata
 
     # Get variable values
-    x_km1 = xilist.asvec()
+    x_km1 = xvlist.asvec()
     u_km1 = mvlist.asvec()
-    d_km1 = dvlist.asvec()    
-
+#    d_km1 = dvlist.asvec()    
+    d_km1 = 0
 #    print "d_km1 = ", d_km1
 #    print "u_km1 = ", u_km1
 
@@ -472,8 +514,8 @@ def runsim(k, simcon, opnclsd):
     # Update open and closed-loop predictions
     for field in ["olpred", "clpred"]:
         mvlist.vecassign(u_k, field, index=0)
-        dvlist.vecassign(d_km1, field, index=0)
-        xilist.vecassign(xhat_k, field, index=0)
+#        dvlist.vecassign(d_km1, field, index=0)
+        xvlist.vecassign(xhat_k, field, index=0)
         cvlist.vecassign(yhat_k, field, index=0)
     
     xof_km1 = np.concatenate((xhat_k,dhat_k))
@@ -503,8 +545,8 @@ def runsim(k, simcon, opnclsd):
 
         for field in ["olpred", "clpred"]:
             mvlist.vecassign(u_k, field, index=(i + 1))
-            dvlist.vecassign(d_km1, field, index=(i + 1))
-            xilist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
+#            dvlist.vecassign(d_km1, field, index=(i + 1))
+            xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
     
         xof_km1 = xof_k
@@ -552,12 +594,12 @@ def runsim(k, simcon, opnclsd):
         sol = mpc.util.casadiStruct2numpyDict(controller.var)
 
         mvlist.vecassign(u_k, "clpred", index=0)
-        xilist.vecassign(xhat_k, "clpred", index=0)
+        xvlist.vecassign(xhat_k, "clpred", index=0)
         cvlist.vecassign(yhat_k, "clpred", index=0)
 
         for i in range(Nf - 1):
             mvlist.vecassign(sol["u"][i+1,:], "clpred", index=(i + 1))
-            xilist.vecassign(sol["x"][i+1,:Nx], "clpred", index=(i + 1))
+            xvlist.vecassign(sol["x"][i+1,:Nx], "clpred", index=(i + 1))
             xcl_k = sol["x"][i+1,:]
             ycl_k = measurement(xcl_k)
             cvlist.vecassign(ycl_k[:Ny], "clpred", index=(i + 1))
@@ -570,8 +612,8 @@ def runsim(k, simcon, opnclsd):
 
     # Store variable values
     mvlist.vecassign(u_k)
-    xilist.vecassign(x_k)
-    xilist.vecassign(xhat_k, "est")
+    xvlist.vecassign(x_k)
+    xvlist.vecassign(xhat_k, "est")
 #    dvlist[0].est = dhat_k
     cvlist.vecassign(y_k)
     cvlist.vecassign(yhat_k, "est")
@@ -592,15 +634,11 @@ DVmenu=["value","pltmax","pltmin"]
 
 MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
             pltmin=100.0, pltmax=200.0, minlim=105.0, maxlim=195.0, svalue=1.0,
-            value=0.0, target=0.0, Nf=60, menu=MVmenu)
+            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
             pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0,
-            value=0.0, target=0.0, Nf=60, menu=MVmenu)
-
-DV1 = sim.MVobj(name='fd', desc='fuel flow disturbance', units='(sccm)', 
-            pltmin=0.0, pltmax=100.0,
-            value=100.0, Nf=60, menu=DVmenu)
+            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
             pltmin=0.0, pltmax=3500.0, minlim=0.0, maxlim=3500.0, qvalue=1.0, noise=1.0,
@@ -624,7 +662,7 @@ XV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)',
 
 XV3 = sim.XVobj(name='t', desc='bag temperature', units='(degC)', 
                pltmin=-100, pltmax=100, 
-               value=0.0, Nf=60, menu=XVmenu)
+               value=1.244, Nf=60, menu=XVmenu)
 
 XV4 = sim.XVobj(name='r', desc='reference trajectory state', units='', 
                pltmin=-100, pltmax=100, 
@@ -640,13 +678,12 @@ OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 MVlist = [MV1, MV2]
 XVlist = [XV1, XV2, XV3, XV4]
 CVlist = [CV1, CV2, CV3]
-DVlist = [DV1]
 OPlist = [NF, OL]
 DeltaT = 0.5
 N      = 120
 refint = 100
 simcon = sim.SimCon(simname=simname,
-                    mvlist=MVlist, cvlist=CVlist, xvlist=XVlist, dvlist=DVlist,
+                    mvlist=MVlist, cvlist=CVlist, xvlist=XVlist,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # build the GUI and start it up.

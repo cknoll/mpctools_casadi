@@ -1,5 +1,8 @@
 # This is a fired heater example.
 #
+# ToDO:
+# 1. Add soft constraint weights to CV menu.
+# 2. Write up a script 
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
