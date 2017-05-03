@@ -91,7 +91,9 @@ def runsim(k, simcon, opnclsd):
             u0[i] = mvlist[i].value
 #        for i in range(Nd):
 #            d0[i] = dvlist[i].value
-            
+        xd = x0
+        ud = u0
+
         # Define scaling factors
             
         h0 = 1.1e4         # altitude scaling factor            (m)
@@ -113,9 +115,10 @@ def runsim(k, simcon, opnclsd):
 
         # Define ode for the hot-air balloon .
 
-        def ode(x,u):
+        def ode(x,u,d):
+            
             f     = (1 + u[0])*100/f0;
-            term1 = alpha*(1 - delta*x[0])**(gamma -1);
+            term1 = alpha*(1 - delta*xd[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
             term4 = (1 + lambde*u[1]);
@@ -130,7 +133,7 @@ def runsim(k, simcon, opnclsd):
         # Create casadi function and simulator.
 
         ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
-        htr = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+        hab = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
 
         # Initialize the steady-state values
 
@@ -162,7 +165,7 @@ def runsim(k, simcon, opnclsd):
             dxdt = mpc.vcat([ode_disturbance(x,u,d), np.zeros((Nid,))])
             return dxdt
  
-        htraug = mpc.DiscreteSimulator(ode_augmented, Delta,
+        habaug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
         
 
@@ -176,8 +179,8 @@ def runsim(k, simcon, opnclsd):
 
             # For this case all of the disturbances are output disturbances.
 
-            xc   = x[:Nx]
-            dhat = x[Nx:Nx+Nid]
+            xc    = x[:Nx]
+            dhat  = x[Nx:Nx+Nid]
             ym   = np.dot(Cx,xc) + dhat
             return ym
 
@@ -343,7 +346,7 @@ def runsim(k, simcon, opnclsd):
 
         # Make steady-state target selector.
 
-        contVars = [0,1,2,3,4]
+#        contVars = [0,1]
         Rss = R;
 #        Rss  = np.zeros((Nu,Nu))
         Qyss = Qy
@@ -413,22 +416,22 @@ def runsim(k, simcon, opnclsd):
         }
         controller = mpc.nmpc(**nmpcargs)
 
-        if k == 0:
+#        if k == 0:
             # Initialize variables
-            x_k      = np.zeros(Nx)
-            xhat_k   = np.zeros(Nx)
-            dhat_k   = np.zeros(Nid)
+#            x_k      = np.zeros(Nx)
+#            xhat_k   = np.zeros(Nx)
+#            dhat_k   = np.zeros(Nid)
 
             # Store initial values for variables
-            xvlist.vecassign(xs)
-            xvlist.vecassign(xs, "est")
-            mvlist.vecassign(us)
+#            xvlist.vecassign(xs)
+#            xvlist.vecassign(xs, "est")
+#            mvlist.vecassign(us)
 #            dvlist.vecassign(ds)
-            cvlist.vecassign(dhat_k, "dist")
+#            cvlist.vecassign(dhat_k, "dist")
             #            dvlist[0].est = dhat_k
 
         # Store values in simulation container
-        simcon.proc = [htr]
+        simcon.proc = [hab]
         simcon.mod = []
         simcon.mod.append(us)
         simcon.mod.append(xs)
@@ -437,7 +440,7 @@ def runsim(k, simcon, opnclsd):
         simcon.mod.append(estimator)
         simcon.mod.append(targetfinder)
         simcon.mod.append(controller)
-        simcon.mod.append(htraug)
+        simcon.mod.append(habaug)
         simcon.mod.append(measurement)
         simcon.mod.append(psize)
         simcon.ydata = ydata
@@ -445,7 +448,7 @@ def runsim(k, simcon, opnclsd):
 
     # Get stored values
     #TODO: these should be dictionaries.
-    htr           = simcon.proc[0]
+    hab           = simcon.proc[0]
     us            = simcon.mod[0]
     xs            = simcon.mod[1]
     ys            = simcon.mod[2]
@@ -453,7 +456,7 @@ def runsim(k, simcon, opnclsd):
     estimator     = simcon.mod[4]
     targetfinder  = simcon.mod[5]
     controller    = simcon.mod[6]
-    htraug        = simcon.mod[7]
+    habaug        = simcon.mod[7]
     measurement   = simcon.mod[8]
     psize         = simcon.mod[9]
     Nx            = psize[0]
@@ -472,13 +475,14 @@ def runsim(k, simcon, opnclsd):
     x_km1 = xvlist.asvec()
     u_km1 = mvlist.asvec()
 #    d_km1 = dvlist.asvec()    
-    d_km1 = 0
-#    print "d_km1 = ", d_km1
-#    print "u_km1 = ", u_km1
+    d_km1 = []
+    print "x_km1 = ", x_km1
+    print "u_km1 = ", u_km1
+    print "d_km1 = ", d_km1
 
     # Advance the process
 
-    x_k = htr.sim(x_km1, u_km1, d_km1)
+    x_k = hab.sim(x_km1, u_km1, d_km1)
 
     # Take plant measurement
 
@@ -529,7 +533,7 @@ def runsim(k, simcon, opnclsd):
     for i in range(0,(Nf - 1)):
         if predictionOkay:
             try:
-                xof_k = htraug.sim(xof_km1, u_km1, ds)
+                xof_k = habaug.sim(xof_km1, u_km1, ds)
             except RuntimeError: # Integrator failed.
                 predictionOkay = False
         if predictionOkay:
@@ -621,7 +625,7 @@ def runsim(k, simcon, opnclsd):
     simcon.ydata    = ydata
     simcon.udata    = udata
 
-# set up htr mpc example
+# set up hab mpc example
 
 simname = 'Hot-Air Ballon Example'
 
@@ -661,7 +665,7 @@ XV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)',
             value=0.0, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='t', desc='bag temperature', units='(degC)', 
-               pltmin=-100, pltmax=100, 
+               pltmin=70, pltmax=100, 
                value=1.244, Nf=60, menu=XVmenu)
 
 XV4 = sim.XVobj(name='r', desc='reference trajectory state', units='', 
