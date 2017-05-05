@@ -11,7 +11,7 @@
 \begin{frame}[allowframebreaks]{Installation}
     Install a scientific Python 2.7 distribution
     \begin{itemize}
-        \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, and matplotlib.
+        \item Any ``Scientific Python'' should do, but it must include NumPy, SciPy, matplotlib, and Tkinter.
         \item Be sure to choose 2.7 and not 3.x
         \item Spyder (a Python IDE) is very helpful but not required.
         \item See the \hyperlink{scientificpython}{\textcolor{blue}{Scientific Python Options}} slides for some good choices
@@ -35,10 +35,9 @@
     \begin{itemize}
         \item Windows/Linux/Mac zip file available at \clickurl{http://files.casadi.org}
             \begin{itemize}
-                \item Choose 3.0.1, pick OS, and download \texttt{casadi-py27-*.zip}
-                \item Windows 64 bit users, see the \hyperlink{specialnotes}{\textcolor{blue}{Special Notes}} slide
+                \item Choose 3.1.1, pick OS, and download \texttt{casadi-py27-*.zip}
             \end{itemize}
-        \item Unzip \texttt{casadi}, \texttt{lib}, and \texttt{include} to the \texttt{mpc-tools-casadi} folder from the previous step.
+        \item Unzip \texttt{casadi}, to the \texttt{mpc-tools-casadi} folder from the previous step.
     \end{itemize}
     
     \medskip
@@ -47,7 +46,7 @@
     \begin{itemize}
         \item Open a Python interpreter (run \lstinline[style=shell]!python! from a terminal/command prompt)
         \item Run the commands \lstinline[style=python]!import site; print site.getusersitepackages()! to see where your user site packages are stored
-        \item Move the \texttt{casadi}, \texttt{lib}, \texttt{include}, and \texttt{mpctools} folders to that location.
+        \item Move the \texttt{casadi} and \texttt{mpctools} folders to that location.
         \begin{itemize}
             \item You should make the folders if they do not already exist
         \end{itemize}
@@ -68,7 +67,7 @@
     APT (Ubuntu/Debian)
     \begin{itemize}
         \item Use \lstinline[style=shell]@sudo apt-get install spyder@ to get Spyder and all dependencies.
-        \item Includes \texttt{python-numpy}, \texttt{python-scipy}, and \texttt{python-matplotlib}.
+        \item Includes \texttt{python-numpy}, \texttt{python-scipy}, \texttt{python-matplotlib}, and \texttt{python-tk}.
     \end{itemize}
     
     \framebreak
@@ -79,18 +78,10 @@
         \item Download from \clickurl{http://conda.pydata.org/miniconda.html}
         \item After install, need to install additional components
         \begin{itemize}
-            \item Packages: \lstinline[style=shell]@conda install numpy scipy matplotlib@
+            \item Packages: \lstinline[style=shell]@conda install numpy scipy matplotlib tk@
             \item IDE: \lstinline[style=shell]@conda install spyder@
             \item Both commands should be entered in a terminal/command prompt
         \end{itemize}
-    \end{itemize}
-    
-    \medskip
-    
-    Python(x,y) (Windows only)
-    \begin{itemize}
-        \item Download from \clickurl{http://python-xy.github.io/}
-        \item Only 32 bit is available.
     \end{itemize}
 \end{frame}
 
@@ -135,17 +126,9 @@
 \begin{frame}[label=specialnotes]{Special Notes}
     The CasADi version you download must match the bitness of your Python installation (i.e., 32 vs. 64 bit).
     \begin{itemize}
-        \item For 32 bit: \texttt{casadi-py27-np1.9.1-v3.0.1.zip}
-        \item For 64 bit: \texttt{casadi-py27-np1.9.1-v3.0.1-64bit.zip}
+        \item For 32 bit: \texttt{casadi-py27-np1.9.1-v3.1.1.zip}
+        \item For 64 bit: \texttt{casadi-py27-np1.9.1-v3.1.1-64bit.zip}
         \item You can check Python bitness in an interpreter with \lstinline[style=python]!import sys; print 64 if sys.maxsize > 2**32 else 32!
-    \end{itemize}
-    
-    \medskip
-    
-    For Windows 64 bit, the official releases are bugged. Use a version from the ``commits'' folder on \clickurl{http://files.casadi.org}.
-    \begin{itemize}
-        \item E.g., commit \texttt{de2f632} from \winsixtyfour{https://sourceforge.net/}\hspace{0pt}\winsixtyfour{projects/casadi/files/CasADi/commits/de2f632/windows/}
-        \item These are development versions with extra features (but possibly extra bugs)
     \end{itemize}
 \end{frame}
 

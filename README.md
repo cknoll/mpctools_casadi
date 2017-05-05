@@ -28,6 +28,8 @@ To use mpc-tools-casadi, you will need a recent versions of
 * Python 2.7
 * Numpy
 * Scipy
+* Matplotlib
+* Tkinter (only needed for `*_mpcsim.py` examples)
 * Casadi (Version >=3.0; download from <http://files.casadi.org>)
 
 With these packages installed, mpc-tools-casadi can be downloaded from the
