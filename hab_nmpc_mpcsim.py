@@ -1,10 +1,14 @@
 # This is a hot-air balloon example
 #
 # ToDo:
-# (1) Add slider for vent and button for fuel.
-# (2) Write up a script.
+# (0) Plot dimensional values
+# (1) Get rid of disturbance d
+# (2) Add soft constraints
+# (3) Make the fuel an integer MV
+# (4) Add slider for vent and button for fuel.
+# (5) Write up a script.
 #
-# Tom Badgwell 05/05/17
+# Tom Badgwell 05/06/17
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
@@ -62,7 +66,7 @@ def runsim(k, simcon, opnclsd):
 
         # Define problem size parameters.
 
-        Nx   = 4           # number of states
+        Nx   = 3            # number of states
         Nu   = 2            # number of inputs
         Nd   = 0            # number of measured disturbances
         Ny   = 3            # number of outputs
@@ -111,22 +115,21 @@ def runsim(k, simcon, opnclsd):
         gamma  = 5.257     # atmosphere number
         delta  = 0.2481    # temperature drop-off coefficient
         lambde = 1.00      # vent coefficient
-        eps    = t0/tc     # reference trajectory factory
 
         # Define ode for the hot-air balloon .
 
         def ode(x,u,d):
-            f     = (1 + u[0])*100/f0;
+
+            f     = (1 + u[0]/f0)*100/f0;
             term1 = alpha*(1 - delta*x[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
-            term4 = (1 + lambde*u[1]);
+            term4 = (1 + lambde*u0[1]/p0);
             term5 = omega*x[1]*np.fabs(x[1]);
             dx1dt = x[1]; 
             dx2dt = term1*term2 - 0.5 - term5;
             dx3dt = -term3*term4 + f;
-            dx4dt = -eps*x[3];
-            dxdt = np.array([dx1dt, dx2dt, dx3dt, dx4dt]);
+            dxdt = np.array([dx1dt, dx2dt, dx3dt]);
             return dxdt
 
         # Create casadi function and simulator.
@@ -170,9 +173,10 @@ def runsim(k, simcon, opnclsd):
 
         # Only the first three states are measured
 
-        Cx = np.array([[1, 0, 0, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 1, 0]])
+        Cx = np.array([[1, 0, 0],
+                       [0, 1, 0],
+                       [0, 0, 1]])
+
 
         def measurement(x,d=ds):
 
@@ -180,7 +184,11 @@ def runsim(k, simcon, opnclsd):
 
             xc    = x[:Nx]
             dhat  = x[Nx:Nx+Nid]
-            ym = np.dot(Cx,xc) + dhat
+            yd = np.dot(Cx,xc) + dhat
+            ym = yd
+            ym[0] = yd[0]*h0
+            ym[1] = yd[1]*h0/t0
+            ym[2] = yd[2]*T0
             return ym
 
         # Turn into casadi functions.
@@ -213,45 +221,10 @@ def runsim(k, simcon, opnclsd):
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
-        # Now get a linearization at this steady state and calculate Riccati cost-to-go.
 
-#        a11  = 0
-#        a12  = 1
-#        a13  = 0
-#        a14  = 0
-#        a21a = -delta*alpha*(gamma**-1)*((1-delta*x0[0])**(gamma-2))
-#        a21b = 1-(gamma**2)*(1-delta*x0[0])/x0[2]
-#        a21  = a21a*a21b
-#        a22  = 0
-#        a23  = (1-delta*x0[0])*(x0[2]**-2)
-#        a24  = 0
-#        a31  = -beta*delta
-#        a32  = 0
-#        a33  = -beta
-#        a34  = 0
-#        a41  = 0
-#        a42  = 0
-#        a43  = 0
-#        a44  = -eps
-#        A    = np.array([[a11, a12, a13, a14],
-#                [a21, a22, a23, a24],
-#                [a31, a31, a33, a34],
-#                [a41, a42, a43, a44]])
-#        b11 = 0
-#        b12 = 0
-#        b21 = 0
-#        b22 = 0
-#        b31 = 100.0/f0
-#        b32 = beta*lambde
-#        b41 = 0
-#        b42 = 0
-#        B   = np.array([[b11, b12],
-#                        [b21, b22],
-#                        [b31, b32],
-#                        [b41, b42]])
-#
-#        print "A = ", A
-#        print "B = ", B
+        print "xs = ", xs
+        print "us = ", us
+        print "ds = ", ds
 
         ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
         A = ss["A"]
@@ -280,7 +253,7 @@ def runsim(k, simcon, opnclsd):
 
         # Build augmented estimator matrices.
 
-        Qw = np.diag([1, 1, 1, 1, 1, 1, 1])
+        Qw = np.diag([1, 1, 1, 1, 1, 1])
         Rv = np.diag([cvlist[0].mnoise, cvlist[1].mnoise, cvlist[2].mnoise])
         Qwinv = linalg.inv(Qw)
         Rvinv = linalg.inv(Rv)
@@ -634,45 +607,45 @@ XVmenu=["mnoise","noise","pltmax","pltmin"]
 CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"]
 DVmenu=["value","pltmax","pltmin"]
 
-MV1 = sim.MVobj(name='f', desc='dim. fuel flow setpoint', units='',
-            pltmin=-0.1, pltmax=3.1, minlim=0.0, maxlim=3.0, svalue=1.0,
+# MV1 = sim.MVobj(name='f', desc='dim. fuel flow setpoint', units='',
+#            pltmin=-0.1, pltmax=3.1, minlim=0.0, maxlim=3.0, svalue=1.0,
+#            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+#
+# MV2 = sim.MVobj(name='p', desc='dim. top vent position', units='', 
+#            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, svalue=1.0,
+#            rvalue=1.0, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+
+MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
+            pltmin=0.0, pltmax=7000.0, minlim=105.0, maxlim=195.0, svalue=1.0,
             rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
-MV2 = sim.MVobj(name='p', desc='dim. top vent position', units='', 
-            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, svalue=1.0,
-            rvalue=1.0, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
+            pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0,
+            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
-# MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
-#            pltmin=100.0, pltmax=200.0, minlim=105.0, maxlim=195.0, svalue=1.0,
-#            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
-#
-# MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
-#            pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0,
-#            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
-
-CV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
-            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, qvalue=1.0, noise=0.01,
-            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
-
-CV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
-            pltmin=-0.06, pltmax=0.06, minlim=-0.05, maxlim=0.05, qvalue=0.0, noise=0.001,
-            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
-
-CV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
-            pltmin=1.1, pltmax=1.7, minlim=1.2, maxlim=1.6, qvalue=0.0, noise=0.016,
-            value=1.244, setpoint=1.244, Nf=60, menu=CVmenu)
-
-# CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
-#            pltmin=0.0, pltmax=3500.0, minlim=0.0, maxlim=3500.0, qvalue=1.0, noise=1.0,
+# CV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
+#            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, qvalue=1.0, noise=0.01,
 #            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 #
-# CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
-#            pltmin=-25.0, pltmax=25.0, minlim=-23.0, maxlim=23.0, qvalue=1.0, noise=1.0,
+# CV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
+#            pltmin=-0.06, pltmax=0.06, minlim=-0.05, maxlim=0.05, qvalue=0.0, noise=0.001,
 #            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 #
-# CV3 = sim.XVobj(name='T', desc='bag temperature', units='(degC)', 
-#            pltmin=60.0, pltmax=110.0, minlim=61.0, maxlim=109.0, qvalue=0.0, noise=0.1,
-#            value=85.0, setpoint=85.0, Nf=60, menu=CVmenu)
+# CV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
+#            pltmin=1.1, pltmax=1.7, minlim=1.2, maxlim=1.6, qvalue=0.0, noise=0.016,
+#            value=1.244, setpoint=1.244, Nf=60, menu=CVmenu)
+
+CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
+            pltmin=0.0, pltmax=3500.0, minlim=0.0, maxlim=3500.0, qvalue=1.0, noise=1.0,
+            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
+
+CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
+            pltmin=-25.0, pltmax=25.0, minlim=-23.0, maxlim=23.0, qvalue=0.0, noise=1.0,
+            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
+
+CV3 = sim.XVobj(name='T', desc='bag temperature', units='(degC)', 
+            pltmin=60.0, pltmax=110.0, minlim=61.0, maxlim=109.0, qvalue=0.0, noise=0.1,
+            value=85.0, setpoint=85.0, Nf=60, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
             pltmin=-0.1, pltmax=1.1, 
@@ -686,10 +659,6 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
                pltmin=1.1, pltmax=1.7, 
                value=1.244, Nf=60, menu=XVmenu)
 
-XV4 = sim.XVobj(name='r', desc='reference trajectory state', units='', 
-               pltmin=-2, pltmax=2, 
-               value=0.0, Nf=60, menu=XVmenu)
-
 # define options
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
@@ -698,7 +667,7 @@ OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 # load up variable lists
 
 MVlist = [MV1, MV2]
-XVlist = [XV1, XV2, XV3, XV4]
+XVlist = [XV1, XV2, XV3]
 CVlist = [CV1, CV2, CV3]
 OPlist = [NF, OL]
 DeltaT = 0.5
