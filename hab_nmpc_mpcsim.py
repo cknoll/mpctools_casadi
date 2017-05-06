@@ -120,7 +120,8 @@ def runsim(k, simcon, opnclsd):
 
         def ode(x,u,d):
 
-            f     = (1 + u[0]/f0)*100/f0;
+            f     = (1 + u[0])*100/f0;
+#            f     = u[0]/f0;
             term1 = alpha*(1 - delta*x[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
@@ -171,7 +172,7 @@ def runsim(k, simcon, opnclsd):
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
         
 
-        # Only the first three states are measured
+        # Measure the three states
 
         Cx = np.array([[1, 0, 0],
                        [0, 1, 0],
@@ -188,7 +189,7 @@ def runsim(k, simcon, opnclsd):
             ym = yd
             ym[0] = yd[0]*h0
             ym[1] = yd[1]*h0/t0
-            ym[2] = yd[2]*T0
+            ym[2] = yd[2]*T0 - 273.2
             return ym
 
         # Turn into casadi functions.
@@ -220,11 +221,6 @@ def runsim(k, simcon, opnclsd):
         Qx  = mpc.mtimes(Cx.T,Qy,Cx)
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
-
-
-        print "xs = ", xs
-        print "us = ", us
-        print "ds = ", ds
 
         ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
         A = ss["A"]
@@ -616,7 +612,7 @@ DVmenu=["value","pltmax","pltmin"]
 #            rvalue=1.0, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
-            pltmin=0.0, pltmax=7000.0, minlim=105.0, maxlim=195.0, svalue=1.0,
+            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, svalue=1.0,
             rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
