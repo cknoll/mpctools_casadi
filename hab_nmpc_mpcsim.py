@@ -1,12 +1,13 @@
 # This is a hot-air balloon example
 #
 # ToDo:
-# (0) Plot dimensional values
-# (1) Get rid of disturbance d
-# (2) Add soft constraints
-# (3) Make the fuel an integer MV
-# (4) Add slider for vent and button for fuel.
-# (5) Write up a script.
+# (0) Plot dimensional values: verify same solution as dimensionless
+# (1) Add estimator and control constraint h >= 0
+# (2) Get rid of disturbance d
+# (3) Add soft constraints
+# (4) Make the fuel an integer MV
+# (5) Add slider for vent and button for fuel.
+# (6) Write up a script.
 #
 # Tom Badgwell 05/06/17
 
@@ -120,8 +121,8 @@ def runsim(k, simcon, opnclsd):
 
         def ode(x,u,d):
 
+
             f     = (1 + u[0])*100/f0;
-#            f     = u[0]/f0;
             term1 = alpha*(1 - delta*x[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
@@ -451,6 +452,10 @@ def runsim(k, simcon, opnclsd):
     # Advance the process
 
     x_k = hab.sim(x_km1, u_km1, d_km1)
+
+    # Constrain the altitude state
+
+    if (x_k[0] < 0.0): x_k[0] = 0.0
 
     # Take plant measurement
 
