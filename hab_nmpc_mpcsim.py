@@ -1,15 +1,12 @@
 # This is a hot-air balloon example
 #
 # ToDo:
-# (0) Plot dimensional values: verify same solution as dimensionless
-# (1) Add estimator and control constraint h >= 0
-# (2) Get rid of disturbance d
-# (3) Add soft constraints
-# (4) Make the fuel an integer MV
-# (5) Add slider for vent and button for fuel.
-# (6) Write up a script.
+# (1) Add soft output constraints and expose tuning weights
+# (2) Make the fuel an integer MV
+# (3) Add constraint to MHE: h >= 0
+# (4) Expose the mhe tuning parameters
 #
-# Tom Badgwell 05/06/17
+# Tom Badgwell 05/10/17
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
@@ -120,13 +117,11 @@ def runsim(k, simcon, opnclsd):
         # Define ode for the hot-air balloon .
 
         def ode(x,u,d):
-
-
-            f     = (1 + u[0])*100/f0;
+            f     = (1 + 0.03*u[0])*100/f0;
             term1 = alpha*(1 - delta*x[0])**(gamma -1);
             term2 = (1 - (1 - delta*x[0])/x[2]);
             term3 = beta*(x[2] -1 + delta*x[0]);
-            term4 = (1 + lambde*u0[1]/p0);
+            term4 = (1 + lambde*u[1]/p0);
             term5 = omega*x[1]*np.fabs(x[1]);
             dx1dt = x[1]; 
             dx2dt = term1*term2 - 0.5 - term5;
@@ -173,12 +168,11 @@ def runsim(k, simcon, opnclsd):
                                         [Nx+Nid,Nu,Nd], ["xaug","u","d"])
         
 
-        # Measure the three states
+        # Only the first three states are measured
 
         Cx = np.array([[1, 0, 0],
                        [0, 1, 0],
                        [0, 0, 1]])
-
 
         def measurement(x,d=ds):
 
@@ -190,6 +184,7 @@ def runsim(k, simcon, opnclsd):
             ym = yd
             ym[0] = yd[0]*h0
             ym[1] = yd[1]*h0/t0
+#           ym[2] = yd[2]
             ym[2] = yd[2]*T0 - 273.2
             return ym
 
@@ -608,36 +603,16 @@ XVmenu=["mnoise","noise","pltmax","pltmin"]
 CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"]
 DVmenu=["value","pltmax","pltmin"]
 
-# MV1 = sim.MVobj(name='f', desc='dim. fuel flow setpoint', units='',
-#            pltmin=-0.1, pltmax=3.1, minlim=0.0, maxlim=3.0, svalue=1.0,
-#            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
-#
-# MV2 = sim.MVobj(name='p', desc='dim. top vent position', units='', 
-#            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, svalue=1.0,
-#            rvalue=1.0, value=0.0, target=0.0, Nf=60, menu=MVmenu)
-
-MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(sccm)',
-            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, svalue=1.0,
-            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(%)',
+            pltmin=-5.0, pltmax=105.0, minlim=0.0, maxlim=100.0, svalue=9.0e-4,
+            rvalue=9.0e-7, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
-            pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0,
-            rvalue=0.001, value=0.0, target=0.0, Nf=60, menu=MVmenu)
-
-# CV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
-#            pltmin=-0.1, pltmax=1.1, minlim=0.0, maxlim=1.0, qvalue=1.0, noise=0.01,
-#            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
-#
-# CV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
-#            pltmin=-0.06, pltmax=0.06, minlim=-0.05, maxlim=0.05, qvalue=0.0, noise=0.001,
-#            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
-#
-# CV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
-#            pltmin=1.1, pltmax=1.7, minlim=1.2, maxlim=1.6, qvalue=0.0, noise=0.016,
-#            value=1.244, setpoint=1.244, Nf=60, menu=CVmenu)
+            pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0e-4,
+            rvalue=1.0e-4, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
-            pltmin=0.0, pltmax=3500.0, minlim=0.0, maxlim=3500.0, qvalue=1.0, noise=1.0,
+            pltmin=-300.0, pltmax=7300.0, minlim=0.0, maxlim=7000.0, qvalue=1.0, noise=1.0,
             value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 
 CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
@@ -645,20 +620,20 @@ CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)',
             value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
 
 CV3 = sim.XVobj(name='T', desc='bag temperature', units='(degC)', 
-            pltmin=60.0, pltmax=110.0, minlim=61.0, maxlim=109.0, qvalue=0.0, noise=0.1,
+            pltmin=55.0, pltmax=125.0, minlim=60.0, maxlim=120.0, qvalue=0.0, noise=0.1,
             value=85.0, setpoint=85.0, Nf=60, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
-            pltmin=-0.1, pltmax=1.1, 
+            pltmin=-0.1, pltmax=0.7, 
             value=0.0, Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
-            pltmin=-0.06, pltmax=0.06, 
+            pltmin=-0.08, pltmax=0.08, 
             value=0.0, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
-               pltmin=1.1, pltmax=1.7, 
-               value=1.244, Nf=60, menu=XVmenu)
+            pltmin=1.19, pltmax=1.4, 
+            value=1.244, Nf=60, menu=XVmenu)
 
 # define options
 
