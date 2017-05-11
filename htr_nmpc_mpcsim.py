@@ -718,10 +718,6 @@ OPlist = [NF, OL]
 DeltaT = 1.0
 N      = 120
 refint = 100
-simcon = sim.SimCon(simname=simname,
-                    mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
-                    xilist=XIlist,
-                    oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # Define state-space matrices.
 ssfhtr_Ax = np.array([
@@ -771,6 +767,16 @@ ssfhtr_Cx = np.array([
     [-4.0975288e-01, 6.8432380e-02, -5.6246447e-01, -3.6622004e-01, -1.4926083e+00, 4.1723975e-01, 1.8132373e-01, 1.0962275e-01, -3.1289443e-01, 1.0522818e+00],
 ])            
 
-# build the GUI and start it up.
-plotspacing = dict(left=0.075, top=0.95, bottom=0.05, right=0.99, hspace=0.5)
-sim.makegui(simcon, plotspacing=plotspacing)
+def dosimulation():
+    """Create the GUI and run the simulation."""
+    simcon = sim.SimCon(simname=simname,
+                    mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
+                    xilist=XIlist, oplist=OPlist, N=N, refint=refint,
+                    runsim=runsim, deltat=DeltaT)
+    # build the GUI and start it up.
+    plotspacing = dict(left=0.075, top=0.95, bottom=0.05, right=0.99,
+                       hspace=0.5)
+    sim.makegui(simcon, plotspacing=plotspacing)
+
+if __name__ == "__main__":
+    dosimulation()

@@ -628,10 +628,17 @@ OPlist = [NF, DH, OL]
 DeltaT = 0.5
 N      = 120
 refint = 100
-simcon = sim.SimCon(simname=simname,
-                    mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
-                    oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
-# build the GUI and start it up
 
-sim.makegui(simcon)
+def dosimulation():
+    """Create the GUI and run the simulation."""
+    simcon = sim.SimCon(simname=simname,
+                        mvlist=MVlist, dvlist=DVlist, cvlist=CVlist, xvlist=XVlist,
+                        oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
+    
+    # build the GUI and start it up
+    
+    sim.makegui(simcon)
+
+if __name__ == "__main__":
+    dosimulation()
