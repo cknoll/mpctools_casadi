@@ -3,10 +3,11 @@
 # ToDo:
 # (1) Add soft output constraints and expose tuning weights
 # (2) Make the fuel an integer MV
-# (3) Add constraint to MHE: h >= 0
+# (3) Constrain the predicted altitude to h >= 0
 # (4) Expose the mhe tuning parameters
+# (5) Linearized LQG version
 #
-# Tom Badgwell 05/10/17
+# Tom Badgwell 05/11/17
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
