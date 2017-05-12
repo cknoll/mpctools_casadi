@@ -120,11 +120,13 @@ def _get_setvalue_options():
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
     })
     return setvalue_options
-_setvalue_options = _get_setvalue_options()
+_SETVALUE_OPTIONS = _get_setvalue_options()
+_SETVALUE_NAMES = util.ReadOnlyDict({sv.field : name for (name, sv) in
+                                     _SETVALUE_OPTIONS.iteritems()})
 
 def setvalue(var, desc):
     """Sets a specific variable field using a dialog box."""
-    vinfo = _setvalue_options.get(desc, None)    
+    vinfo = _SETVALUE_OPTIONS.get(desc, None)    
     if vinfo is not None:
         value = float(getattr(var, vinfo.field))
         entrytext = "%s currently %g, enter new value" % (desc, value)
@@ -173,11 +175,15 @@ def makemenus(win, simcon):
     fbutton.config(menu=filemenu)
 
     # Helper function.
-    def addmenus(variable, menu, keyandname):
+    def addmenus(variable, menu):
         """Loops through keyandname, adding to menu if any keys are found."""
-        for (key, name) in keyandname:
-            if key in variable.menu:
-                menu_add_command(menu, variable, name)
+        for key in variable.menu:
+            name = variable.menu_names.get(key, None)
+            if name is None:
+                name = _SETVALUE_NAMES.get(key, None)
+            if name is None:
+                name = "<UNKNOWN NAME: {}>".format(key)
+            menu_add_command(menu, variable, name)
 
     # build the MV menu
 
@@ -186,25 +192,9 @@ def makemenus(win, simcon):
     mvsmenu = tk.Menu(mbutton, tearoff=0)
     mbutton.config(menu=mvsmenu)
 
-    mvkeyandname = [
-        # (key string, nice menu name)
-        ("value", 'Value'),
-        ("sstarg", 'SS Target'), 
-        ("ssrval", 'SS R Weight'), 
-        ("target", 'Target'),
-        ("rvalue", 'R Weight'), 
-        ("svalue", 'S Weight'),
-        ("maxlim", 'Max Limit'), 
-        ("minlim", 'Min Limit'), 
-        ("roclim", 'ROC Limit'), 
-        ("pltmax", 'Plot High Limit'), 
-        ("pltmin", 'Plot Low Limit'), 
-        ("noise", 'Noise'), 
-        ("dist", 'Step Disturbance'),      
-    ]
     for mv in mvlist:
         mvmenu = tk.Menu(mvsmenu, tearoff=False)
-        addmenus(mv, mvmenu, mvkeyandname)
+        addmenus(mv, mvmenu)
         mvsmenu.add_cascade(label=mv.name, menu=mvmenu, underline=0)
 
     # build the DV menu if there are DVs
@@ -215,16 +205,9 @@ def makemenus(win, simcon):
         dvsmenu = tk.Menu(dbutton, tearoff=0)
         dbutton.config(menu=dvsmenu)
 
-        dvkeyandname = [
-            # (key string, nice menu name)
-            ("value", 'Value'),
-            ("pltmax", 'Plot High Limit'),
-            ("pltmin", 'Plot Low Limit'),
-            ("noise", 'Process Noise'),
-        ]
         for dv in dvlist:
             dvmenu = tk.Menu(dvsmenu, tearoff=False)
-            addmenus(dv, dvmenu, dvkeyandname) 
+            addmenus(dv, dvmenu) 
             dvsmenu.add_cascade(label=dv.name, menu=dvmenu, underline = 0)
 
     # build the XV menu if there are XVs
@@ -234,24 +217,9 @@ def makemenus(win, simcon):
         xvsmenu = tk.Menu(xbutton, tearoff=0)
         xbutton.config(menu=xvsmenu)
 
-        xvkeyandname = [
-            # (key string, nice menu name)
-            ("value", 'Value'),
-            ("sstarg", 'SS Target'),
-            ("ssqval", 'SS Q Weight'),
-            ("setpoint", 'Setpoint'),
-            ("qvalue", 'Q Weight'),
-            ("maxlim", 'Max Limit'),
-            ("minlim", 'Min Limit'),
-            ("pltmax", 'Plot High Limit'),
-            ("pltmin", 'Plot Low Limit'),
-            ("mnoise", 'Model Noise'),
-            ("noise", 'Process Noise'),
-            ("dist", 'Process Step Dist.'),
-        ]
         for xv in xvlist:
             xvmenu = tk.Menu(xvsmenu, tearoff=False)
-            addmenus(xv, xvmenu, xvkeyandname)
+            addmenus(xv, xvmenu)
             xvsmenu.add_cascade(label=xv.name, menu=xvmenu, underline=0)
 
     # build the CV menu
@@ -260,24 +228,9 @@ def makemenus(win, simcon):
     cvsmenu = tk.Menu(cbutton, tearoff=0)
     cbutton.config(menu=cvsmenu)
 
-    cvkeyandname = [
-        # (key string, nice menu name)
-        ("value", 'Value'),
-        ("sstarg", 'SS Target'),
-        ("ssqval", 'SS Q Weight'),
-        ("setpoint", 'Setpoint'),
-        ("qvalue", 'Q Weight'),
-        ("maxlim", 'Max Limit'),
-        ("minlim", 'Min Limit'),
-        ("pltmax", 'Plot High Limit'),
-        ("pltmin", 'Plot Low Limit'),
-        ("mnoise", 'Model Noise'),
-        ("noise", 'Process Noise'),
-        ("dist", 'Process Step Dist.'),
-    ]
     for cv in cvlist:
         cvmenu = tk.Menu(cvsmenu, tearoff=False)
-        addmenus(cv, cvmenu, cvkeyandname)
+        addmenus(cv, cvmenu)
         cvsmenu.add_cascade(label=cv.name, menu=cvmenu, underline = 0)
 
     # build the options menu
@@ -903,6 +856,7 @@ class Option(Updatable):
         self.value  = value
         self.chflag = 0
 
+# TODO: make another subclass for MVobj, DVobj, and CVobj.
 class MVobj(Updatable):
     """Structure for manipulated variables."""
     def __init__(self, name=' ', desc=' ', units= ' ',
@@ -935,6 +889,7 @@ class MVobj(Updatable):
         self.olpred = value*np.ones((Nf,))
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
+        self.menu_names = dict(noise="Input Noise", dist="Step Disturbance")
 
 class DVobj(Updatable):
     """Structure for disturbance variables."""
@@ -955,6 +910,7 @@ class DVobj(Updatable):
         self.olpred = value*np.ones((Nf,))
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
+        self.menu_names = dict()
 
 class CVobj(Updatable):
     """Structure for controlled variables."""
@@ -991,6 +947,7 @@ class CVobj(Updatable):
         self.olpred = value*np.ones((Nf,))
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
+        self.menu_names = dict()
 
 class XVobj(Updatable):
     """Struct for estimated variables."""
@@ -1027,6 +984,7 @@ class XVobj(Updatable):
         self.olpred = value*np.ones((Nf,))
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
+        self.menu_names = dict()
 
 class XIobj(Updatable):
     """Struct for invisible (not plotted) estimated states."""
@@ -1040,6 +998,7 @@ class XIobj(Updatable):
         self.name   = name
         self.desc   = desc
         self.menu   = list(menu)
+        self.menu_names = dict()
 
 class SimCon(object):
     """Struct for simulation contents."""

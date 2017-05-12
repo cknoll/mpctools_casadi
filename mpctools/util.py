@@ -15,6 +15,7 @@ from contextlib import contextmanager
 DM = casadi.DM
 MX = casadi.MX
 vertcat = casadi.vertcat
+sum1 = casadi.sum1
 
 # Grab pdb function to emulate Octave/Matlab's keyboard().
 keyboard = pdb.set_trace

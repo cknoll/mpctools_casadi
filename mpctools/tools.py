@@ -386,8 +386,8 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
 
 
 def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
-           funcargs={}, extrapar={}, discretef=True, verbosity=5, timelimit=60,
-           casaditype="SX", inferargs=False):
+           funcargs={}, extrapar={}, e=None, discretef=True, verbosity=5,
+           timelimit=60, casaditype="SX", inferargs=False):
     """
     Solves nonlinear steady-state target problem.
     
@@ -430,8 +430,8 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     # is passed as a set of variables and one is a set of parameters.
     parNames = set(["p"] + extrapar.keys())
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
-        
-    varNames = set(["x","z","u","y"])
+    
+    varNames = set(["x", "z", "u", "y", "s"])
     varStruct = __casadiSymStruct(allShapes, varNames, casaditype)
 
     # Now we fill up the parameters in the guess structure.
@@ -467,7 +467,7 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, funcargs=funcargs, verbosity=verbosity,
                   discretef=discretef, finalpoint=False, casaditype=casaditype,
-                  inferargs=inferargs)
+                  inferargs=inferargs, e=e)
     return __optimalControlProblem(*args, **kwargs)
 
 

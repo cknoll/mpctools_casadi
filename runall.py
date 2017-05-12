@@ -58,6 +58,7 @@ examplefiles += [
     "vdposcillator.py",
     "predatorprey.py",
     "softconstraints.py",
+    "sstargexample.py",
 ]
 showoutput = set(["fishing.py", "cargears.py"])
 

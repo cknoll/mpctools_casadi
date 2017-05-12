@@ -13,7 +13,6 @@ from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg
-import casadi
 
 useCasadiSX = True
 
@@ -320,35 +319,18 @@ def runsim(k, simcon, opnclsd):
 #        Qyss = np.zeros((Ny,Ny))
 #        Qyss[contVars,contVars] = 1 # We want to control all outputs
 #        Qxss = mpc.mtimes(Cx.T,Qyss,Cx)
-
-        def sstargobj(y,y_sp,u,u_sp,Q,R):
+        
+        def sstargobj(y, y_sp, u, u_sp, Q, R, s):
             dy = y - y_sp
             du = u - u_sp
-            return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du)
+            slb = s[:Ny]
+            sub = s[Ny:]
+            slack = mpc.mtimes(lbslack, slb) + mpc.mtimes(ubslack, sub)
+            return mpc.mtimes(dy.T,Q,dy) + mpc.mtimes(du.T,R,du) + slack
 
-        phiargs = ["y","y_sp","u","u_sp","Q","R"]
-        phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
+        phiargs = ["y", "y_sp", "u", "u_sp", "Q", "R", "s"]
+        phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu),2*Ny],
                                 phiargs, scalar=False)
-
-        sstargargs = {
-            "f" : ode_disturbance_casadi,
-            "h" : measurement_casadi,
-            "lb" : {"u" : np.tile(ulb, (1,1)), "y" : np.tile(ylb, (1,1))},
-            "ub" : {"u" : np.tile(uub, (1,1)), "y" : np.tile(yub, (1,1))},
-            "guess" : {
-                "u" : np.tile(us, (1,1)),
-                "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
-                "y" : np.tile(ys, (1,1)),
-            },
-            "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "f" : Nx},
-            "phi" : phi,
-            "funcargs" : dict(phi=phiargs),
-            "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
-            "verbosity" : 0,
-            "discretef" : False,
-            "casaditype" : "SX" if useCasadiSX else "MX",
-        }
-        targetfinder = mpc.sstarg(**sstargargs)
 
         # Add slacked output constraints.
         def outputcon(x, s):
@@ -363,6 +345,28 @@ def runsim(k, simcon, opnclsd):
             return np.concatenate(terms)
         outputcon_casadi = mpc.getCasadiFunc(outputcon, [Nx + Nid, 2*Ny],
                                              ["x", "s"], funcname="e")
+
+        sstargargs = {
+            "f" : ode_disturbance_casadi,
+            "h" : measurement_casadi,
+            "lb" : {"u" : np.tile(ulb, (1,1))},
+            "ub" : {"u" : np.tile(uub, (1,1))},
+            "guess" : {
+                "u" : np.tile(us, (1,1)),
+                "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
+                "y" : np.tile(ys, (1,1)),
+            },
+            "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "f" : Nx, "e" : 2*Ny,
+                   "s" : 2*Ny},
+            "phi" : phi,
+            "inferargs" : True,
+            "e" : outputcon_casadi,
+            "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
+            "verbosity" : 0,
+            "discretef" : False,
+            "casaditype" : "SX" if useCasadiSX else "MX",
+        }
+        targetfinder = mpc.sstarg(**sstargargs)
     
         # Make NMPC solver.
 

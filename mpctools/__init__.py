@@ -36,6 +36,7 @@ import util
 import colloc
 import solvers
 from tools import nmpc, nmhe, sstarg, getCasadiFunc, DiscreteSimulator
+from tools import safevertcat as vcat
 from util import keyboard, mtimes, ekf
+from util import sum1 as sum
 from solvers import callSolver
-vcat = tools.safevertcat
