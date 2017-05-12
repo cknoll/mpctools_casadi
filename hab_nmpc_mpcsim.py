@@ -13,6 +13,7 @@ from mpctools import mpcsim as sim
 import mpctools as mpc
 import numpy as np
 from scipy import linalg
+import casadi
 
 useCasadiSX = True
 
@@ -67,7 +68,6 @@ def runsim(k, simcon, opnclsd):
 
         Nx   = 3            # number of states
         Nu   = 2            # number of inputs
-        Nd   = 0            # number of measured disturbances
         Ny   = 3            # number of outputs
         Nid  = Ny           # number of integrating disturbances
 
@@ -76,7 +76,7 @@ def runsim(k, simcon, opnclsd):
         Nf   = cvlist[0].Nf # length of NMPC future horizon
         Nmhe = 60           # length of MHE past horizon
 
-        psize = [Nx,Nu,Nd,Ny,Nid,Nw,Nv,Nf,Nmhe]
+        psize = (Nx, Nu, Ny, Nid, Nw, Nv, Nf, Nmhe)
 
         # Define sample time in minutes.
         
@@ -87,7 +87,6 @@ def runsim(k, simcon, opnclsd):
         y0 = np.zeros((Ny,))
         x0 = np.zeros((Nx,))
         u0 = np.zeros((Nu,))
-        d0 = np.zeros((Nd,))
         for i in range(Ny):
             y0[i] = cvlist[i].value
         for i in range(Nx):
@@ -104,7 +103,7 @@ def runsim(k, simcon, opnclsd):
         f0 = 3672          # fuel flowrate at takeoff           (sccm)
         p0 = 100.0         # vent position                      (%)
         t0 = 33.49         # time scale factor                  (s)
-        tc = 100.0         # reference trajectory time constant (s)
+        #tc = 100.0         # reference trajectory time constant (s) # Apparently not used.
         
         # Define parameters for hot-air balloon
 
@@ -117,31 +116,31 @@ def runsim(k, simcon, opnclsd):
 
         # Define ode for the hot-air balloon .
 
-        def ode(x,u,d):
-            f     = (1 + 0.03*u[0])*100/f0;
-            term1 = alpha*(1 - delta*x[0])**(gamma -1);
-            term2 = (1 - (1 - delta*x[0])/x[2]);
-            term3 = beta*(x[2] -1 + delta*x[0]);
-            term4 = (1 + lambde*u[1]/p0);
-            term5 = omega*x[1]*np.fabs(x[1]);
-            dx1dt = x[1]; 
-            dx2dt = term1*term2 - 0.5 - term5;
-            dx3dt = -term3*term4 + f;
-            dxdt = np.array([dx1dt, dx2dt, dx3dt]);
+        def ode(x, u):
+            """ODE for hot air balloon system."""
+            f     = (1 + 0.03*u[0])*100/f0
+            term1 = alpha*(1 - delta*x[0])**(gamma - 1)
+            term2 = (1 - (1 - delta*x[0])/x[2])
+            term3 = beta*(x[2] -1 + delta*x[0])
+            term4 = (1 + lambde*u[1]/p0)
+            term5 = omega*x[1]*np.fabs(x[1])
+            dx1dt = x[1]
+            dx2dt = term1*term2 - 0.5 - term5
+            dx3dt = -term3*term4 + f
+            dxdt = np.array([dx1dt, dx2dt, dx3dt])
             return dxdt
 
         # Create casadi function and simulator.
 
-        ode_casadi = mpc.getCasadiFunc(ode,[Nx,Nu,Nd],["x","u","d"],"ode")
-        hab = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu,Nd], ["x","u","d"])
+        ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], "ode")
+        hab = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
         # Initialize the steady-state values
 
         ys = y0
         xs = x0
         us = u0
-        ds = d0
-        xaugs = np.concatenate((xs,np.zeros((Nid,))))
+        xaugs = np.concatenate((xs, np.zeros((Nid,))))
         
         # Define augmented model for state estimation.    
 
@@ -151,22 +150,22 @@ def runsim(k, simcon, opnclsd):
         # all of the states. It's possible that Ipopt may figure this out by itself,
         # but we should just be explicit to avoid any bugs.    
 
-        def ode_disturbance(x,u,d=ds):
+        def ode_disturbance(x, u):
 
             # For this case there are no input disturbances.
 
-            dxdt = ode(x[:Nx], u, d)
+            dxdt = ode(x[:Nx], u)
             return dxdt
 
-        def ode_augmented(x,u,d=ds):
+        def ode_augmented(x, u):
 
             # Need to add extra zeros for derivative of disturbance states.
 
-            dxdt = mpc.vcat([ode_disturbance(x,u,d), np.zeros((Nid,))])
+            dxdt = mpc.vcat([ode_disturbance(x, u), np.zeros((Nid,))])
             return dxdt
  
         habaug = mpc.DiscreteSimulator(ode_augmented, Delta,
-                                        [Nx+Nid,Nu,Nd], ["xaug","u","d"])
+                                        [Nx+Nid,Nu], ["x","u"])
         
 
         # Only the first three states are measured
@@ -175,13 +174,13 @@ def runsim(k, simcon, opnclsd):
                        [0, 1, 0],
                        [0, 0, 1]])
 
-        def measurement(x,d=ds):
+        def measurement(x):
 
             # For this case all of the disturbances are output disturbances.
 
             xc    = x[:Nx]
             dhat  = x[Nx:Nx+Nid]
-            yd = np.dot(Cx,xc) + dhat
+            yd = mpc.mtimes(Cx, xc) + dhat
             ym = yd
             ym[0] = yd[0]*h0
             ym[1] = yd[1]*h0/t0
@@ -192,25 +191,25 @@ def runsim(k, simcon, opnclsd):
         # Turn into casadi functions.
 
         ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
-                                   [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_disturbance")
+                                   [Nx+Nid,Nu], ["x","u"],"ode_disturbance")
         ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
-                               [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented")
+                               [Nx+Nid,Nu],["x","u"],"ode_augmented")
         ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
-                                   [Nx+Nid,Nu,Nd],["xaug","u","d"],"ode_augmented_rk4",
+                                   [Nx+Nid,Nu],["x","u"],"ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
 
-        def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_rk4_casadi(x, u, d) + w
+        def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,))):
+            return ode_augmented_rk4_casadi(x, u) + w
 
-        def ode_estimator(x,u,w=np.zeros((Nx+Nid,)),d=ds):
-            return ode_augmented_casadi(x, u, d) + w
+        def ode_estimator(x,u,w=np.zeros((Nx+Nid,))):
+            return ode_augmented_casadi(x, u) + w
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
-                                   [Nx+Nid,Nu,Nw,Nd], ["xaug","u","w","d"],
+                                   [Nx+Nid,Nu,Nw], ["x","u","w"],
                                    "ode_estimator_rk4", scalar=False)
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
-                             [Nx+Nid,Nd], ["xaug","d"], "measurement")
+                             [Nx+Nid], ["x"], "measurement")
 
         # Weighting matrices for controller.
 
@@ -219,29 +218,33 @@ def runsim(k, simcon, opnclsd):
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
-        ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us,ds], ["A","B","Bp"], Delta)
+        ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us], ["A","B"], Delta)
         A = ss["A"]
         B = ss["B"]
         [K, Pi] = mpc.util.dlqr(A,B,Qx,R)
 
         # Define control stage cost.
-
-        def stagecost(x,u,xsp,usp,Deltau):
+        lbslack = np.array([[cv.lbslack for cv in cvlist]])
+        ubslack = np.array([[cv.ubslack for cv in cvlist]])
+        def stagecost(x, u, xsp, usp, Deltau, s):
             dx = x[:Nx] - xsp[:Nx]
             du = u - usp
+            slb = s[:Ny]
+            sub = s[Ny:]
+            slack = mpc.mtimes(lbslack, slb) + mpc.mtimes(ubslack, sub)
             return (mpc.mtimes(dx.T,Qx,dx) + .1*mpc.mtimes(du.T,R,du)
-                + mpc.mtimes(Deltau.T,S,Deltau))
+                + mpc.mtimes(Deltau.T,S,Deltau) + slack)
 
-        largs = ["x","u","x_sp","u_sp","Du"]
+        largs = ["x","u","x_sp","u_sp","Du","s"]
         l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l",scalar=False)
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,2*Ny],largs,funcname="l",scalar=False)
 
         # Define cost to go.
 
         def costtogo(x,xsp):
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T,Pi,dx)
-        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],
+        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","x_sp"],
                                funcname="Pf", scalar=False)
 
         # Build augmented estimator matrices.
@@ -265,10 +268,10 @@ def runsim(k, simcon, opnclsd):
 
         # Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
 
-        Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us, ds],
-                                       ["A","B","Bp"], Delta)["A"]
-        Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs, ds],
-                                       ["C","Cp"])["C"]
+        Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us],
+                                       ["A","B"], Delta)["A"]
+        Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs],
+                                       ["C"])["C"]
         Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
         svds = linalg.svdvals(Oaug)
         rank = sum(svds > 1e-8)
@@ -286,14 +289,13 @@ def runsim(k, simcon, opnclsd):
             "u" : uguess,
             "y" : yguess,
             "l" : lest,
-            "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "p":Nd, "t":Nmhe},
+            "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "t":Nmhe},
             "lx" : lxest,
             "x0bar" : x0bar,
-            "p" : np.tile(ds,(Nmhe+1,1)),
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
             "timelimit" : 60,
-            "casaditype" : "SX" if useCasadiSX else "MX",                       
+            "casaditype" : "SX" if useCasadiSX else "MX",
         }
         estimator = mpc.nmhe(**nmheargs)
 
@@ -338,8 +340,7 @@ def runsim(k, simcon, opnclsd):
                 "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
                 "y" : np.tile(ys, (1,1)),
             },
-            "p" : np.tile(ds, (1,1)), # Parameters for system.
-            "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "p" : Nd, "f" : Nx},
+            "N" : {"x" : Nx + Nid, "u" : Nu, "y" : Ny, "f" : Nx},
             "phi" : phi,
             "funcargs" : dict(phi=phiargs),
             "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
@@ -349,23 +350,34 @@ def runsim(k, simcon, opnclsd):
         }
         targetfinder = mpc.sstarg(**sstargargs)
 
+        # Add slacked output constraints.
+        def outputcon(x, s):
+            """Softened output constraints."""
+            y = measurement(x)
+            slb = s[:Ny]
+            sub = s[Ny:]
+            terms = (
+                np.array(ylb) - y - slb,
+                y - np.array(yub) - sub,
+            )
+            return np.concatenate(terms)
+        outputcon_casadi = mpc.getCasadiFunc(outputcon, [Nx + Nid, 2*Ny],
+                                             ["x", "s"], funcname="e")
+    
         # Make NMPC solver.
 
         duub = [ mvlist[0].roclim,  mvlist[1].roclim]
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim]
-        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
-              "y" : np.tile(ylb, (Nf,1))}
-        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1)),
-              "y" : np.tile(yub, (Nf,1))}
-        N = {"x":Nx+Nid, "u":Nu, "p":Nd, "t":Nf}
-        p = np.tile(ds, (Nf,1)) # Parameters for system.
+        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1))}
+        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
+        N = {"x": Nx + Nid, "u": Nu, "t": Nf, "s": 2*Ny, "e": 2*Ny}
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
         guess = sp.copy()
         xaug0 = xaugs
         nmpcargs = {
             "f" : ode_augmented_rk4_casadi,
             "l" : l,
-            "funcargs" : dict(l=largs),
+            "inferargs" : True,
             "N" : N,
             "x0" : xaug0,
             "uprev" : us,
@@ -374,7 +386,7 @@ def runsim(k, simcon, opnclsd):
             "guess" : guess,
             "Pf" : Pf,
             "sp" : sp,
-            "p" : p,
+            "e" : outputcon_casadi,
             "verbosity" : 0,
             "timelimit" : 60,
             "casaditype" : "SX" if useCasadiSX else "MX",
@@ -397,57 +409,29 @@ def runsim(k, simcon, opnclsd):
 
         # Store values in simulation container
         simcon.proc = [hab]
-        simcon.mod = []
-        simcon.mod.append(us)
-        simcon.mod.append(xs)
-        simcon.mod.append(ys)
-        simcon.mod.append(ds)
-        simcon.mod.append(estimator)
-        simcon.mod.append(targetfinder)
-        simcon.mod.append(controller)
-        simcon.mod.append(habaug)
-        simcon.mod.append(measurement)
-        simcon.mod.append(psize)
+        simcon.mod = (us, xs, ys, estimator, targetfinder, controller, habaug,
+                      measurement, psize)
         simcon.ydata = ydata
         simcon.udata = udata
 
     # Get stored values
-    #TODO: these should be dictionaries.
+    #TODO: these should be dictionaries or NamedTuples.
     hab           = simcon.proc[0]
-    us            = simcon.mod[0]
-    xs            = simcon.mod[1]
-    ys            = simcon.mod[2]
-    ds            = simcon.mod[3]
-    estimator     = simcon.mod[4]
-    targetfinder  = simcon.mod[5]
-    controller    = simcon.mod[6]
-    habaug        = simcon.mod[7]
-    measurement   = simcon.mod[8]
-    psize         = simcon.mod[9]
-    Nx            = psize[0]
-    Nu            = psize[1]
-    Nd            = psize[2]
-    Ny            = psize[3]
-    Nid           = psize[4]
-    Nw            = psize[5]
-    Nv            = psize[6]
-    Nf            = psize[7]
-    Nmhe          = psize[8]
+    (us, xs, ys, estimator, targetfinder, controller, habaug, measurement, psize) = simcon.mod
+    (Nx, Nu, Ny, Nid, Nw, Nv, Nf, Nmhe) = psize
     ydata         = simcon.ydata
     udata         = simcon.udata
 
     # Get variable values
     x_km1 = xvlist.asvec()
     u_km1 = mvlist.asvec()
-#    d_km1 = dvlist.asvec()    
-    d_km1 = []
 #    print "x_km1 = ", x_km1
 #    print "u_km1 = ", u_km1
 #    print "d_km1 = ", d_km1
 
     # Advance the process
 
-    x_k = hab.sim(x_km1, u_km1, d_km1)
+    x_k = hab.sim(x_km1, u_km1)
 
     # Constrain the altitude state
 
@@ -502,7 +486,7 @@ def runsim(k, simcon, opnclsd):
     for i in range(0,(Nf - 1)):
         if predictionOkay:
             try:
-                xof_k = habaug.sim(xof_km1, u_km1, ds)
+                xof_k = habaug.sim(xof_km1, u_km1)
             except RuntimeError: # Integrator failed.
                 predictionOkay = False
         if predictionOkay:
@@ -601,7 +585,7 @@ simname = 'Hot-Air Ballon Example'
 
 MVmenu=["value","rvalue","svalue","target","maxlim","minlim","roclim","pltmax","pltmin"]
 XVmenu=["mnoise","noise","pltmax","pltmin"]
-CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin"]
+CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin","lbslack","ubslack"]
 DVmenu=["value","pltmax","pltmin"]
 
 MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(%)',
@@ -612,17 +596,17 @@ MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)',
             pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0e-4,
             rvalue=1.0e-4, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
-CV1 = sim.XVobj(name='h', desc='altitude', units='(m)', 
+CV1 = sim.CVobj(name='h', desc='altitude', units='(m)', 
             pltmin=-300.0, pltmax=7300.0, minlim=0.0, maxlim=7000.0, qvalue=1.0, noise=1.0,
-            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
+            value=0.0, setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
-CV2 = sim.XVobj(name='v', desc='vertical velocity', units='(m/s)', 
+CV2 = sim.CVobj(name='v', desc='vertical velocity', units='(m/s)', 
             pltmin=-25.0, pltmax=25.0, minlim=-23.0, maxlim=23.0, qvalue=0.0, noise=1.0,
-            value=0.0, setpoint=0.0, Nf=60, menu=CVmenu)
+            value=0.0, setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
-CV3 = sim.XVobj(name='T', desc='bag temperature', units='(degC)', 
+CV3 = sim.CVobj(name='T', desc='bag temperature', units='(degC)', 
             pltmin=55.0, pltmax=125.0, minlim=60.0, maxlim=120.0, qvalue=0.0, noise=0.1,
-            value=85.0, setpoint=85.0, Nf=60, menu=CVmenu)
+            value=85.0, setpoint=85.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
             pltmin=-0.1, pltmax=0.7, 

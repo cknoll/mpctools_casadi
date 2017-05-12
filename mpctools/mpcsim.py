@@ -65,7 +65,7 @@ def notdone():
     """Tk error message for features not yet available."""
     tkmsg.showerror('Not implemented', 'Not yet available')
 
-def my_add_command(menu, var, desc):
+def menu_add_command(menu, var, desc):
     """Wrapper to add a command to dropdown menus."""    
     menu.add_command(label='Set ' + desc, command=lambda : setvalue(var, desc),
                      underline=0)
@@ -77,12 +77,14 @@ def openfile(simcon):
     execfile(f)
 
 # Generate dictionary of available options for setvalue.
+# TODO: refactor so that this list is generated in the simulation file instead
+#       of having a single global list.
 def _get_setvalue_options():
     """Returns a dictionary of available setvalue options."""
     SetvalueTuple = collections.namedtuple("SetValue", ["field", "xmin",
                                                         "xmax", "chflag",
                                                         "askfunc"])
-    def svo(field, xmin=None, xmax=None, chflag=False, askfunc=None):
+    def svo(field, xmin=None, xmax=None, chflag=False, askfunc=askfloat):
         """Wrapper for SetvalueTuple with default arguments."""
         return SetvalueTuple(field, xmin, xmax, chflag, askfunc)
     setvalue_options = util.ReadOnlyDict({
@@ -114,6 +116,8 @@ def _get_setvalue_options():
         "Reset Time" : svo("value", xmin=0, xmax=10000, chflag=True),
         "Derivative Time" : svo("value", xmin=0, xmax=100, chflag=True),
         "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=-1e-6, chflag=True),
+        "LB Slack Weight" : svo("lbslack", xmin=0, chflag=True),
+        "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
     })
     return setvalue_options
 _setvalue_options = _get_setvalue_options()
@@ -173,7 +177,7 @@ def makemenus(win, simcon):
         """Loops through keyandname, adding to menu if any keys are found."""
         for (key, name) in keyandname:
             if key in variable.menu:
-                my_add_command(menu, variable, name)
+                menu_add_command(menu, variable, name)
 
     # build the MV menu
 
@@ -285,7 +289,7 @@ def makemenus(win, simcon):
 
     for op in oplist:
         opmenu = tk.Menu(opsmenu, tearoff=False)
-        my_add_command(opmenu, op, op.desc) 
+        menu_add_command(opmenu, op, op.desc) 
         opsmenu.add_cascade(label=op.name, menu=opmenu, underline = 0)
 
     # build the help menu
@@ -958,6 +962,7 @@ class CVobj(Updatable):
                  ssqval=1.0, setpoint=0.0, qvalue=1.0, maxlim=1.0e10,
                  minlim=-1.0e10, roclim=1.0e10, pltmax=100.0, pltmin=0.0,
                  noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
+                 lbslack=None, ubslack=None,
                  menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
                        "noise","dist")):
@@ -981,6 +986,8 @@ class CVobj(Updatable):
         self.chflag = 0
         self.Nf     = Nf
         self.bias   = bias
+        self.lbslack = lbslack
+        self.ubslack = ubslack
         self.olpred = value*np.ones((Nf,))
         self.clpred = value*np.ones((Nf,))
         self.menu   = list(menu)
