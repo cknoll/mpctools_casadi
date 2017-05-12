@@ -200,9 +200,6 @@ def runsim(k, simcon, opnclsd):
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,))):
             return ode_augmented_rk4_casadi(x, u) + w
 
-        def ode_estimator(x,u,w=np.zeros((Nx+Nid,))):
-            return ode_augmented_casadi(x, u) + w
-
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
                                    [Nx+Nid,Nu,Nw], ["x","u","w"],
                                    "ode_estimator_rk4", scalar=False)

@@ -4,6 +4,9 @@ Dashboard for mpcsim simulations.
 Choose the system you wish to simulate. Upon closing the simulation, you will
 be brought back to this main menu.
 """
+import matplotlib
+matplotlib.use("Agg")
+
 import collections
 import numpy as np
 import cstr_nmpc_mpcsim as cstr
