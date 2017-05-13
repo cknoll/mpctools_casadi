@@ -387,7 +387,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
 
 def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
            funcargs={}, extrapar={}, e=None, discretef=True, verbosity=5,
-           timelimit=60, casaditype="SX", inferargs=False):
+           timelimit=60, casaditype="SX", inferargs=False, udiscrete=None):
     """
     Solves nonlinear steady-state target problem.
     
@@ -463,11 +463,16 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     else:
         obj = None
     
+    # Decide if u has discrete components.
+    discretevar = dict()
+    if udiscrete is not None:
+        discretevar["u"] = udiscrete
+    
     # Get controller arguments.    
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, funcargs=funcargs, verbosity=verbosity,
                   discretef=discretef, finalpoint=False, casaditype=casaditype,
-                  inferargs=inferargs, e=e)
+                  inferargs=inferargs, e=e, discretevar=discretevar)
     return __optimalControlProblem(*args, **kwargs)
 
 

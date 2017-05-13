@@ -118,11 +118,14 @@ def _get_setvalue_options():
         "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=-1e-6, chflag=True),
         "LB Slack Weight" : svo("lbslack", xmin=0, chflag=True),
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
+        "Discrete-valued fuel" : svo("value", xmin=0, xmax=1, chflag=True,
+                                     askfunc=askinteger),
     })
     return setvalue_options
 _SETVALUE_OPTIONS = _get_setvalue_options()
 _SETVALUE_NAMES = util.ReadOnlyDict({sv.field : name for (name, sv) in
-                                     _SETVALUE_OPTIONS.iteritems()})
+                                     _SETVALUE_OPTIONS.iteritems()
+                                     if sv.field != "value"})
 
 def setvalue(var, desc):
     """Sets a specific variable field using a dialog box."""

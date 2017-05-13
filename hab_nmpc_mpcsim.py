@@ -29,6 +29,7 @@ def runsim(k, simcon, opnclsd):
     deltat = simcon.deltat
     nf = oplist[0]
     doolpred = oplist[1]
+    discretefuel = oplist[2]
 
     # Check for changes.
 
@@ -307,6 +308,10 @@ def runsim(k, simcon, opnclsd):
             ydata = simcon.ydata
             udata = simcon.udata
 
+        # Choose if u is discrete-valued.
+        udiscrete = np.array([bool(discretefuel.value), False])
+        solvername = "bonmin" if np.any(udiscrete) else "ipopt"
+
         # Make steady-state target selector.
 
 #        contVars = [0,1]
@@ -361,7 +366,9 @@ def runsim(k, simcon, opnclsd):
             "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
+            "udiscrete" : udiscrete,
             "casaditype" : "SX" if useCasadiSX else "MX",
+            "solver" : solvername,
         }
         targetfinder = mpc.sstarg(**sstargargs)
     
@@ -390,7 +397,9 @@ def runsim(k, simcon, opnclsd):
             "e" : outputcon_casadi,
             "verbosity" : 0,
             "timelimit" : 60,
+            "udiscrete" : udiscrete,
             "casaditype" : "SX" if useCasadiSX else "MX",
+            "solver" : solvername,
         }
         controller = mpc.nmpc(**nmpcargs)
 
@@ -625,13 +634,14 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
+fuel = sim.Option(name="Discrete fuel", desc="Discrete-valued fuel", value=0)
 
 # load up variable lists
 
 MVlist = [MV1, MV2]
 XVlist = [XV1, XV2, XV3]
 CVlist = [CV1, CV2, CV3]
-OPlist = [NF, OL]
+OPlist = [NF, OL, fuel]
 DeltaT = 0.5
 N      = 120
 refint = 100

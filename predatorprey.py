@@ -70,15 +70,18 @@ for t in xrange(Nsim + 1):
 def doplot(t, x, y, xhat, yhat):
     """Makes a plot of actual and estimated states and outputs."""
     labels = ["Untagged Prey", "Tagged Prey", "Predators", "Tag Fraction"]
+    estimated = [True, True, True, False]
     if MEASURE_PREY:
         labels.append("Total Prey")
+        estimated.append(False)
     data = np.concatenate((x, y), axis=1)
     datahat = np.concatenate((xhat, yhat), axis=1)
     [fig, ax] = plt.subplots(nrows=len(labels))
-    for (i, label) in enumerate(labels):
+    for (i, (label, est)) in enumerate(zip(labels, estimated)):
         ax[i].plot(t, data[:,i], color="green", label="Actual")
         ax[i].plot(t, datahat[:,i], color="red", label="Estimated")
-        ax[i].set_ylabel(labels[i])
+        label = "\n".join([label, "(Estimated)" if est else "(Measured)"])
+        ax[i].set_ylabel(label)
         if i == 0:
             ax[i].legend(loc="lower center", bbox_to_anchor=(0.5,1.01), ncol=2)
     ax[i].set_xlabel("Time")
