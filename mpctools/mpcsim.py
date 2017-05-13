@@ -79,7 +79,7 @@ def openfile(simcon):
 # Generate dictionary of available options for setvalue.
 # TODO: refactor so that this list is generated in the simulation file instead
 #       of having a single global list.
-def _get_setvalue_options():
+def _get_setvalue_data():
     """Returns a dictionary of available setvalue options."""
     SetvalueTuple = collections.namedtuple("SetValue", ["field", "xmin",
                                                         "xmax", "chflag",
@@ -103,7 +103,8 @@ def _get_setvalue_options():
         "Plot High Limit" : svo("pltmax", xmin="pltmin"),
         "Plot Low Limit" : svo("pltmin", xmax="pltmax"),
         "Process Noise" : svo("noise", xmin=0),
-        "Model Noise" : svo("mnoise", xmin=0),
+        "Model Noise" : svo("mnoise", xmin=1e-10, chflag=True),
+        "Disturbance Model Noise" : svo("dnoise", xmin=1e-10, chflag=True),
         "Process Step Dist." : svo("dist"),
         "Refresh Int." : svo("refint", xmin=10, xmax=10000),
         "Noise Factor" : svo("value", xmin=0),
@@ -120,11 +121,15 @@ def _get_setvalue_options():
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
         "Fuel increment" : svo("value", xmin=0, xmax=1),
     })
-    return setvalue_options
-_SETVALUE_OPTIONS = _get_setvalue_options()
-_SETVALUE_NAMES = util.ReadOnlyDict({sv.field : name for (name, sv) in
-                                     _SETVALUE_OPTIONS.iteritems()
-                                     if sv.field != "value"})
+        
+    # Also create a reverse mapping.
+    setvalue_names = {sv.field : name for (name, sv) in
+                      setvalue_options.iteritems()}
+    setvalue_names["value"] = "Value"
+    setvalue_names = util.ReadOnlyDict(setvalue_names)
+    
+    return (setvalue_options, setvalue_names)
+(_SETVALUE_OPTIONS, _SETVALUE_NAMES) = _get_setvalue_data()
 
 def setvalue(var, desc):
     """Sets a specific variable field using a dialog box."""
@@ -959,7 +964,7 @@ class XVobj(Updatable):
                  setpoint=0.0, qvalue=1.0,
                  maxlim=1.0e10, minlim=-1.0e10,
                  pltmax=100.0, pltmin=0.0,
-                 noise=0.0, mnoise=0.000001, dist=0.0, Nf=0, bias=0.0,
+                 noise=0.0, mnoise=0.000001, dnoise=1, dist=0.0, Nf=0, bias=0.0,
                  menu=("value","sstarg","ssqval","setpoint","qvalue",
                        "maxlim","minlim","pltmax","pltmin","mnoise",
                        "noise","dist")):
@@ -978,6 +983,7 @@ class XVobj(Updatable):
         self.pltmin = pltmin
         self.noise  = noise
         self.mnoise = mnoise
+        self.dnoise = dnoise
         self.dist   = dist
         self.ref    = value
         self.chflag = 0

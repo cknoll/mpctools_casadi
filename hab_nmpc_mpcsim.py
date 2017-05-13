@@ -238,8 +238,8 @@ def runsim(k, simcon, opnclsd):
 
         # Build augmented estimator matrices.
 
-        Qw = np.diag([1, 1, 1, 1, 1, 1])
-        Rv = np.diag([cvlist[0].mnoise, cvlist[1].mnoise, cvlist[2].mnoise])
+        Qw = np.diag([xv.mnoise for xv in xvlist] + [xv.dnoise for xv in xvlist])
+        Rv = np.diag([cv.mnoise for cv in cvlist])
         Qwinv = linalg.inv(Qw)
         Rvinv = linalg.inv(Rv)
 
@@ -290,13 +290,8 @@ def runsim(k, simcon, opnclsd):
 
         # Make steady-state target selector.
 
-#        contVars = [0,1]
-        Rss = R;
-#        Rss  = np.zeros((Nu,Nu))
+        Rss = R
         Qyss = Qy
-#        Qyss = np.zeros((Ny,Ny))
-#        Qyss[contVars,contVars] = 1 # We want to control all outputs
-#        Qxss = mpc.mtimes(Cx.T,Qyss,Cx)
         
         def sstargobj(y, y_sp, u, u_sp, Q, R, s):
             dy = y - y_sp
@@ -374,20 +369,6 @@ def runsim(k, simcon, opnclsd):
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         controller = mpc.nmpc(**nmpcargs)
-
-#        if k == 0:
-            # Initialize variables
-#            x_k      = np.zeros(Nx)
-#            xhat_k   = np.zeros(Nx)
-#            dhat_k   = np.zeros(Nid)
-
-            # Store initial values for variables
-#            xvlist.vecassign(xs)
-#            xvlist.vecassign(xs, "est")
-#            mvlist.vecassign(us)
-#            dvlist.vecassign(ds)
-#            cvlist.vecassign(dhat_k, "dist")
-            #            dvlist[0].est = dhat_k
 
         # Store values in simulation container
         simcon.proc = [hab]
@@ -554,7 +535,7 @@ def runsim(k, simcon, opnclsd):
         else:
             simcon.extra["quanterr"] = 0
         
-        print "runsim: quantization error: %g" % simcon.extra["quanterr"]
+        print "runsim: quantization offset: %g" % simcon.extra["quanterr"]
         u_k = np.squeeze(sol["u"][0,:])
 
         # Update closed-loop predictions
@@ -594,7 +575,7 @@ simname = 'Hot-Air Ballon Example'
 # define variables
 
 MVmenu=["value","rvalue","svalue","target","maxlim","minlim","roclim","pltmax","pltmin"]
-XVmenu=["mnoise","noise","pltmax","pltmin"]
+XVmenu=["mnoise","dnoise","pltmax","pltmin"]
 CVmenu=["setpoint","qvalue","maxlim","minlim","mnoise","noise","pltmax","pltmin","lbslack","ubslack"]
 DVmenu=["value","pltmax","pltmin"]
 
@@ -619,15 +600,15 @@ CV3 = sim.CVobj(name='T', desc='bag temperature', units='(degC)',
             value=85.0, setpoint=85.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
-            pltmin=-0.1, pltmax=0.7, 
+            pltmin=-0.1, pltmax=0.7, mnoise=1, dnoise=1,
             value=0.0, Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
-            pltmin=-0.08, pltmax=0.08, 
+            pltmin=-0.08, pltmax=0.08, mnoise=1, dnoise=1,
             value=0.0, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
-            pltmin=1.19, pltmax=1.4, 
+            pltmin=1.19, pltmax=1.4, mnoise=1, dnoise=1,
             value=1.244, Nf=60, menu=XVmenu)
 
 # define options
