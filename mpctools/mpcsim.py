@@ -118,8 +118,7 @@ def _get_setvalue_options():
         "Heat Of Reaction" : svo("value", xmin=-1e-6, xmax=-1e-6, chflag=True),
         "LB Slack Weight" : svo("lbslack", xmin=0, chflag=True),
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
-        "Discrete-valued fuel" : svo("value", xmin=0, xmax=1, chflag=True,
-                                     askfunc=askinteger),
+        "Fuel increment" : svo("value", xmin=0, xmax=1),
     })
     return setvalue_options
 _SETVALUE_OPTIONS = _get_setvalue_options()
@@ -1036,6 +1035,7 @@ class SimCon(object):
         self.ydata = list(ydata)
         self.udata = list(udata)
         self.root = root
+        self.extra = {}
         self.__defaults = None
         self.__defaultfields = ["refint", "deltat", "ydata", "udata", "N"]
         self.__updatables = ["mvlist", "dvlist", "cvlist", "xvlist", "xilist", "oplist"]
@@ -1071,6 +1071,7 @@ class SimCon(object):
             varanddefault = zip(getattr(self, k), getattr(self.__defaults, k))
             for (var, defaultvar) in varanddefault:
                 var._update(defaultvar)
+        self.extra = {}
                 
 def makeaxes(fig, rows, cols, sharex=True):
     """

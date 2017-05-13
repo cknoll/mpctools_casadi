@@ -29,7 +29,7 @@ def runsim(k, simcon, opnclsd):
     deltat = simcon.deltat
     nf = oplist[0]
     doolpred = oplist[1]
-    discretefuel = oplist[2]
+    fuelincrement = oplist[2].value
 
     # Check for changes.
 
@@ -130,9 +130,8 @@ def runsim(k, simcon, opnclsd):
             dxdt = np.array([dx1dt, dx2dt, dx3dt])
             return dxdt
 
-        # Create casadi function and simulator.
+        # Create simulator.
 
-        ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], "ode")
         hab = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
         # Initialize the steady-state values
@@ -192,8 +191,6 @@ def runsim(k, simcon, opnclsd):
 
         ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
                                    [Nx+Nid,Nu], ["x","u"],"ode_disturbance")
-        ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
-                               [Nx+Nid,Nu],["x","u"],"ode_augmented")
         ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
                                    [Nx+Nid,Nu],["x","u"],"ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
@@ -215,11 +212,6 @@ def runsim(k, simcon, opnclsd):
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
-        ss = mpc.util.getLinearizedModel(ode_casadi, [xs,us], ["A","B"], Delta)
-        A = ss["A"]
-        B = ss["B"]
-        [K, Pi] = mpc.util.dlqr(A,B,Qx,R)
-
         # Define control stage cost.
         lbslack = np.array([[cv.lbslack for cv in cvlist]])
         ubslack = np.array([[cv.ubslack for cv in cvlist]])
@@ -240,7 +232,7 @@ def runsim(k, simcon, opnclsd):
 
         def costtogo(x,xsp):
             dx = x[:Nx] - xsp[:Nx]
-            return mpc.mtimes(dx.T,Pi,dx)
+            return mpc.mtimes(dx.T, Qx, dx)
         Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","x_sp"],
                                funcname="Pf", scalar=False)
 
@@ -262,18 +254,6 @@ def runsim(k, simcon, opnclsd):
 
         lxest = None
         x0bar = None
-
-        # Check if the augmented system is detectable. (Rawlings and Mayne, Lemma 1.8)
-
-        Aaug = mpc.util.getLinearizedModel(ode_augmented_casadi,[xaugs, us],
-                                       ["A","B"], Delta)["A"]
-        Caug = mpc.util.getLinearizedModel(measurement_casadi,[xaugs],
-                                       ["C"])["C"]
-        Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
-        svds = linalg.svdvals(Oaug)
-        rank = sum(svds > 1e-8)
-        if rank < Nx + Nid:
-            print "***Warning: augmented system is not detectable!"
 
         # Make NMHE solver.
 
@@ -307,10 +287,6 @@ def runsim(k, simcon, opnclsd):
         else:
             ydata = simcon.ydata
             udata = simcon.udata
-
-        # Choose if u is discrete-valued.
-        udiscrete = np.array([bool(discretefuel.value), False])
-        solvername = "bonmin" if np.any(udiscrete) else "ipopt"
 
         # Make steady-state target selector.
 
@@ -366,9 +342,7 @@ def runsim(k, simcon, opnclsd):
             "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
-            "udiscrete" : udiscrete,
             "casaditype" : "SX" if useCasadiSX else "MX",
-            "solver" : solvername,
         }
         targetfinder = mpc.sstarg(**sstargargs)
     
@@ -397,9 +371,7 @@ def runsim(k, simcon, opnclsd):
             "e" : outputcon_casadi,
             "verbosity" : 0,
             "timelimit" : 60,
-            "udiscrete" : udiscrete,
             "casaditype" : "SX" if useCasadiSX else "MX",
-            "solver" : solvername,
         }
         controller = mpc.nmpc(**nmpcargs)
 
@@ -423,6 +395,7 @@ def runsim(k, simcon, opnclsd):
                       measurement, psize)
         simcon.ydata = ydata
         simcon.udata = udata
+        simcon.extra["quanterr"] = 0
 
     # Get stored values
     #TODO: these should be dictionaries or NamedTuples.
@@ -553,11 +526,38 @@ def runsim(k, simcon, opnclsd):
         print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
 
         controller.saveguess()
-        u_k = np.squeeze(controller.var["u",0])
+        sol = mpc.util.casadiStruct2numpyDict(controller.var)
+        
+        # Apply quantization.
+        
+        if fuelincrement > 1e-3:
+            minfuel = ulb[0]
+            maxfuel = uub[0]
+            
+            # Use cumulative rounding strategy.
+            quantum = (maxfuel - minfuel)*fuelincrement
+            wantfuel = (sol["u"][:,0] - minfuel)/quantum
+            wantsofar = 0
+            getfuel = []
+            getsofar = simcon.extra["quanterr"]/quantum
+            for want in wantfuel:
+                wantsofar += want
+                get = round(wantsofar - getsofar)
+                getfuel.append(get)
+                getsofar += get
+            simcon.extra["quanterr"] += (getfuel[0] - wantfuel[0])*quantum
+            sol["u"][:,0] = minfuel + np.array(getfuel)*quantum
+            
+            # Re-simulate the x trajectory.
+            for i in xrange(sol["u"].shape[0]):
+                sol["x"][i + 1,:] = habaug.sim(sol["x"][i,:], sol["u"][i,:])
+        else:
+            simcon.extra["quanterr"] = 0
+        
+        print "runsim: quantization error: %g" % simcon.extra["quanterr"]
+        u_k = np.squeeze(sol["u"][0,:])
 
         # Update closed-loop predictions
-
-        sol = mpc.util.casadiStruct2numpyDict(controller.var)
 
         mvlist.vecassign(u_k, "clpred", index=0)
         xvlist.vecassign(xhat_k, "clpred", index=0)
@@ -634,7 +634,7 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
-fuel = sim.Option(name="Discrete fuel", desc="Discrete-valued fuel", value=0)
+fuel = sim.Option(name="Fuel increment", desc="Fuel increment", value=0)
 
 # load up variable lists
 
