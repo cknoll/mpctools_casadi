@@ -270,7 +270,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
 
 def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
          p=None, verbosity=5, largs=None, funcargs={}, timelimit=60, Delta=None,
-         wAdditive=False, casaditype="SX", inferargs=False):
+         wAdditive=False, casaditype="SX", inferargs=False, extrapar={}):
     """
     Solves nonlinear MHE problem.
     
@@ -319,7 +319,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
         raise KeyError("Invalid or missing entries in N dictionary!")
     
     # Handle prior for x0bar.
-    extrapar = {}    
+    extrapar = extrapar.copy()    
     if lx is not None or x0bar is not None:
         if lx is None or x0bar is None:
             raise ValueError("Both or none of lx and x0bar must be given!")
@@ -387,15 +387,20 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
 
 def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
            funcargs={}, extrapar={}, e=None, discretef=True, verbosity=5,
-           timelimit=60, casaditype="SX", inferargs=False, udiscrete=None):
+           timelimit=60, casaditype="SX", inferargs=False, udiscrete=None,
+           ignoress=None):
     """
     Solves nonlinear steady-state target problem.
     
     N must be a dictionary with at least entries "x" and "y". If parameters
     are present, you must also specify a "p" entry.
     
-    lb and ub should be dictionaries of bounds for the various variables.
-    guess should have the same structure.    
+    If given, ignoress is list of integers giving the indices of states to
+    ignore in the steady-state constraint. The intended purpose is to screen
+    out pure integrator states to avoid 0 = 0 constraints (which often cause
+    problems during optimization).
+    
+    For descriptions of other arguments, refer to the help for nmpc.   
     """
     
     # Copy dictionaries so we don't change the user inputs.
@@ -449,6 +454,29 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     N["h"] = N["y"]
     if "f" not in N.keys():
         N["f"] = N["x"]
+    
+    # Screen out ignored states.
+    if ignoress is not None:
+        if inferargs and "f" not in funcargs:
+            funcargs["f"] = __getargnames(f)
+        if "f" in funcargs:
+            xind = dict(zip(funcargs["f"], range(len(funcargs["f"])))).get("x")
+        else:
+            xind = 0
+        keep = np.ones(N["x"], dtype=bool)
+        for i in ignoress:
+            keep[i] = False
+        mask = np.eye(N["x"])[keep,:] 
+        _f = f
+        _discretef = discretef
+        def wrappedf(*args):
+            """Returns only a subset of of model equations."""
+            dx = _f(*args)
+            if _discretef:
+                dx -= args[xind]
+            return util.mtimes(mask, dx)
+        f = getCasadiFunc(wrappedf, wraps=_f)
+        discretef = False
     
     # Make objective term.
     if phi is not None:
@@ -1091,8 +1119,8 @@ def __getArgs(names,t=0,*structs):
             thisargs.append(structs[i][v][t])
     return thisargs
 
-def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
-                  Delta=1, M=1, scalar=True, casaditype=None):
+def getCasadiFunc(f, varsizes=None, varnames=None, funcname=None, rk4=False,
+                  Delta=1, M=1, scalar=True, casaditype=None, wraps=None):
     """
     Takes a function handle and turns it into a Casadi function.
     
@@ -1102,10 +1130,26 @@ def getCasadiFunc(f, varsizes, varnames=None, funcname="f", rk4=False,
     
     sizes should be a list of how many elements are in each one of the inputs.
     
-    This version is more general because it lets you specify arbitrary
-    arguments, but you have to make sure you do everything properly.
+    Alternatively, instead of specifying varsizes, varnames, and funcname,
+    you can pass a casadi.Function as wraps to copy these values from the other
+    function.
     """ 
+    # Decide if user specified wraps.
+    if wraps is not None:
+        if not isinstance(wraps, casadi.Function):
+            raise TypeError("wraps must be a casadi.Function!")
+        if varsizes is None:
+            varsizes = [wraps.size_in(i) for i in range(wraps.n_in())]
+        if varnames is None:
+            varnames = [wraps.name_in(i) for i in range(wraps.n_in())]
+        if funcname is None:
+            funcname = wraps.name()
+    
     # Pass the buck to the sub function.
+    if varsizes is None:
+        raise ValueError("Must specify either varsizes or wraps!")
+    if funcname is None:
+        funcname = "f"
     symbols = __getCasadiFunc(f, varsizes, varnames, funcname, scalar,
                               casaditype, allowmatrix=True)
     args = symbols["args"]

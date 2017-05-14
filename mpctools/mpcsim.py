@@ -76,6 +76,14 @@ def openfile(simcon):
     simcon.root.destroy()
     execfile(f)
 
+def askbool(description, message, **kwargs):
+    """
+    Asks a yes/no question and returns a bool.
+    
+    kwargs ignored for compatibility.
+    """
+    return tkmsg.askyesnocancel(description, message)
+
 # Generate dictionary of available options for setvalue.
 # TODO: refactor so that this list is generated in the simulation file instead
 #       of having a single global list.
@@ -108,8 +116,7 @@ def _get_setvalue_data():
         "Process Step Dist." : svo("dist"),
         "Refresh Int." : svo("refint", xmin=10, xmax=10000),
         "Noise Factor" : svo("value", xmin=0),
-        "Open-Loop Predictions" : svo("value", xmin=0, xmax=1,
-                                      askfunc=askinteger),
+        "Open-Loop Predictions" : svo("value", askfunc=askbool),
         "A Value" : svo("value", xmin=-10, xmax=10, chflag=True),
         "Gain Mismatch Factor" : svo("gfac", xmin=0, chflag=True),
         "Disturbance Model" : svo("value", xmin=1, xmax=5, chflag=True),
@@ -120,6 +127,7 @@ def _get_setvalue_data():
         "LB Slack Weight" : svo("lbslack", xmin=0, chflag=True),
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
         "Fuel increment" : svo("value", xmin=0, xmax=1),
+        "Linear Model" : svo("value", askfunc=askbool, chflag=True),
     })
         
     # Also create a reverse mapping.
@@ -135,8 +143,16 @@ def setvalue(var, desc):
     """Sets a specific variable field using a dialog box."""
     vinfo = _SETVALUE_OPTIONS.get(desc, None)    
     if vinfo is not None:
-        value = float(getattr(var, vinfo.field))
-        entrytext = "%s currently %g, enter new value" % (desc, value)
+        value = getattr(var, vinfo.field)
+        askfunc = askfloat if vinfo.askfunc is None else vinfo.askfunc
+        if askfunc is askbool:
+            if value:
+                entrytext = "Currently using %s. Keep using %s?" % (desc, desc)
+            else:
+                entrytext = ("Currently not using %s. Start using %s?"
+                             % (desc, desc))
+        else:
+            entrytext = "%s currently %g, enter new value" % (desc, value)
         kwargs = {}
         for (k, lim) in [("minvalue", vinfo.xmin), ("maxvalue", vinfo.xmax)]:
             if lim is not None:
@@ -145,7 +161,6 @@ def setvalue(var, desc):
                 else:
                     val = lim
                 kwargs[k] = val
-        askfunc = askfloat if vinfo.askfunc is None else vinfo.askfunc
         value = askfunc(var.name, entrytext, **kwargs)
         if value is not None:
             setattr(var, vinfo.field, value)

@@ -30,6 +30,7 @@ def runsim(k, simcon, opnclsd):
     nf = oplist[0]
     doolpred = oplist[1]
     fuelincrement = oplist[2].value
+    uselinmodel = bool(oplist[3].value)
 
     # Check for changes.
 
@@ -96,6 +97,7 @@ def runsim(k, simcon, opnclsd):
 #        for i in range(Nd):
 #            d0[i] = dvlist[i].value
 
+
         # Define scaling factors
             
         h0 = 1.1e4         # altitude scaling factor            (m)
@@ -141,26 +143,31 @@ def runsim(k, simcon, opnclsd):
         us = u0
         xaugs = np.concatenate((xs, np.zeros((Nid,))))
         
-        # Define augmented model for state estimation.    
-
-        # We need to define two of these because Ipopt isn't smart enough to throw out
-        # the 0 = 0 equality constraints. ode_disturbance only gives dx/dt for the
-        # actual states, and ode_augmented appends the zeros so that dx/dt is given for
-        # all of the states. It's possible that Ipopt may figure this out by itself,
-        # but we should just be explicit to avoid any bugs.    
-
-        def ode_disturbance(x, u):
-
-            # For this case there are no input disturbances.
-
-            dxdt = ode(x[:Nx], u)
-            return dxdt
+        # Define generic linear models.
+        xlin = np.array([0, 0, 1.244, 0, 0, 0])
+        ulin = np.array([0, 0])
+        
+        def linear_model_nmpc(x, u, A, B, xlin, ulin):
+            """Generic linear evolution."""
+            return mpc.mtimes(A, x - xlin) + mpc.mtimes(B, u - ulin) + xlin
+        linsizes = [Nx + Nid, Nu, (Nx + Nid, Nx + Nid), (Nx + Nid, Nu), Nx + Nid, Nu]
+        linargs = ["x", "u", "A", "B", "xlin", "ulin"]
+        linmodel_mpc = mpc.getCasadiFunc(linear_model_nmpc, linsizes, linargs,
+                                         funcname="f")
+        
+        def linear_model_nmhe(x, u, A, B, xlin, ulin, w):
+            """Generic linear evolution with state noise."""
+            return linear_model_nmpc(x, u, A, B, xlin, ulin) + w
+        linmodel_mhe = mpc.getCasadiFunc(linear_model_nmhe, linsizes + [Nw],
+                                         linargs + ["w"], funcname="f")
+        
+        # Define augmented model for state estimation.
 
         def ode_augmented(x, u):
 
             # Need to add extra zeros for derivative of disturbance states.
 
-            dxdt = mpc.vcat([ode_disturbance(x, u), np.zeros((Nid,))])
+            dxdt = mpc.vcat([ode(x[:Nx], u), np.zeros((Nid,))])
             return dxdt
  
         habaug = mpc.DiscreteSimulator(ode_augmented, Delta,
@@ -183,18 +190,24 @@ def runsim(k, simcon, opnclsd):
             ym = yd
             ym[0] = yd[0]*h0
             ym[1] = yd[1]*h0/t0
-#           ym[2] = yd[2]
             ym[2] = yd[2]*T0 - 273.2
             return ym
 
         # Turn into casadi functions.
+        ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
+                                                 [Nx + Nid, Nu], ["x", "u"],
+                                                 funcname="ode_augmented")
 
-        ode_disturbance_casadi = mpc.getCasadiFunc(ode_disturbance,
-                                   [Nx+Nid,Nu], ["x","u"],"ode_disturbance")
         ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
                                    [Nx+Nid,Nu],["x","u"],"ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
-
+        
+        linmodelpar = mpc.util.getLinearizedModel(ode_augmented_rk4_casadi,
+                                                  [xlin, ulin],
+                                                  ["A", "B"])
+        linmodelpar["xlin"] = xlin
+        linmodelpar["ulin"] = ulin
+        
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,))):
             return ode_augmented_rk4_casadi(x, u) + w
 
@@ -261,13 +274,15 @@ def runsim(k, simcon, opnclsd):
         xguess = np.tile(xaugs,(Nmhe+1,1))
         yguess = np.tile(ys,(Nmhe+1,1))
         nmheargs = {
-            "f" : ode_estimator_rk4_casadi,
+            "f" : linmodel_mhe if uselinmodel else ode_estimator_rk4_casadi,
             "h" : measurement_casadi,
             "u" : uguess,
             "y" : yguess,
             "l" : lest,
             "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "t":Nmhe},
             "lx" : lxest,
+            "inferargs" : True,
+            "extrapar" : linmodelpar if uselinmodel else {},
             "x0bar" : x0bar,
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
@@ -318,9 +333,10 @@ def runsim(k, simcon, opnclsd):
             return np.concatenate(terms)
         outputcon_casadi = mpc.getCasadiFunc(outputcon, [Nx + Nid, 2*Ny],
                                              ["x", "s"], funcname="e")
-
+        
         sstargargs = {
-            "f" : ode_disturbance_casadi,
+            "f" : ode_augmented_casadi,
+            "ignoress" : range(Nx, Nx + Nid), # Ignore integrating disturbances.
             "h" : measurement_casadi,
             "lb" : {"u" : np.tile(ulb, (1,1))},
             "ub" : {"u" : np.tile(uub, (1,1))},
@@ -352,9 +368,10 @@ def runsim(k, simcon, opnclsd):
         guess = sp.copy()
         xaug0 = xaugs
         nmpcargs = {
-            "f" : ode_augmented_rk4_casadi,
+            "f" : linmodel_mpc if uselinmodel else ode_augmented_rk4_casadi,
             "l" : l,
             "inferargs" : True,
+            "extrapar" : linmodelpar if uselinmodel else {},
             "N" : N,
             "x0" : xaug0,
             "uprev" : us,
@@ -377,6 +394,8 @@ def runsim(k, simcon, opnclsd):
         simcon.ydata = ydata
         simcon.udata = udata
         simcon.extra["quanterr"] = 0
+        simcon.extra["mpcfunc"] = ode_augmented_rk4_casadi
+        simcon.extra["mhefunc"] = ode_estimator_rk4_casadi
 
     # Get stored values
     #TODO: these should be dictionaries or NamedTuples.
@@ -416,6 +435,7 @@ def runsim(k, simcon, opnclsd):
     udata.append(u_km1) 
     estimator.par["y"] = ydata
     estimator.par["u"] = udata
+    
     estimator.solve()
     estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
 
@@ -496,12 +516,15 @@ def runsim(k, simcon, opnclsd):
         uss = np.squeeze(targetfinder.var["u",0,:])
 
         print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
-        
+
         # Now use nonlinear MPC controller.
 
         controller.par["x_sp"] = [xaugss]*(Nf + 1)
         controller.par["u_sp"] = [uss]*Nf
         controller.par["u_prev"] = [u_km1]
+        if uselinmodel:
+            controller.par["xlin"] = xaugss
+            controller.par["ulin"] = uss
         controller.fixvar("x",0,xaughat_k)            
         controller.solve()
         print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
@@ -517,17 +540,19 @@ def runsim(k, simcon, opnclsd):
             
             # Use cumulative rounding strategy.
             quantum = (maxfuel - minfuel)*fuelincrement
-            wantfuel = (sol["u"][:,0] - minfuel)/quantum
+            wantfuel = sol["u"][:,0]/quantum
+            Nmax = np.floor(maxfuel/quantum)
+            Nmin = np.ceil(minfuel/quantum)
             wantsofar = 0
             getfuel = []
             getsofar = simcon.extra["quanterr"]/quantum
             for want in wantfuel:
                 wantsofar += want
-                get = round(wantsofar - getsofar)
+                get = np.clip(round(wantsofar - getsofar), Nmin, Nmax)
                 getfuel.append(get)
                 getsofar += get
             simcon.extra["quanterr"] += (getfuel[0] - wantfuel[0])*quantum
-            sol["u"][:,0] = minfuel + np.array(getfuel)*quantum
+            sol["u"][:,0] = np.array(getfuel)*quantum
             
             # Re-simulate the x trajectory.
             for i in xrange(sol["u"].shape[0]):
@@ -616,13 +641,14 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 fuel = sim.Option(name="Fuel increment", desc="Fuel increment", value=0)
+linmodel = sim.Option(name="Lin. Model", desc="Linear Model", value=False)
 
 # load up variable lists
 
 MVlist = [MV1, MV2]
 XVlist = [XV1, XV2, XV3]
 CVlist = [CV1, CV2, CV3]
-OPlist = [NF, OL, fuel]
+OPlist = [NF, OL, fuel, linmodel]
 DeltaT = 0.5
 N      = 120
 refint = 100
