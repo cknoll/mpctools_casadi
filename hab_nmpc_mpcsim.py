@@ -486,7 +486,6 @@ def runsim(k, simcon, opnclsd):
 
         for field in ["olpred", "clpred"]:
             mvlist.vecassign(u_k, field, index=(i + 1))
-#            dvlist.vecassign(d_km1, field, index=(i + 1))
             xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
     
@@ -515,8 +514,8 @@ def runsim(k, simcon, opnclsd):
         xaugss = np.squeeze(targetfinder.var["x",0,:])
         uss = np.squeeze(targetfinder.var["u",0,:])
 
-        print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
-
+        print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)
+        
         # Now use nonlinear MPC controller.
 
         controller.par["x_sp"] = [xaugss]*(Nf + 1)
@@ -525,7 +524,7 @@ def runsim(k, simcon, opnclsd):
         if uselinmodel:
             controller.par["xlin"] = xaugss
             controller.par["ulin"] = uss
-        controller.fixvar("x",0,xaughat_k)            
+        controller.fixvar("x",0,xaughat_k)           
         controller.solve()
         print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
 
@@ -625,15 +624,15 @@ CV3 = sim.CVobj(name='T', desc='bag temperature', units='(degC)',
             value=85.0, setpoint=85.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
-            pltmin=-0.1, pltmax=0.7, mnoise=1, dnoise=1,
+            pltmin=-0.1, pltmax=0.7, mnoise=1, dnoise=0.001,
             value=0.0, Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
-            pltmin=-0.08, pltmax=0.08, mnoise=1, dnoise=1,
+            pltmin=-0.08, pltmax=0.08, mnoise=1, dnoise=0.001,
             value=0.0, Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
-            pltmin=1.19, pltmax=1.4, mnoise=1, dnoise=1,
+            pltmin=1.19, pltmax=1.4, mnoise=1, dnoise=0.001,
             value=1.244, Nf=60, menu=XVmenu)
 
 # define options
