@@ -15,7 +15,7 @@
 import Tkinter as tk
 import tkMessageBox as tkmsg
 from tkFileDialog import askopenfilename
-from tkSimpleDialog import askfloat, askinteger
+from tkSimpleDialog import askfloat, askinteger # analysis:ignore
 import collections
 import copy
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg

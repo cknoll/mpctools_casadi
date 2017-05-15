@@ -94,8 +94,7 @@ def runsim(k, simcon, opnclsd):
             x0[i] = xvlist[i].value
         for i in range(Nu):
             u0[i] = mvlist[i].value
-#        for i in range(Nd):
-#            d0[i] = dvlist[i].value
+        xaug0 = np.concatenate((x0, np.zeros(Nid)))
 
 
         # Define scaling factors
@@ -141,25 +140,7 @@ def runsim(k, simcon, opnclsd):
         ys = y0
         xs = x0
         us = u0
-        xaugs = np.concatenate((xs, np.zeros((Nid,))))
-        
-        # Define generic linear models.
-        xlin = np.array([0, 0, 1.244, 0, 0, 0])
-        ulin = np.array([0, 0])
-        
-        def linear_model_nmpc(x, u, A, B, xlin, ulin):
-            """Generic linear evolution."""
-            return mpc.mtimes(A, x - xlin) + mpc.mtimes(B, u - ulin) + xlin
-        linsizes = [Nx + Nid, Nu, (Nx + Nid, Nx + Nid), (Nx + Nid, Nu), Nx + Nid, Nu]
-        linargs = ["x", "u", "A", "B", "xlin", "ulin"]
-        linmodel_mpc = mpc.getCasadiFunc(linear_model_nmpc, linsizes, linargs,
-                                         funcname="f")
-        
-        def linear_model_nmhe(x, u, A, B, xlin, ulin, w):
-            """Generic linear evolution with state noise."""
-            return linear_model_nmpc(x, u, A, B, xlin, ulin) + w
-        linmodel_mhe = mpc.getCasadiFunc(linear_model_nmhe, linsizes + [Nw],
-                                         linargs + ["w"], funcname="f")
+        xaugs = np.concatenate((xs, np.zeros(Nid)))
         
         # Define augmented model for state estimation.
 
@@ -174,23 +155,16 @@ def runsim(k, simcon, opnclsd):
                                         [Nx+Nid,Nu], ["x","u"])
         
 
-        # Only the first three states are measured
+        # First three states are measured, with scaling factors. Next three
+        # states are integrating output disturbances.
 
-        Cx = np.array([[1, 0, 0],
-                       [0, 1, 0],
-                       [0, 0, 1]])
+        Cx = np.diag([h0, h0/t0, T0])
+        Caug = np.tile(Cx, (1, 2))
 
         def measurement(x):
-
-            # For this case all of the disturbances are output disturbances.
-
-            xc    = x[:Nx]
-            dhat  = x[Nx:Nx+Nid]
-            yd = mpc.mtimes(Cx, xc) + dhat
-            ym = yd
-            ym[0] = yd[0]*h0
-            ym[1] = yd[1]*h0/t0
-            ym[2] = yd[2]*T0 - 273.2
+            """Augmented system measurement (all output disturbances)."""
+            ym = mpc.mtimes(Caug, x)
+            ym[2] -= 273.2 # Cibvert from K to C.
             return ym
 
         # Turn into casadi functions.
@@ -202,11 +176,18 @@ def runsim(k, simcon, opnclsd):
                                    [Nx+Nid,Nu],["x","u"],"ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
         
+        
+        # Get linearized model.
+        xlin = np.array([0, 0, 1.244, 0, 0, 0])
+        ulin = np.array([0, 0])
+        
         linmodelpar = mpc.util.getLinearizedModel(ode_augmented_rk4_casadi,
                                                   [xlin, ulin],
                                                   ["A", "B"])
+        linmodelpar["C"] = Caug
         linmodelpar["xlin"] = xlin
         linmodelpar["ulin"] = ulin
+        linmodelpar["ylin"] = measurement(xlin)
         
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,))):
             return ode_augmented_rk4_casadi(x, u) + w
@@ -217,37 +198,6 @@ def runsim(k, simcon, opnclsd):
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
                              [Nx+Nid], ["x"], "measurement")
-
-        # Weighting matrices for controller.
-
-        Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue])
-        Qx  = mpc.mtimes(Cx.T,Qy,Cx)
-        R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
-        S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
-
-        # Define control stage cost.
-        lbslack = np.array([[cv.lbslack for cv in cvlist]])
-        ubslack = np.array([[cv.ubslack for cv in cvlist]])
-        def stagecost(x, u, xsp, usp, Deltau, s):
-            dx = x[:Nx] - xsp[:Nx]
-            du = u - usp
-            slb = s[:Ny]
-            sub = s[Ny:]
-            slack = mpc.mtimes(lbslack, slb) + mpc.mtimes(ubslack, sub)
-            return (mpc.mtimes(dx.T,Qx,dx) + .1*mpc.mtimes(du.T,R,du)
-                + mpc.mtimes(Deltau.T,S,Deltau) + slack)
-
-        largs = ["x","u","x_sp","u_sp","Du","s"]
-        l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,2*Ny],largs,funcname="l",scalar=False)
-
-        # Define cost to go.
-
-        def costtogo(x,xsp):
-            dx = x[:Nx] - xsp[:Nx]
-            return mpc.mtimes(dx.T, Qx, dx)
-        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","x_sp"],
-                               funcname="Pf", scalar=False)
 
         # Build augmented estimator matrices.
 
@@ -274,7 +224,7 @@ def runsim(k, simcon, opnclsd):
         xguess = np.tile(xaugs,(Nmhe+1,1))
         yguess = np.tile(ys,(Nmhe+1,1))
         nmheargs = {
-            "f" : linmodel_mhe if uselinmodel else ode_estimator_rk4_casadi,
+            "f" : ode_estimator_rk4_casadi,
             "h" : measurement_casadi,
             "u" : uguess,
             "y" : yguess,
@@ -282,7 +232,6 @@ def runsim(k, simcon, opnclsd):
             "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "t":Nmhe},
             "lx" : lxest,
             "inferargs" : True,
-            "extrapar" : linmodelpar if uselinmodel else {},
             "x0bar" : x0bar,
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
@@ -290,6 +239,35 @@ def runsim(k, simcon, opnclsd):
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         estimator = mpc.nmhe(**nmheargs)
+
+        # Calculate Kalman Filter.
+        kalmanfilter = {k : linmodelpar[k] for k in ["A", "C"]}
+        kalmanfilter["Q"] = Qw
+        kalmanfilter["R"] = Rv
+        [kalmanfilter["L"], kalmanfilter["P"]] = mpc.util.dlqe(**kalmanfilter)
+        kalmanfilter.update({k : linmodelpar[k] for k in ["B", "xlin", "ulin", "ylin"]})
+        kalmanfilter["xhat"] = xaug0
+        
+        def kf_filter(kf, u, y):
+            """
+            Performs a Kalman Filtering step.
+            
+            First argument shoudl be a dict with fields A, B, L, and xhat
+            (with xhat giving xhat(k - 1 | k - 1). Other arguments u(k), and
+            y(k).
+            
+            Note that the kf dict is updated with the new xhat.
+            """
+            xhat = kf["xhat"]
+            xlin = kf["xlin"]
+            ulin = kf["ulin"]
+            ylin = kf["ylin"]
+            xhatm = kf["A"].dot(xhat - xlin) + kf["B"].dot(u - ulin) + xlin
+            yhatm = kf["C"].dot(xhatm - xlin) + ylin
+            xhat = xhatm + kf["L"].dot(y - yhatm)
+            kf["xhat"] = xhat
+            return xhat
+        kalmanfilter["filter"] = kf_filter
 
         # Declare ydata and udata. Note that it would make the most sense to declare
         # these using collection.deques since we're always popping the left element or
@@ -303,10 +281,20 @@ def runsim(k, simcon, opnclsd):
             ydata = simcon.ydata
             udata = simcon.udata
 
+        # Weighting matrices for controller.
+
+        Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue])
+        Qx  = mpc.mtimes(Cx[:,:Nx].T, Qy, Cx)
+        R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
+        S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
+
         # Make steady-state target selector.
 
         Rss = R
         Qyss = Qy
+        
+        lbslack = np.array([[cv.lbslack for cv in cvlist]])
+        ubslack = np.array([[cv.ubslack for cv in cvlist]])
         
         def sstargobj(y, y_sp, u, u_sp, Q, R, s):
             dy = y - y_sp
@@ -356,6 +344,28 @@ def runsim(k, simcon, opnclsd):
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         targetfinder = mpc.sstarg(**sstargargs)
+
+        # Define control stage cost.
+        def stagecost(x, u, xsp, usp, Deltau, s):
+            dx = x[:Nx] - xsp[:Nx]
+            du = u - usp
+            slb = s[:Ny]
+            sub = s[Ny:]
+            slack = mpc.mtimes(lbslack, slb) + mpc.mtimes(ubslack, sub)
+            return (mpc.mtimes(dx.T,Qx,dx) + mpc.mtimes(du.T,R,du)
+                + mpc.mtimes(Deltau.T,S,Deltau) + slack)
+
+        largs = ["x","u","x_sp","u_sp","Du","s"]
+        l = mpc.getCasadiFunc(stagecost,
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,2*Ny],largs,funcname="l",scalar=False)
+
+        # Define cost to go.
+
+        def costtogo(x,xsp):
+            dx = x[:Nx] - xsp[:Nx]
+            return mpc.mtimes(dx.T, Qx, dx)
+        Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","x_sp"],
+                               funcname="Pf", scalar=False)
     
         # Make NMPC solver.
 
@@ -366,12 +376,10 @@ def runsim(k, simcon, opnclsd):
         N = {"x": Nx + Nid, "u": Nu, "t": Nf, "s": 2*Ny, "e": 2*Ny}
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
         guess = sp.copy()
-        xaug0 = xaugs
         nmpcargs = {
-            "f" : linmodel_mpc if uselinmodel else ode_augmented_rk4_casadi,
+            "f" : ode_augmented_rk4_casadi,
             "l" : l,
             "inferargs" : True,
-            "extrapar" : linmodelpar if uselinmodel else {},
             "N" : N,
             "x0" : xaug0,
             "uprev" : us,
@@ -387,6 +395,18 @@ def runsim(k, simcon, opnclsd):
         }
         controller = mpc.nmpc(**nmpcargs)
 
+        # Calculate LQR.
+        
+        lqr = dict()
+        lqr["A"] = linalg.block_diag(linmodelpar["A"][:Nx,:Nx], np.zeros((Nu, Nu)))
+        lqr["B"] = np.vstack((linmodelpar["B"][:Nx,:], np.eye(Nu)))
+        lqr["Q"] = linalg.block_diag(Qx, S)
+        lqr["R"] = R + S
+        lqr["M"] = np.vstack((np.zeros((Nx, Nu)), -S))
+        [lqr["K"], lqr["P"]] = mpc.util.dlqr(**lqr)
+        lqr["xlin"] = np.concatenate((xlin[:Nx], np.zeros(Nu)))
+        lqr["ulin"] = ulin
+
         # Store values in simulation container
         simcon.proc = [hab]
         simcon.mod = (us, xs, ys, estimator, targetfinder, controller, habaug,
@@ -396,6 +416,8 @@ def runsim(k, simcon, opnclsd):
         simcon.extra["quanterr"] = 0
         simcon.extra["mpcfunc"] = ode_augmented_rk4_casadi
         simcon.extra["mhefunc"] = ode_estimator_rk4_casadi
+        simcon.extra["kalmanfilter"] = kalmanfilter
+        simcon.extra["lqr"] = lqr
 
     # Get stored values
     #TODO: these should be dictionaries or NamedTuples.
@@ -408,9 +430,6 @@ def runsim(k, simcon, opnclsd):
     # Get variable values
     x_km1 = xvlist.asvec()
     u_km1 = mvlist.asvec()
-#    print "x_km1 = ", x_km1
-#    print "u_km1 = ", u_km1
-#    print "d_km1 = ", d_km1
 
     # Advance the process
 
@@ -418,13 +437,13 @@ def runsim(k, simcon, opnclsd):
 
     # Constrain the altitude state
 
-    if (x_k[0] < 0.0): x_k[0] = 0.0
+    x_k[0] = max(x_k[0], 0)
 
     # Take plant measurement
 
     y_k = measurement(np.concatenate((x_k,np.zeros((Nid,)))))
 
-    if (nf.value > 0.0):
+    if nf.value > 0.0:
 
         for i in range(0, Ny):
             y_k[i] += nf.value*np.random.normal(0.0, cvlist[i].noise)
@@ -436,18 +455,24 @@ def runsim(k, simcon, opnclsd):
     estimator.par["y"] = ydata
     estimator.par["u"] = udata
     
-    estimator.solve()
-    estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
+    if uselinmodel:
+        kalmanfilter = simcon.extra["kalmanfilter"]
+        xaughat_k = kalmanfilter["filter"](kalmanfilter, u_km1, y_k)
+        status = "Kalman Filter"
+    else:
+        estimator.solve()
+        estsol = mpc.util.casadiStruct2numpyDict(estimator.var)
+        status = estimator.stats["status"]
+        xaughat_k = estsol["x"][-1,:]
+        estimator.saveguess()
 
-    print "runsim: estimator status - %s" % (estimator.stats["status"])
-    xaughat_k = estsol["x"][-1,:]
+    print "runsim: estimator status - %s" % status
     xhat_k = xaughat_k[:Nx]
     dhat_k = xaughat_k[Nx:]
 
     yhat_k = measurement(np.concatenate((xhat_k, dhat_k)))
     ydata.pop(0)
-    udata.pop(0)    
-    estimator.saveguess()        
+    udata.pop(0)
 
     # Initialize the input
     u_k = u_km1
@@ -455,7 +480,6 @@ def runsim(k, simcon, opnclsd):
     # Update open and closed-loop predictions
     for field in ["olpred", "clpred"]:
         mvlist.vecassign(u_k, field, index=0)
-#        dvlist.vecassign(d_km1, field, index=0)
         xvlist.vecassign(xhat_k, field, index=0)
         cvlist.vecassign(yhat_k, field, index=0)
     
@@ -489,8 +513,6 @@ def runsim(k, simcon, opnclsd):
             xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
     
-        xof_km1 = xof_k
-    
     # calculate mpc input adjustment in control is on
 
     if (opnclsd.status.get() == 1):
@@ -521,9 +543,6 @@ def runsim(k, simcon, opnclsd):
         controller.par["x_sp"] = [xaugss]*(Nf + 1)
         controller.par["u_sp"] = [uss]*Nf
         controller.par["u_prev"] = [u_km1]
-        if uselinmodel:
-            controller.par["xlin"] = xaugss
-            controller.par["ulin"] = uss
         controller.fixvar("x",0,xaughat_k)           
         controller.solve()
         print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
@@ -612,7 +631,7 @@ MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)',
             rvalue=1.0e-4, value=0.0, target=0.0, Nf=60, menu=MVmenu)
 
 CV1 = sim.CVobj(name='h', desc='altitude', units='(m)', 
-            pltmin=-300.0, pltmax=7300.0, minlim=0.0, maxlim=7000.0, qvalue=1.0, noise=1.0,
+            pltmin=-300.0, pltmax=7300.0, minlim=0.0, maxlim=7000.0, qvalue=1e-6, noise=1.0,
             value=0.0, setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 CV2 = sim.CVobj(name='v', desc='vertical velocity', units='(m/s)', 
