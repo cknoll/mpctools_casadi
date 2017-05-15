@@ -30,7 +30,8 @@ def runsim(k, simcon, opnclsd):
     nf = oplist[0]
     doolpred = oplist[1]
     fuelincrement = oplist[2].value
-    uselinmodel = bool(oplist[3].value)
+    usenonlinmpc = bool(oplist[3].value)
+    usenonlinmhe = usenonlinmpc
 
     # Check for changes.
 
@@ -58,6 +59,7 @@ def runsim(k, simcon, opnclsd):
     ulb = [mvlist[0].minlim, mvlist[1].minlim]
     yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
     ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
+    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Rande of model validity.
     
     # Initialize values on first execution or when something changes.
 
@@ -230,12 +232,13 @@ def runsim(k, simcon, opnclsd):
             "y" : yguess,
             "l" : lest,
             "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "t":Nmhe},
+            "lb" : {"x" : np.tile(xlb, (Nmhe + 1, 1))},
             "lx" : lxest,
             "inferargs" : True,
             "x0bar" : x0bar,
             "verbosity" : 0,
             "guess" : {"x":xguess, "y":yguess, "u":uguess},
-            "timelimit" : 60,
+            "timelimit" : 10,
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         estimator = mpc.nmhe(**nmheargs)
@@ -265,7 +268,6 @@ def runsim(k, simcon, opnclsd):
             xhatm = kf["A"].dot(xhat - xlin) + kf["B"].dot(u - ulin) + xlin
             yhatm = kf["C"].dot(xhatm - xlin) + ylin
             xhat = xhatm + kf["L"].dot(y - yhatm)
-            kf["xhat"] = xhat
             return xhat
         kalmanfilter["filter"] = kf_filter
 
@@ -326,7 +328,7 @@ def runsim(k, simcon, opnclsd):
             "f" : ode_augmented_casadi,
             "ignoress" : range(Nx, Nx + Nid), # Ignore integrating disturbances.
             "h" : measurement_casadi,
-            "lb" : {"u" : np.tile(ulb, (1,1))},
+            "lb" : {"u" : np.tile(ulb, (1,1)), "x" : np.tile(xlb, (1, 1))},
             "ub" : {"u" : np.tile(uub, (1,1))},
             "guess" : {
                 "u" : np.tile(us, (1,1)),
@@ -341,6 +343,7 @@ def runsim(k, simcon, opnclsd):
             "extrapar" : {"R" : Rss, "Q" : Qyss, "y_sp" : ys, "u_sp" : us},
             "verbosity" : 0,
             "discretef" : False,
+            "timelimit" : 10,
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         targetfinder = mpc.sstarg(**sstargargs)
@@ -371,7 +374,8 @@ def runsim(k, simcon, opnclsd):
 
         duub = [ mvlist[0].roclim,  mvlist[1].roclim]
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim]
-        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1))}
+        lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
+              "x" : np.tile(xlb, (Nf + 1, 1))}
         ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
         N = {"x": Nx + Nid, "u": Nu, "t": Nf, "s": 2*Ny, "e": 2*Ny}
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
@@ -390,7 +394,7 @@ def runsim(k, simcon, opnclsd):
             "sp" : sp,
             "e" : outputcon_casadi,
             "verbosity" : 0,
-            "timelimit" : 60,
+            "timelimit" : 10,
             "casaditype" : "SX" if useCasadiSX else "MX",
         }
         controller = mpc.nmpc(**nmpcargs)
@@ -455,16 +459,18 @@ def runsim(k, simcon, opnclsd):
     estimator.par["y"] = ydata
     estimator.par["u"] = udata
     
-    if uselinmodel:
-        kalmanfilter = simcon.extra["kalmanfilter"]
-        xaughat_k = kalmanfilter["filter"](kalmanfilter, u_km1, y_k)
-        status = "Kalman Filter"
-    else:
+    if usenonlinmhe:
         estimator.solve()
         estsol = mpc.util.casadiStruct2numpyDict(estimator.var)
         status = estimator.stats["status"]
         xaughat_k = estsol["x"][-1,:]
         estimator.saveguess()
+    else:
+        kalmanfilter = simcon.extra["kalmanfilter"]
+        xaughat_k = kalmanfilter["filter"](kalmanfilter, u_km1, y_k)
+        xaughat_k = np.maximum(xaughat_k, xlb) # Make sure estimate is valid.
+        status = "Kalman Filter"
+    simcon.extra["kalmanfilter"]["xhat"] = xaughat_k
 
     print "runsim: estimator status - %s" % status
     xhat_k = xaughat_k[:Nx]
@@ -538,17 +544,48 @@ def runsim(k, simcon, opnclsd):
 
         print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)
         
+        # Update Kalman Filter steady state.
+        simcon.extra["kalmanfilter"].update(xlin=xaugss, ulin=uss,
+                                            ylin=measurement(xaugss))
+        
+        # Choose model for simulation.
+        if usenonlinmpc:
+            mpcmodel_ = simcon.extra["mpcfunc"]
+        else:
+            kf = simcon.extra["kalmanfilter"]
+            def mpcmodel_(x, u):
+                """Linear model for mpc."""
+                return (kf["A"].dot(x - xaugss)
+                        + kf["B"].dot(u - uss)
+                        + xaugss)
+        mpcmodel = mpc.tools.DummySimulator(mpcmodel_, [Nx + Nid, Nu], ["x", "u"])
+        
         # Now use nonlinear MPC controller.
-
-        controller.par["x_sp"] = [xaugss]*(Nf + 1)
-        controller.par["u_sp"] = [uss]*Nf
-        controller.par["u_prev"] = [u_km1]
-        controller.fixvar("x",0,xaughat_k)           
-        controller.solve()
-        print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
-
-        controller.saveguess()
-        sol = mpc.util.casadiStruct2numpyDict(controller.var)
+        if usenonlinmpc:
+            controller.par["x_sp"] = [xaugss]*(Nf + 1)
+            controller.par["u_sp"] = [uss]*Nf
+            controller.par["u_prev"] = [u_km1]
+            controller.fixvar("x",0,xaughat_k)           
+            controller.solve()
+            status = controller.stats["status"]
+            obj = controller.obj
+            controller.saveguess()
+            sol = mpc.util.casadiStruct2numpyDict(controller.var)
+        else:
+            sol = dict(u=np.zeros((Nf, Nu)), x=np.zeros((Nf + 1, Nx + Nid)))
+            sol["x"][0,:] = xaughat_k
+            sol["x"][1:,Nx:] = np.tile(xaughat_k[Nx:], (Nf, 1))
+            lqr = simcon.extra["lqr"]
+            uprev = u_km1
+            for t in xrange(Nf):
+                z_ = np.concatenate((sol["x"][t,:Nx] - xaugss[:Nx], uprev - uss))
+                if t == 0:
+                    obj = mpc.mtimes(z_.T, lqr["P"], z_)
+                sol["u"][t,:] = (lqr["K"].dot(z_) + uss).clip(ulb, uub)
+                sol["x"][t + 1,:] = mpcmodel.sim(sol["x"][t,:], sol["u"][t,:])
+                uprev = sol["u"][t,:]
+            status = "LQR"
+        print "runsim: controller status - %s (Obj: %.5g)" % (status, obj) 
         
         # Apply quantization.
         
@@ -574,7 +611,7 @@ def runsim(k, simcon, opnclsd):
             
             # Re-simulate the x trajectory.
             for i in xrange(sol["u"].shape[0]):
-                sol["x"][i + 1,:] = habaug.sim(sol["x"][i,:], sol["u"][i,:])
+                sol["x"][i + 1,:] = mpcmodel.sim(sol["x"][i,:], sol["u"][i,:])
         else:
             simcon.extra["quanterr"] = 0
         
@@ -659,14 +696,14 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 fuel = sim.Option(name="Fuel increment", desc="Fuel increment", value=0)
-linmodel = sim.Option(name="Lin. Model", desc="Linear Model", value=False)
+nonlinmpc = sim.Option("Nonlin. MPC", desc="Nonlinear MPC", value=False)
 
 # load up variable lists
 
 MVlist = [MV1, MV2]
 XVlist = [XV1, XV2, XV3]
 CVlist = [CV1, CV2, CV3]
-OPlist = [NF, OL, fuel, linmodel]
+OPlist = [NF, OL, fuel, nonlinmpc]
 DeltaT = 0.5
 N      = 120
 refint = 100

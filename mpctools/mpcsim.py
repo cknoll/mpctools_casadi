@@ -128,6 +128,8 @@ def _get_setvalue_data():
         "UB Slack Weight" : svo("ubslack", xmin=0, chflag=True),
         "Fuel increment" : svo("value", xmin=0, xmax=1),
         "Linear Model" : svo("value", askfunc=askbool, chflag=True),
+        "Nonlinear MPC" : svo("value", askfunc=askbool),
+        "Nonlinear MHE" : svo("value", askfunc=askbool),
     })
         
     # Also create a reverse mapping.
