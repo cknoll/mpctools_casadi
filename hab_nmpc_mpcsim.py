@@ -59,7 +59,8 @@ def runsim(k, simcon, opnclsd):
     ulb = [mvlist[0].minlim, mvlist[1].minlim]
     yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
     ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
-    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Rande of model validity.
+    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Range of model validity.
+    xub = [np.Inf, np.Inf, np.Inf, np.Inf, np.Inf, np.Inf]
     
     # Initialize values on first execution or when something changes.
 
@@ -124,7 +125,7 @@ def runsim(k, simcon, opnclsd):
             f     = (1 + 0.03*u[0])*100/f0
             term1 = alpha*(1 - delta*x[0])**(gamma - 1)
             term2 = (1 - (1 - delta*x[0])/x[2])
-            term3 = beta*(x[2] -1 + delta*x[0])
+            term3 = beta*(x[2] - 1 + delta*x[0])
             term4 = (1 + lambde*u[1]/p0)
             term5 = omega*x[1]*np.fabs(x[1])
             dx1dt = x[1]
@@ -233,6 +234,7 @@ def runsim(k, simcon, opnclsd):
             "l" : lest,
             "N" : {"x":Nx + Nid, "u":Nu, "y":Ny, "t":Nmhe},
             "lb" : {"x" : np.tile(xlb, (Nmhe + 1, 1))},
+            "ub" : {"x" : np.tile(xub, (Nmhe + 1, 1))},
             "lx" : lxest,
             "inferargs" : True,
             "x0bar" : x0bar,
@@ -329,7 +331,7 @@ def runsim(k, simcon, opnclsd):
             "ignoress" : range(Nx, Nx + Nid), # Ignore integrating disturbances.
             "h" : measurement_casadi,
             "lb" : {"u" : np.tile(ulb, (1,1)), "x" : np.tile(xlb, (1, 1))},
-            "ub" : {"u" : np.tile(uub, (1,1))},
+            "ub" : {"u" : np.tile(uub, (1,1)), "x" : np.tile(xub, (1, 1))},
             "guess" : {
                 "u" : np.tile(us, (1,1)),
                 "x" : np.tile(np.concatenate((xs,np.zeros((Nid,)))), (1,1)),
@@ -376,7 +378,8 @@ def runsim(k, simcon, opnclsd):
         dulb = [-mvlist[0].roclim, -mvlist[1].roclim]
         lb = {"u" : np.tile(ulb, (Nf,1)), "Du" : np.tile(dulb, (Nf,1)),
               "x" : np.tile(xlb, (Nf + 1, 1))}
-        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1))}
+        ub = {"u" : np.tile(uub, (Nf,1)), "Du" : np.tile(duub, (Nf,1)),
+              "x" : np.tile(xub, (Nf + 1, 1))}
         N = {"x": Nx + Nid, "u": Nu, "t": Nf, "s": 2*Ny, "e": 2*Ny}
         sp = {"x" : np.tile(xaugs, (Nf+1,1)), "u" : np.tile(us, (Nf,1))}
         guess = sp.copy()
@@ -468,7 +471,7 @@ def runsim(k, simcon, opnclsd):
     else:
         kalmanfilter = simcon.extra["kalmanfilter"]
         xaughat_k = kalmanfilter["filter"](kalmanfilter, u_km1, y_k)
-        xaughat_k = np.maximum(xaughat_k, xlb) # Make sure estimate is valid.
+        xaughat_k = np.clip(xaughat_k, xlb, xub) # Make sure estimate is valid.
         status = "Kalman Filter"
     simcon.extra["kalmanfilter"]["xhat"] = xaughat_k
 
