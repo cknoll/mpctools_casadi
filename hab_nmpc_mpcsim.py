@@ -59,8 +59,11 @@ def runsim(k, simcon, opnclsd):
     ulb = [mvlist[0].minlim, mvlist[1].minlim]
     yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
     ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
-    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Range of model validity.
-    xub = [np.Inf, np.Inf, np.Inf, np.Inf, np.Inf, np.Inf]
+    xlb = [0.0,-0.12, 1.1,-3500.0,-30.0,-30.0] # Range of model validity.
+    xub = [1.0, 0.12, 1.5, 3500.0, 30.0, 30.0] # Set at ~50% above and below plot limits
+    
+#    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Range of model validity.
+#    xub = [np.Inf, np.Inf, np.Inf, np.Inf, np.Inf, np.Inf]
     
     # Initialize values on first execution or when something changes.
 
@@ -167,7 +170,7 @@ def runsim(k, simcon, opnclsd):
         def measurement(x):
             """Augmented system measurement (all output disturbances)."""
             ym = mpc.mtimes(Caug, x)
-            ym[2] -= 273.2 # Cibvert from K to C.
+            ym[2] -= 273.2 # Convert from K to C.
             return ym
 
         # Turn into casadi functions.
