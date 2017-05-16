@@ -1,13 +1,4 @@
 # This is a hot-air balloon example
-#
-# ToDo:
-# (1) Add soft output constraints and expose tuning weights
-# (2) Make the fuel an integer MV
-# (3) Constrain the predicted altitude to h >= 0
-# (4) Expose the mhe tuning parameters
-# (5) Linearized LQG version
-#
-# Tom Badgwell 05/11/17
 
 from mpctools import mpcsim as sim
 import mpctools as mpc
@@ -16,6 +7,58 @@ from scipy import linalg
 
 useCasadiSX = True
 
+# Define system sizes.
+Nx   = 3            # number of states
+Nu   = 2            # number of inputs
+Ny   = 3            # number of outputs
+Nid  = Ny           # number of integrating disturbances
+
+Nw   = Nx + Nid     # number of augmented states
+Nv   = Ny           # number of output measurements
+
+# Define scaling factors
+h0 = 1.1e4         # altitude scaling factor            (m)
+T0 = 288.2         # air temperature at takeoff         (K)
+f0 = 3672          # fuel flowrate at takeoff           (sccm)
+p0 = 100.0         # vent position                      (%)
+t0 = 33.49         # time scale factor                  (s)
+
+# Define parameters for hot-air balloon
+alpha  = 2.549     # balloon number
+omega  = 20.0      # drag coefficient
+beta   = 0.1116    # heat transfer coefficient
+gamma  = 5.257     # atmosphere number
+delta  = 0.2481    # temperature drop-off coefficient
+lambde = 1.00      # vent coefficient
+
+# Define ode and measurement function for the hot-air balloon.
+def ode(x, u):
+    """ODE for hot air balloon system."""
+    f     = (1 + 0.03*u[0])*100/f0
+    term1 = alpha*(1 - delta*x[0])**(gamma - 1)
+    term2 = (1 - (1 - delta*x[0])/x[2])
+    term3 = beta*(x[2] - 1 + delta*x[0])
+    term4 = (1 + lambde*u[1]/p0)
+    term5 = omega*x[1]*np.fabs(x[1])
+    dx1dt = x[1]
+    dx2dt = term1*term2 - 0.5 - term5
+    dx3dt = -term3*term4 + f
+    dxdt = np.array([dx1dt, dx2dt, dx3dt])
+    return dxdt
+
+def measurement(x):
+    """Augmented system measurement (all output disturbances)."""
+    ym = x[:Nx] + x[Nx:] # Nominal states plus output disturbances.
+    ym = ym*np.array([h0, h0/t0, T0]) # Apply scaling.
+    ym[2] -= 273.2 # Convert from K to C.
+    return ym
+
+# Define initial conditions for x, u, and y.
+x_init = np.array([0, 0, 1.244, 0, 0, 0])
+u_init = np.array([0, 0])
+y_init = measurement(x_init)
+
+# Define simulation functions.
 def runsim(k, simcon, opnclsd):
 
     print "runsim: iteration %d -----------------------------------" % k
@@ -59,11 +102,8 @@ def runsim(k, simcon, opnclsd):
     ulb = [mvlist[0].minlim, mvlist[1].minlim]
     yub = [cvlist[0].maxlim, cvlist[1].maxlim, cvlist[2].maxlim]
     ylb = [cvlist[0].minlim, cvlist[1].minlim, cvlist[2].minlim]
-    xlb = [0.0,-0.12, 1.1,-3500.0,-30.0,-30.0] # Range of model validity.
+    xlb = [-0.1,-0.12, 1.1,-3500.0,-30.0,-30.0] # Range of model validity.
     xub = [1.0, 0.12, 1.5, 3500.0, 30.0, 30.0] # Set at ~50% above and below plot limits
-    
-#    xlb = [0, -np.Inf, 0.1, -np.Inf, -np.Inf, -np.Inf] # Range of model validity.
-#    xub = [np.Inf, np.Inf, np.Inf, np.Inf, np.Inf, np.Inf]
     
     # Initialize values on first execution or when something changes.
 
@@ -71,19 +111,11 @@ def runsim(k, simcon, opnclsd):
 
         print "runsim: initialization"
 
-        # Define problem size parameters.
-
-        Nx   = 3            # number of states
-        Nu   = 2            # number of inputs
-        Ny   = 3            # number of outputs
-        Nid  = Ny           # number of integrating disturbances
-
-        Nw   = Nx + Nid     # number of augmented states
-        Nv   = Ny           # number of output measurements
+        # Define other problem size parameters.
+        
         Nf   = cvlist[0].Nf # length of NMPC future horizon
         Nmhe = 60           # length of MHE past horizon
-
-        psize = (Nx, Nu, Ny, Nid, Nw, Nv, Nf, Nmhe)
+        psize = (Nf, Nmhe)
 
         # Define sample time in minutes.
         
@@ -101,41 +133,6 @@ def runsim(k, simcon, opnclsd):
         for i in range(Nu):
             u0[i] = mvlist[i].value
         xaug0 = np.concatenate((x0, np.zeros(Nid)))
-
-
-        # Define scaling factors
-            
-        h0 = 1.1e4         # altitude scaling factor            (m)
-        T0 = 288.2         # air temperature at takeoff         (K)
-        f0 = 3672          # fuel flowrate at takeoff           (sccm)
-        p0 = 100.0         # vent position                      (%)
-        t0 = 33.49         # time scale factor                  (s)
-        #tc = 100.0         # reference trajectory time constant (s) # Apparently not used.
-        
-        # Define parameters for hot-air balloon
-
-        alpha  = 2.549     # balloon number
-        omega  = 20.0      # drag coefficient
-        beta   = 0.1116    # heat transfer coefficient
-        gamma  = 5.257     # atmosphere number
-        delta  = 0.2481    # temperature drop-off coefficient
-        lambde = 1.00      # vent coefficient
-
-        # Define ode for the hot-air balloon .
-
-        def ode(x, u):
-            """ODE for hot air balloon system."""
-            f     = (1 + 0.03*u[0])*100/f0
-            term1 = alpha*(1 - delta*x[0])**(gamma - 1)
-            term2 = (1 - (1 - delta*x[0])/x[2])
-            term3 = beta*(x[2] - 1 + delta*x[0])
-            term4 = (1 + lambde*u[1]/p0)
-            term5 = omega*x[1]*np.fabs(x[1])
-            dx1dt = x[1]
-            dx2dt = term1*term2 - 0.5 - term5
-            dx3dt = -term3*term4 + f
-            dxdt = np.array([dx1dt, dx2dt, dx3dt])
-            return dxdt
 
         # Create simulator.
 
@@ -159,19 +156,6 @@ def runsim(k, simcon, opnclsd):
  
         habaug = mpc.DiscreteSimulator(ode_augmented, Delta,
                                         [Nx+Nid,Nu], ["x","u"])
-        
-
-        # First three states are measured, with scaling factors. Next three
-        # states are integrating output disturbances.
-
-        Cx = np.diag([h0, h0/t0, T0])
-        Caug = np.tile(Cx, (1, 2))
-
-        def measurement(x):
-            """Augmented system measurement (all output disturbances)."""
-            ym = mpc.mtimes(Caug, x)
-            ym[2] -= 273.2 # Convert from K to C.
-            return ym
 
         # Turn into casadi functions.
         ode_augmented_casadi = mpc.getCasadiFunc(ode_augmented,
@@ -181,20 +165,7 @@ def runsim(k, simcon, opnclsd):
         ode_augmented_rk4_casadi = mpc.getCasadiFunc(ode_augmented,
                                    [Nx+Nid,Nu],["x","u"],"ode_augmented_rk4",
                                      rk4=True,Delta=Delta,M=2)
-        
-        
-        # Get linearized model.
-        xlin = np.array([0, 0, 1.244, 0, 0, 0])
-        ulin = np.array([0, 0])
-        
-        linmodelpar = mpc.util.getLinearizedModel(ode_augmented_rk4_casadi,
-                                                  [xlin, ulin],
-                                                  ["A", "B"])
-        linmodelpar["C"] = Caug
-        linmodelpar["xlin"] = xlin
-        linmodelpar["ulin"] = ulin
-        linmodelpar["ylin"] = measurement(xlin)
-        
+
         def ode_estimator_rk4(x,u,w=np.zeros((Nx+Nid,))):
             return ode_augmented_rk4_casadi(x, u) + w
 
@@ -203,8 +174,22 @@ def runsim(k, simcon, opnclsd):
                                    "ode_estimator_rk4", scalar=False)
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
-                             [Nx+Nid], ["x"], "measurement")
-
+                             [Nx+Nid], ["x"], "measurement")        
+        
+        # Get linearized model.
+        xlin = x_init
+        ulin = u_init
+        
+        linmodelpar = mpc.util.getLinearizedModel(ode_augmented_rk4_casadi,
+                                                  [xlin, ulin],
+                                                  ["A", "B"])
+        linmodelpar["xlin"] = xlin
+        linmodelpar["ulin"] = ulin
+        
+        linmodelpar["C"] = mpc.util.getLinearizedModel(measurement_casadi,
+                                                       [xlin], ["C"])["C"]
+        linmodelpar["ylin"] = measurement(xlin)
+        
         # Build augmented estimator matrices.
 
         Qw = np.diag([xv.mnoise for xv in xvlist] + [xv.dnoise for xv in xvlist])
@@ -282,8 +267,8 @@ def runsim(k, simcon, opnclsd):
         # any noticable slowdown.
 
         if (k == 0):
-            ydata = [ys]*Nmhe
-            udata = [us]*(Nmhe-1)
+            ydata = [y_init.copy() for i in xrange(Nmhe)]
+            udata = [u_init.copy() for i in xrange(Nmhe - 1)]
         else:
             ydata = simcon.ydata
             udata = simcon.udata
@@ -291,7 +276,8 @@ def runsim(k, simcon, opnclsd):
         # Weighting matrices for controller.
 
         Qy  = np.diag([cvlist[0].qvalue, cvlist[1].qvalue, cvlist[2].qvalue])
-        Qx  = mpc.mtimes(Cx[:,:Nx].T, Qy, Cx)
+        Cx = linmodelpar["C"][:,:Nx]
+        Qx  = mpc.mtimes(Cx.T, Qy, Cx)
         R   = np.diag([mvlist[0].rvalue, mvlist[1].rvalue])
         S   = np.diag([mvlist[0].svalue, mvlist[1].svalue])
 
@@ -420,7 +406,7 @@ def runsim(k, simcon, opnclsd):
         # Store values in simulation container
         simcon.proc = [hab]
         simcon.mod = (us, xs, ys, estimator, targetfinder, controller, habaug,
-                      measurement, psize)
+                      psize)
         simcon.ydata = ydata
         simcon.udata = udata
         simcon.extra["quanterr"] = 0
@@ -432,8 +418,8 @@ def runsim(k, simcon, opnclsd):
     # Get stored values
     #TODO: these should be dictionaries or NamedTuples.
     hab           = simcon.proc[0]
-    (us, xs, ys, estimator, targetfinder, controller, habaug, measurement, psize) = simcon.mod
-    (Nx, Nu, Ny, Nid, Nw, Nv, Nf, Nmhe) = psize
+    (us, xs, ys, estimator, targetfinder, controller, habaug, psize) = simcon.mod
+    (Nf, Nmhe) = psize
     ydata         = simcon.ydata
     udata         = simcon.udata
 
@@ -445,16 +431,17 @@ def runsim(k, simcon, opnclsd):
 
     x_k = hab.sim(x_km1, u_km1)
 
-    # Constrain the altitude state
-
-    x_k[0] = max(x_k[0], 0)
+    # Constrain the altitude and velocity states.
+    
+    if x_k[0] <= 0:
+        x_k[1] = max(x_k[1], 0) # No negative velocity on the ground.
+    x_k[0] = max(x_k[0], 0) # No negative altitude.
 
     # Take plant measurement
 
     y_k = measurement(np.concatenate((x_k,np.zeros((Nid,)))))
 
     if nf.value > 0.0:
-
         for i in range(0, Ny):
             y_k[i] += nf.value*np.random.normal(0.0, cvlist[i].noise)
     
@@ -503,6 +490,9 @@ def runsim(k, simcon, opnclsd):
     # just return NaNs for future predictions. Also, if the user doesn't want
     # predictions, then we just always skip them.
     predictionOkay = bool(doolpred.value)
+    xmask = np.array([1]*Nx + [0]*Nid)
+    y_lb_safe = 0.5*(ylb + measurement(xmask*xlb))
+    y_ub_safe = 0.5*(yub + measurement(xmask*xub))
     for i in range(0,(Nf - 1)):
         if predictionOkay:
             try:
@@ -514,7 +504,7 @@ def runsim(k, simcon, opnclsd):
             yof_k = measurement(xof_k)
             
             # Stop forecasting if bounds are exceeded.
-            if np.any(yof_k > yub) or np.any(yof_k < ylb):
+            if np.any(yof_k > y_ub_safe) or np.any(yof_k < y_lb_safe):
                 predictionOkay = False
         else:
             xof_k = np.NaN*np.ones((Nx+Nid,))
@@ -524,8 +514,9 @@ def runsim(k, simcon, opnclsd):
             mvlist.vecassign(u_k, field, index=(i + 1))
             xvlist.vecassign(xof_k[:Nx], field, index=(i + 1)) # Note [:Nx].
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
+        xof_km1 = xof_k
     
-    # calculate mpc input adjustment in control is on
+    # calculate mpc input adjustment if control is on
 
     if (opnclsd.status.get() == 1):
 
@@ -667,42 +658,42 @@ DVmenu=["value","pltmax","pltmin"]
 
 MV1 = sim.MVobj(name='f', desc='fuel flow setpoint', units='(%)',
             pltmin=-5.0, pltmax=105.0, minlim=0.0, maxlim=100.0, svalue=9.0e-4,
-            rvalue=9.0e-7, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+            rvalue=9.0e-7, value=u_init[0], target=0.0, Nf=60, menu=MVmenu)
 
 MV2 = sim.MVobj(name='p', desc='top vent position', units='(%)', 
             pltmin=0.0, pltmax=100.0, minlim=1.0, maxlim=99.0, svalue=1.0e-4,
-            rvalue=1.0e-4, value=0.0, target=0.0, Nf=60, menu=MVmenu)
+            rvalue=1.0e-4, value=u_init[1], target=0.0, Nf=60, menu=MVmenu)
 
 CV1 = sim.CVobj(name='h', desc='altitude', units='(m)', 
             pltmin=-300.0, pltmax=7300.0, minlim=0.0, maxlim=7000.0, qvalue=1e-6, noise=1.0,
-            value=0.0, setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
+            value=y_init[0], setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 CV2 = sim.CVobj(name='v', desc='vertical velocity', units='(m/s)', 
             pltmin=-25.0, pltmax=25.0, minlim=-23.0, maxlim=23.0, qvalue=0.0, noise=1.0,
-            value=0.0, setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
+            value=y_init[1], setpoint=0.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 CV3 = sim.CVobj(name='T', desc='bag temperature', units='(degC)', 
             pltmin=55.0, pltmax=125.0, minlim=60.0, maxlim=120.0, qvalue=0.0, noise=0.1,
-            value=85.0, setpoint=85.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
+            value=y_init[2], setpoint=85.0, Nf=60, lbslack=1000, ubslack=1000, menu=CVmenu)
 
 XV1 = sim.XVobj(name='h', desc='dim. altitude', units='', 
             pltmin=-0.1, pltmax=0.7, mnoise=1, dnoise=0.001,
-            value=0.0, Nf=60, menu=XVmenu)
+            value=x_init[0], Nf=60, menu=XVmenu)
 
 XV2 = sim.XVobj(name='v', desc='dim. vertical velocity', units='', 
             pltmin=-0.08, pltmax=0.08, mnoise=1, dnoise=0.001,
-            value=0.0, Nf=60, menu=XVmenu)
+            value=x_init[1], Nf=60, menu=XVmenu)
 
 XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='', 
             pltmin=1.19, pltmax=1.4, mnoise=1, dnoise=0.001,
-            value=1.244, Nf=60, menu=XVmenu)
+            value=x_init[2], Nf=60, menu=XVmenu)
 
 # define options
 
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 fuel = sim.Option(name="Fuel increment", desc="Fuel increment", value=0)
-nonlinmpc = sim.Option("Nonlin. MPC", desc="Nonlinear MPC", value=False)
+nonlinmpc = sim.Option("Nonlin. MPC", desc="Nonlinear MPC", value=True)
 
 # load up variable lists
 
