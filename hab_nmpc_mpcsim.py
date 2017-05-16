@@ -516,34 +516,38 @@ def runsim(k, simcon, opnclsd):
             cvlist.vecassign(yof_k[:Ny], field, index=(i + 1))
         xof_km1 = xof_k
     
+    # Find a valid steady state to use as the origin for the linearized model.
+    
+    ysp_k = [cvlist[0].setpoint, cvlist[1].setpoint, cvlist[2].setpoint]
+    usp_k = [mvlist[0].target, mvlist[1].target]
+    xtarget = np.concatenate((x_km1,dhat_k))
+    
+    targetfinder.guess["x",0] = xtarget
+    targetfinder.fixvar("x", 0, dhat_k, range(Nx,Nx+Nid))
+    targetfinder.par["y_sp",0] = ysp_k
+    targetfinder.par["u_sp",0] = usp_k
+    targetfinder.guess["u",0] = u_km1
+    if opnclsd.status.get() == 0:
+        # Want to find the steady state for the given input.
+        targetfinder.fixvar("u", 0, u_km1)
+    else:
+        # Let the target finder pick u.
+        targetfinder.lb["u",0] = ulb
+        targetfinder.ub["u",0] = uub
+    targetfinder.solve()
+
+    xaugss = np.squeeze(targetfinder.var["x",0,:])
+    uss = np.squeeze(targetfinder.var["u",0,:])
+
+    print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)
+    
+    # Update Kalman Filter steady state.
+    simcon.extra["kalmanfilter"].update(xlin=xaugss, ulin=uss,
+                                        ylin=measurement(xaugss))    
+    
     # calculate mpc input adjustment if control is on
 
     if (opnclsd.status.get() == 1):
-
-        # Use nonlinear steady-state target selector
-
-        ysp_k = [cvlist[0].setpoint, cvlist[1].setpoint, cvlist[2].setpoint]
-        usp_k = [mvlist[0].target, mvlist[1].target]
-        xtarget = np.concatenate((x_km1,dhat_k))
-
-        # Previously had targetfinder.par["p",0] = d_km1, but this shouldn't
-        # be because the target finder should be using the same model as the
-        # controller and doesn't get to know the real disturbance.
-        targetfinder.guess["x",0] = xtarget
-        targetfinder.fixvar("x",0,dhat_k,range(Nx,Nx+Nid))
-        targetfinder.par["y_sp",0] = ysp_k
-        targetfinder.par["u_sp",0] = usp_k
-        targetfinder.guess["u",0] = u_km1
-        targetfinder.solve()
-
-        xaugss = np.squeeze(targetfinder.var["x",0,:])
-        uss = np.squeeze(targetfinder.var["u",0,:])
-
-        print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)
-        
-        # Update Kalman Filter steady state.
-        simcon.extra["kalmanfilter"].update(xlin=xaugss, ulin=uss,
-                                            ylin=measurement(xaugss))
         
         # Choose model for simulation.
         if usenonlinmpc:
@@ -693,7 +697,7 @@ XV3 = sim.XVobj(name='T', desc='dim. bag temperature', units='',
 NF = sim.Option(name='NF', desc='Noise Factor', value=0.0)
 OL = sim.Option(name="OL Pred.", desc="Open-Loop Predictions", value=1)
 fuel = sim.Option(name="Fuel increment", desc="Fuel increment", value=0)
-nonlinmpc = sim.Option("Nonlin. MPC", desc="Nonlinear MPC", value=True)
+nonlinmpc = sim.Option("Nonlin. MPC", desc="Nonlinear MPC", value=False)
 
 # load up variable lists
 
@@ -710,4 +714,10 @@ simcon = sim.SimCon(simname=simname,
 
 # build the GUI and start it up.
 plotspacing = dict(left=0.075, top=0.95, bottom=0.05, right=0.99, hspace=0.5)
-sim.makegui(simcon, plotspacing=plotspacing)
+
+def dosimulation():
+    """Build the GUI and start the simulation."""
+    sim.makegui(simcon, plotspacing=plotspacing)
+
+if __name__ == "__main__":
+    dosimulation()

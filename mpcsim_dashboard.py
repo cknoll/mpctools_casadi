@@ -9,13 +9,17 @@ matplotlib.use("Agg")
 
 import collections
 import numpy as np
+import cstr_lqg_mpcsim as cstr_linear
 import cstr_nmpc_mpcsim as cstr
 import htr_nmpc_mpcsim as htr
+import hab_nmpc_mpcsim as hab
 
 simulations = collections.OrderedDict()
 
+simulations["Linear CSTR"] = cstr_linear
 simulations["Nonlinear CSTR"] = cstr
 simulations["Fired Heater"] = htr
+simulations["Hot Air Balloon"] = hab
 
 def mainloop():
     """Runs the main loop allowing user to choose the simulation."""

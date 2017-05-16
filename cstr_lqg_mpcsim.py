@@ -496,5 +496,9 @@ simcon = sim.SimCon(simname=simname,
                     oplist=OPlist, N=N, refint=refint, runsim=runsim, deltat=DeltaT)
 
 # build the GUI and start it up
+def dosimulation():
+    """Build the GUI and start running."""
+    sim.makegui(simcon)
 
-sim.makegui(simcon)
+if __name__ == "__main__":
+    dosimulation()
