@@ -1,4 +1,4 @@
-# MPCTools: Nonlinear Model Predictive Control Tools for Casadi (Python Interface) #
+# MPCTools: Nonlinear Model Predictive Control Tools for CasADi (Python Interface) #
 
 Copyright (C) 2017
 
@@ -30,7 +30,7 @@ To use MPCTools, you will need a recent versions of
 * Scipy
 * Matplotlib
 * Tkinter (only needed for `*_mpcsim.py` examples)
-* Casadi (Version >=3.0; [download here](http://files.casadi.org>))
+* CasADi (Version >=3.0; [download here](http://files.casadi.org>))
 
 With these packages installed, MPCTools can be downloaded from the
 website above, and the mpctools folder can be manually placed in the user's
@@ -59,8 +59,8 @@ Because MPCTools is primarily an interface to CasADi, you should cite CasADi as
 described on its [website](https://github.com/casadi/casadi/wiki/Publications).
 In addition, you can cite MPCTools as
 
-- Risbeck, M.J., Rawlings, J.B., 2015. MPCTools: Nonlinear Model Predictive
-  Control Tools for Casadi (Python Interface).
+- Risbeck, M.J., Rawlings, J.B., 2015. MPCTools: Nonlinear model predictive
+  control tools for CasADi (Python interface).
   `https://bitbucket.org/rawlings-group/mpc-tools-casadi`.
 
 ## Bugs ##
