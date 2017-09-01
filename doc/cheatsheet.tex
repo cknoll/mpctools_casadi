@@ -229,6 +229,22 @@ Additional arguments are below.
     \item \texttt{verbosity}: same as in \texttt{nmpc}.
 \end{itemize}
 
+\paragraph*{Custom Constraints.}
+
+In case you need to add custom constraints to an optimization problem beyond what is available via the \lstinline|e| argument of \lstinline|nmpc|, you have the option to add CasADi expressions as additional constraints in the optimization problem.
+Optimization variables and parameters can be accessed via the \lstinline|varsym| and \lstinline|parsym| attributes of \lstinline|ControlSolver|, and the expressions can be added as constraints via \lstinline|addconstraints|.
+For example, suppose you wish to constrain $u(5) = u(0)$ and $u(15) = u(10)$, you would use
+%
+\begin{lstlisting}[frame=L]
+solver = mpctools.nmpc(...) # Build controller.
+u = solver.varsym["u"] # Get u symbolic variables.
+solver.addconstraints([u[0] - u[5], u[15] - u[10]])
+\end{lstlisting}
+%
+Note that \lstinline|addconstraints| can take a single CasADi \emph{vector} constraints, or a list of vector constraints.
+By default, all constraints are added as equality constraints, but inequality constraints can be specified as described in the docstring for \lstinline|addconstraints|.
+Consult the CasADi documentation for more details on working with symbolic variables and expressions.
+
 \paragraph*{Repeated Optimization.}
 
 If you plan to be solving the same optimization repeatedly, speed can be improved by using the \texttt{ControlSolver} class.

@@ -59,6 +59,7 @@ examplefiles += [
     "predatorprey.py",
     "softconstraints.py",
     "sstargexample.py",
+    "customconstraints.py",
 ]
 showoutput = set(["fishing.py", "cargears.py"])
 

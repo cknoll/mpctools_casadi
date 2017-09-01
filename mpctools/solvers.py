@@ -1,6 +1,7 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
 import numpy as np
 import util
+import tools
 import casadi
 import time
 import warnings
@@ -186,6 +187,14 @@ class ControlSolver(object):
         self.__settings.update(settings)
         self.__changed = True
     
+    @property
+    def varsym(self):
+        return self.__var
+    
+    @property
+    def parsym(self):
+        return self.__par
+    
     def __init__(self, var, varlb, varub, varguess, obj, con, conlb, conub,
                  par=None, parval=None, verbosity=5, timelimit=60, isQP=False,
                  casaditype="SX", name="ControlSolver", casadioptions=None,
@@ -208,6 +217,7 @@ class ControlSolver(object):
         """
         
         # First store everybody to the object.
+        self.__changed = True
         self.__var = var
         self.__varval = var(np.nan)
         self.__vardict = None # Lazy pudate flag.
@@ -529,3 +539,71 @@ class ControlSolver(object):
             self.lb[var,t,indices] = val
             self.ub[var,t,indices] = val
             self.guess[var,t,indices] = val      
+    
+    def addconstraints(self, newcon, ctype=None, lb=None, ub=None):
+        """
+        Adds a constraint to the optimization problem.
+        
+        con should be a CasADi symbolic expression, or a list of expressions
+        that can be vertically concatenated into a vector to give new
+        constraints.
+        
+        To specify the bounds on constraints, there are two options. First, you
+        can specify ctype as '=', '<', or '>' to define equality or one-sided
+        inequality constraints. Alternatively, you can specify lb or ub as
+        scalars or vectors with the same concatenated size as con. Note that if
+        either of lb or ub is provided, then ctype is ignored, and any missing
+        bound is set to +/-infinity. If only con is provided, then the
+        constraints are added as equalities.
+        """
+        newcon = tools.safevertcat(newcon)
+        if ctype is None:
+            if lb is None and ub is None:
+                ctype = "="
+            else:
+                if lb is None:
+                    lb = -np.inf
+                if ub is None:
+                    ub = np.inf
+        if ctype is not None:
+            if ctype == "=":
+                lb = 0
+                ub = 0
+            elif ctype == "<":
+                lb = -np.inf
+                ub = 0
+            elif ctype == ">":
+                lb = 0
+                ub = np.inf
+        
+        def promote(x):
+            """Promotes x to be a vector of the appropriate length."""
+            x = np.array(x)
+            if x.size == 1:
+                x = x.flatten()*np.ones(newcon.numel())
+            elif x.ndims != 1:
+                raise ValueError("lb and ub must be vectors!")
+            return x
+        lb = promote(lb)
+        ub = promote(ub)
+        
+        def cat(old, new):
+            """Vertically concatenates two vector objects."""
+            return tools.safevertcat([old, new])
+        self.__con = cat(self.__con, newcon)
+        self.__conlb = cat(self.__conlb, lb)
+        self.__conub = cat(self.__conub, ub)
+        
+        self.__changed = True
+
+    def addtoobjective(self, newobj):
+        """
+        Adds a new term to the objective function.
+        
+        newobj must be a scalar CasADi expression.
+        """
+        if not hasattr(newobj, "shape") or newobj.shape() != (1, 1):
+            raise ValueError("newobj must be a scalar expression!")
+        self.__obj = self.__obj + newobj
+        self.__changed = True
+        

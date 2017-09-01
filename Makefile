@@ -12,7 +12,7 @@ EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             cargears.py fishing.py runall.py siso_lmpc_mpcsim.py \
             cstr_lqg_mpcsim.py cstr_nmpc_mpcsim.py heater_pid_mpcsim.py \
             template.py icyhill.py hab_nmpc_mpcsim.py mpcsim_dashboard.py \
-            htr_nmpc_mpcsim.py \
+            htr_nmpc_mpcsim.py customconstraints.py \
 
 DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
