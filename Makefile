@@ -40,6 +40,16 @@ upload : $(ZIPNAME)
 	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$(ZIPNAME)"
 .PHONY : upload
 
+# Automated Python 3 conversion.
+mpc-tools-casadi-python3.zip : mpc-tools-casadi.zip
+	@echo "Making $@."
+	@./makepython3
+
+# Phony rules.
+dist : mpc-tools-casadi.zip
+dist3 : mpc-tools-casadi-python3.zip
+.PHONY : dist dist3
+
 # Rules for documentation pdfs.
 $(DOC_PDF) : %.pdf : %.tex
 	@echo "Making $@."

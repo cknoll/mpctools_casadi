@@ -30,7 +30,7 @@ To use MPCTools, you will need a recent versions of
 * Scipy
 * Matplotlib
 * Tkinter (only needed for `*_mpcsim.py` examples)
-* CasADi (Version >=3.0; [download here](http://files.casadi.org>))
+* CasADi (Version >=3.0; [download here](http://files.casadi.org))
 
 With these packages installed, MPCTools can be downloaded from the
 website above, and the mpctools folder can be manually placed in the user's

@@ -1,0 +1,10 @@
+#!/bin/bash
+dir=$(mktemp --directory --tmpdir=. -t makepython3-XXXXXXXX)
+unzip -qq mpc-tools-casadi.zip -d $dir
+mv $dir/mpc-tools-casadi $dir/mpc-tools-casadi-python3
+find $dir -name '*.py' -exec sed -i 's/.*showandsave.*//' {} \;
+2to3 --no-diffs --write --nobackups $dir 2> 2to3.log
+cd $dir && zip -qq -r ../mpc-tools-casadi-python3.zip mpc-tools-casadi-python3
+cd ..
+rm -rf $dir
+
