@@ -276,8 +276,9 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     
     N muste be a dictionary with at least entries "x", "y", and "t". "w" may be
     specified, but it is assumed to be equal to "x" if not given. "v" is always
-    taken to be equal to "y". If parameters are present, you must also specify
-    a "p" entry.
+    taken to be equal to "y". If time-varying parameters are present, you must
+    also specify a "p" entry. Time-invariant parameters can be specified in
+    extrapar.
     
     u, y, and p must be 2D arrays with the time dimension first. Note that y
     and p should have N["t"] + 1 rows, while u should have N["t"] rows.
@@ -292,9 +293,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
         
     Otherwise, the model must take a "w" argument.
     
-    The return value is a dictionary. Entry "x" is a N["t"] + 1 by N["x"]
-    array that gives xhat(k | N["t"]) for k = 0,1,...,N["t"]. There is no final
-    predictor step.
+    The return value is a ControlSolver object.
     """
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
@@ -348,7 +347,10 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     # Now we fill up the parameters in the guess structure.
     for (name,val) in [("u",u),("p",p),("y",y)]:
         guess[name] = val
-    
+    for v in extrapar.keys():
+        thispar = np.array(extrapar[v])[np.newaxis,...]
+        guess[v] = thispar
+
     # Need to decide about algebraic constraints.
     if "z" in allShapes:
         N["g"] = N["z"]
