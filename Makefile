@@ -12,7 +12,8 @@ EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             cargears.py fishing.py runall.py siso_lmpc_mpcsim.py \
             cstr_lqg_mpcsim.py cstr_nmpc_mpcsim.py heater_pid_mpcsim.py \
             template.py icyhill.py hab_nmpc_mpcsim.py mpcsim_dashboard.py \
-            htr_nmpc_mpcsim.py customconstraints.py \
+            htr_nmpc_mpcsim.py customconstraints.py sstargexample.py \
+            softconstraints.py
 
 DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
@@ -26,28 +27,29 @@ MISC_FILES := COPYING.txt mpctoolssetup.py cstr.m README.md
 MPC_TOOLS_CASADI_FILES := $(MPCTOOLS_SRC) $(EXAMPLES) $(DOC_PDF) \
                           $(CSTR_MATLAB_FILES) $(MISC_FILES)
 
-ZIPNAME := MPCTools-Python2.zip
+ZIPNAME_2 := MPCTools-Python2.zip
 ZIPNAME_3 := MPCTools-Python3.zip
 
 # Define zip rule.
-$(ZIPNAME) : $(MPC_TOOLS_CASADI_FILES)
+$(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
 	@echo "Building zip distribution."
-	@python makezip.py --name $(ZIPNAME) $(MPC_TOOLS_CASADI_FILES) || rm -f $(ZIPNAME)
+	@python makezip.py --name $(ZIPNAME_2) $(MPC_TOOLS_CASADI_FILES) || rm -f $(ZIPNAME_2)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
-upload : $(ZIPNAME)
+upload : $(ZIPNAME_2) $(ZIPNAME_3)
 	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$^"
 .PHONY : upload
 
 # Automated Python 3 conversion.
-$(ZIPNAME_3) : $(ZIPNAME)
+$(ZIPNAME_3) : $(ZIPNAME_2)
 	@echo "Making $@."
 	@./makepython3 $< $@
 
 # Phony rules.
-dist : $(ZIPNAME)
+dist2 : $(ZIPNAME_2)
 dist3 : $(ZIPNAME_3)
-.PHONY : dist dist3
+dist : dist2 dist3
+.PHONY : dist dist2 dist3
 
 # Rules for documentation pdfs.
 $(DOC_PDF) : %.pdf : %.tex
@@ -96,7 +98,7 @@ TEXSUFFIXES := .log .aux .toc .vrb .synctex.gz .snm .nav .out
 TEX_MISC := $(foreach doc, $(basename $(DOC_TEX)), $(addprefix $(doc), $(TEXSUFFIXES)))
 OTHER_MISC := doc/sidebyside.tex doc/sidebyside-cstr.tex
 clean :
-	@rm -f $(ZIPNAME) $(TEX_MISC) $(OTHER_MISC)
+	@rm -f $(ZIPNAME_2) $(ZIPNAME_3) $(TEX_MISC) $(OTHER_MISC)
 .PHONY : clean
 
 PDF_MISC := $(DOC_PDF) cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
@@ -104,4 +106,14 @@ PDF_MISC := $(DOC_PDF) cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
 realclean : clean
 	@rm -f $(PDF_MISC) $(CSTR_MATLAB_FILES)
 .PHONY : realclean
+
+# Rules for running tests.
+test2 : $(ZIPNAME_2)
+	@echo "Running Python 2 tests." 
+	@python2 testzip.py $< 1> /dev/null
+test3 : $(ZIPNAME_3)
+	@echo "Running Python 3 tests." 
+	@python3 testzip.py $< 1> /dev/null
+test : test2 test3
+.PHONY : test test2 test3
 

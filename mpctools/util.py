@@ -413,6 +413,30 @@ def smushColloc(t=None, x=None, tc=None, xc=None, Delta=1, asdict=False):
 
 
 @contextmanager
+def nice_stdout():
+    """
+    Redirect C++ output to Python's stdout (or at least attempts to).
+    
+    Taken from casadi.tools.io with some modifications for Python 3
+    compatbility.
+    """
+    (r, w) = os.pipe()
+    sys.stdout.flush()
+    backup = os.dup(1)
+    os.dup2(w, 1)
+    try:
+        yield
+    finally:
+       os.dup2(backup, 1)
+       os.write(w, b"x")
+       sys.stdout.write(os.read(r, 2**20)[:-1]
+                        .decode(sys.getdefaultencoding()))
+       os.close(r)
+       os.close(w)
+       os.close(backup)
+
+
+@contextmanager
 def stdout_redirected(to=os.devnull):
     """
     context to redirect all Python output, including C code.
@@ -430,11 +454,9 @@ def stdout_redirected(to=os.devnull):
     means all C output is buffered and then returned all at once. Thus, this is
     only really useful if don't need to see output as it is created.
     """
-    import casadi.tools.io as casadiio
-
     old_stdout = sys.stdout
     with open(to, "w") as new_stdout:
-        with casadiio.nice_stdout(): # Buffers C output to Python stdout.
+        with nice_stdout(): # Buffers C output to Python stdout.
             sys.stdout = new_stdout # Redefine Python stdout.
             try:
                 yield # Allow code to be run with the redirected stdout.

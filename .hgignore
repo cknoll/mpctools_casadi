@@ -14,9 +14,10 @@ doc/*.toc
 doc/*.bbl
 doc/*.blg
 cstr-matlab/*
-runall.log
+runall-python*.log
 __local__/*
 build/*
 MPCTools-Python2.zip
 MPCTools-Python3.zip
-
+2to3.log
+2to3.diff
