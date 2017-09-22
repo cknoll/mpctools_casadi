@@ -10,13 +10,12 @@ Contains all of the plotting functions for mpc-tools-casadi.
 
 SHOW_FIGURE_WINDOWS = True # Global setting about whether to show figures.
 SAVE_FIGURE_PDFS = True # Global setting to save figure pdfs.
-SHOWANDSAVE_DEFAULT_CHOICE = "prompt"
+SHOWANDSAVE_DEFAULT_CHOICE = "y"
 
 # Override some things if user passes an --ioff flag.
 if "--ioff" in sys.argv:
     plt.ioff()
     SHOW_FIGURE_WINDOWS = False
-    SHOWANDSAVE_DEFAULT_CHOICE = "y"
 
 def mpcplot(x, u, t, xsp=None, fig=None, xinds=None, uinds=None, tightness=0.5,
             title=None, timefirst=True, legend=True, returnAxes=False,
@@ -185,8 +184,6 @@ def showandsave(fig,filename="fig.pdf",choice=None,**kwargs):
         choice = SHOWANDSAVE_DEFAULT_CHOICE
     if SHOW_FIGURE_WINDOWS and plt.isinteractive():    
         fig.show()
-        if not SAVE_FIGURE_PDFS:
-            raw_input("Press [Enter] to continue....")
     if SAVE_FIGURE_PDFS:
         if choice == "prompt":
             choice = raw_input("Save figure as '%s' [y/n]? " % (filename,))

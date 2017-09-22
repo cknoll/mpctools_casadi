@@ -1,7 +1,6 @@
 from __future__ import print_function, division # Grab some handy Python3 stuff.
 import numpy as np
-import util
-import tools
+from . import util
 import casadi
 import time
 import warnings
@@ -556,7 +555,7 @@ class ControlSolver(object):
         bound is set to +/-infinity. If only con is provided, then the
         constraints are added as equalities.
         """
-        newcon = tools.safevertcat(newcon)
+        newcon = util.safevertcat(newcon)
         if ctype is None:
             if lb is None and ub is None:
                 ctype = "="
@@ -589,7 +588,7 @@ class ControlSolver(object):
         
         def cat(old, new):
             """Vertically concatenates two vector objects."""
-            return tools.safevertcat([old, new])
+            return util.safevertcat([old, new])
         self.__con = cat(self.__con, newcon)
         self.__conlb = cat(self.__conlb, lb)
         self.__conub = cat(self.__conub, ub)

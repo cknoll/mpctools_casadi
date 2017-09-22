@@ -9,7 +9,7 @@ in runall.py.
 import unittest
 import numpy as np
 import casadi
-import tools
+from .util import safevertcat
 
 class SymTests(unittest.TestCase):
     """Tests compatibility of various operations with symbolics."""
@@ -19,24 +19,24 @@ class SymTests(unittest.TestCase):
         self.x = casadi.vertcat(self.x0, self.x1)
     
     def test_listvertcat(self):
-        check = tools.safevertcat([self.x0, self.x1])
+        check = safevertcat([self.x0, self.x1])
         self.assertEqual(repr(check), repr(self.x))
         
     def test_arrayvertcat(self):
-        check = tools.safevertcat(np.array([self.x0, self.x1]))
+        check = safevertcat(np.array([self.x0, self.x1]))
         self.assertEqual(repr(check), repr(self.x))
 
     def test_scalarvertcat(self):
-        check = tools.safevertcat(self.x0)
+        check = safevertcat(self.x0)
         self.assertEqual(repr(check), repr(self.x0))
         
     def test_literalarrayvertcat(self):
-        check = tools.safevertcat(np.array([1, 1]))
+        check = safevertcat(np.array([1, 1]))
         self.assertEqual(repr(check), repr(casadi.IM([1, 1])))
         
     def test_literalscalarvertcat(self):
         with self.assertRaises(TypeError):
-            tools.safevertcat(1)
+            safevertcat(1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-from __future__ import print_function, division # Grab handy Python3 stuff.
+from __future__ import print_function, division
 import numpy as np
 import casadi
 import casadi.tools as ctools
@@ -6,8 +6,8 @@ import colloc
 import warnings
 
 # Other things from our package.
-import util
-import solvers
+from . import util
+from . import solvers
 
 """
 Functions for solving MPC problems using Casadi and Ipopt.
@@ -191,7 +191,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
         uprev = np.array(uprev).flatten()
         uprev.shape = (1,uprev.size)
         guess["u_prev"] = uprev
-    for v in extrapar.keys():
+    for v in extrapar:
         thispar = np.array(extrapar[v])[np.newaxis,...]
         guess[v] = thispar
     
@@ -350,7 +350,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
         guess[name] = val
     
     # Need to decide about algebraic constraints.
-    if "z" in allShapes.keys():
+    if "z" in allShapes:
         N["g"] = N["z"]
     else:
         N["g"] = None
@@ -441,18 +441,18 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
 
     # Now we fill up the parameters in the guess structure.
     guess["p"] = p
-    for v in extrapar.keys():
+    for v in extrapar:
         thispar = np.array(extrapar[v])
         thispar.shape = (1,) + thispar.shape # Prepend dummy time dimension.
         guess[v] = thispar
     
     # Need to decide about algebraic constraints.
-    if "z" in allShapes.keys():
+    if "z" in allShapes:
         N["g"] = N["z"]
     else:
         N["g"] = None
     N["h"] = N["y"]
-    if "f" not in N.keys():
+    if "f" not in N:
         N["f"] = N["x"]
     
     # Screen out ignored states.
@@ -725,7 +725,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
             raise KeyError("Must supply arguments to l!")
     
     # Make sure user-defined arguments are valid.
-    for k in args.keys():
+    for k in args:
         try:
             okay = givenvars.issuperset(args[k])
         except TypeError:
@@ -737,19 +737,19 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
     
     # Now sort out defaults.
     defaultargs = {
-        "f" : filter(lambda k: k not in fErrorVars, ["x","z","u","w","p"]),
+        "f" : [k for k in ["x","z","u","w","p"] if k not in fErrorVars],
         "g" : ["x","z","w","p"],
         "h" : ["x","z","p"],
         "e" : ["x","z","u","p"],
     }
     def isGiven(v): # Membership function.
         return v in givenvars
-    for k in set(defaultargs.keys()).difference(args.keys()):
+    for k in set(defaultargs).difference(args):
         args[k] = filter(isGiven, defaultargs[k])
     
     # Also define inverse map to get positions of arguments.
     argsInv = {}
-    for a in args.keys():
+    for a in args:
         argsInv[a] = dict([(args[a][j], j) for j in range(len(args[a]))])
     
     # Define some helper functions/variables.    
@@ -950,7 +950,7 @@ def __generalVariableShapes(sizeDict, setpoint=[], delta=[], finalx=True,
     """
     # Figure out what variables are supplied.
     allsizes = set(["x", "z", "u", "w", "p", "y", "v", "s", "sf", "c", "t"])
-    givensizes = allsizes.intersection(sizeDict.keys())
+    givensizes = allsizes.intersection(sizeDict)
     
     # Make sure we were given a time.
     try:
@@ -994,7 +994,7 @@ def __generalVariableShapes(sizeDict, setpoint=[], delta=[], finalx=True,
     # Now loop through all the variables, and if we've been given all of the
     # necessary sizes, then add that variable
     shapeDict = {}
-    for (v, (t, shapeinds)) in allvars.items():
+    for (v, (t, shapeinds)) in allvars.iteritems():
         if givensizes.issuperset(shapeinds):
             shape = [sizeDict[i] for i in shapeinds]
             if len(shape) == 0:
@@ -1005,8 +1005,8 @@ def __generalVariableShapes(sizeDict, setpoint=[], delta=[], finalx=True,
             
     # Finally, look through extra variables and raise an error if something
     # will overwrite a variable that is already there.
-    for v in extra.keys():
-        if v in shapeDict.keys():
+    for v in extra:
+        if v in shapeDict:
             raise KeyError("Extra parameter '%s' shadows a reserved name. "
                 "Please choose a different name." % (v,))
         else:
@@ -1288,7 +1288,7 @@ def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", scalar=True,
     catargs = [XX(a) for a in args]
                 
     # Evaluate the function and return everything.
-    fexpr = safevertcat(f(*args))
+    fexpr = util.safevertcat(f(*args))
     return dict(fexpr=fexpr, args=catargs, rawargs=args, XX=XX, names=varnames,
                 sizes=realvarsizes)
 
@@ -1315,31 +1315,6 @@ def __getargnames(func):
 # =============
 # Miscellany
 # ============
-
-
-def safevertcat(x):
-    """
-    Safer wrapper for Casadi's vertcat.
-    
-    the input x is expected to be an iterable containing multiple things that
-    should be concatenated together. This is in contrast to Casadi 3.0's new
-    version of vertcat that accepts a variable number of arguments. We retain
-    this (old, Casadi 2.4) behavior because it makes it easier to check types.    
-    
-    If a single SX or MX object is passed, then this doesn't do anything.
-    Otherwise, if all elements are numpy ndarrays, then numpy's concatenate
-    is called. If anything isn't an array, then casadi.vertcat is called.
-    """
-    symtypes = set(["SX", "MX"])
-    xtype = getattr(x, "type_name", lambda : None)()
-    if xtype in symtypes:
-        val = x
-    elif (not isinstance(x, np.ndarray) and
-            all(isinstance(a, np.ndarray) for a in x)):
-        val = np.concatenate(x)
-    else:
-        val = casadi.vertcat(*x)
-    return val
 
 class DummySimulator(object):
     """
@@ -1427,7 +1402,7 @@ class DiscreteSimulator(DummySimulator):
         self._checkargs(args)
         integratorargs = dict(x0=args[0])
         if len(args) > 1:
-            integratorargs["p"] = safevertcat(args[1:])
+            integratorargs["p"] = util.safevertcat(args[1:])
         
         # Call integrator.
         nextstep = self.__integrator(**integratorargs)

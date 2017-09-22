@@ -105,7 +105,7 @@ mhe = mpc.nmhe(f, h, u[:Nt,:], y[:Nt + 1,:], l, N, lx, x0bar, lb=lb,
                guess=guess, wAdditive=True, verbosity=0)
 
 xhat = np.NaN*np.ones((Nsim + 1, Nx))
-for t in xrange(Nsim + 1):
+for t in range(Nsim + 1):
     # Solve current MHE problem.
     mhe.solve()
     status = mhe.stats["status"]
@@ -125,7 +125,7 @@ for t in xrange(Nsim + 1):
         xhat[t,:] = mhe.vardict["x"][0,:]
         mhe.newmeasurement(y[t + Nt,:], u[t + Nt,:], mhe.vardict["x"][1,:])
         mhe.saveguess()
-yhat = np.array([measurement(xhat[i,:]) for i in xrange(Nsim + 1)])
+yhat = np.array([measurement(xhat[i,:]) for i in range(Nsim + 1)])
 
 # Make a plot.
 t = np.arange(Nsim + 1)*Delta

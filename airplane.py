@@ -56,7 +56,6 @@ else:
 plane = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
 x0 = np.array([1000,1000,500,50,0])
-#x0 = np.array([0,0,0,50,0])
 u0 = np.array([0,0,50])
 
 xlb = np.array([-np.inf,-np.inf,0,15,-np.pi])

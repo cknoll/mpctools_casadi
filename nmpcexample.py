@@ -62,7 +62,7 @@ solvers["NMPC"] = mpc.nmpc(f=ode_casadi,N=Nnonlin,Delta=Delta,**commonargs)
 Nsim = 100
 x = {}
 u = {}
-for method in solvers.keys():
+for method in solvers:
     x[method] = np.zeros((Nsim+1,Nx))
     x[method][0,:] = x0
     u[method] = np.zeros((Nsim,Nu))
@@ -112,7 +112,7 @@ timeuax[-1].set_xlabel("Time")
 colors = {"LMPC":"red", "NMPC":"green"}
 tplot = Nsim*Delta*np.linspace(0,1,Nsim+1)
 
-for method in x.keys():
+for method in x:
     # Plot in time.
     uplot = np.vstack((u[method],u[method][-1,:])) # Fix t/u size mismatch.
     for i in range(Nu):

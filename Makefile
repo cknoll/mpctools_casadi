@@ -18,17 +18,16 @@ DOC_TEX := $(addprefix doc/, install.tex cheatsheet.tex introslides.tex \
              octave-vs-python.tex)
 DOC_PDF := $(DOC_TEX:.tex=.pdf)
 
-INSTALLER_FILES := $(addprefix installer/, casadiinstaller.py README.txt)
-
 CSTR_MATLAB_FILES := $(addprefix cstr-matlab/, main.m massenbal.m \
                        massenbalstst.m partial.m)
 
 MISC_FILES := COPYING.txt mpctoolssetup.py cstr.m README.md
 
 MPC_TOOLS_CASADI_FILES := $(MPCTOOLS_SRC) $(EXAMPLES) $(DOC_PDF) \
-                          $(INSTALLER_FILES) $(CSTR_MATLAB_FILES) $(MISC_FILES)
+                          $(CSTR_MATLAB_FILES) $(MISC_FILES)
 
-ZIPNAME := mpc-tools-casadi.zip
+ZIPNAME := MPCTools-Python2.zip
+ZIPNAME_3 := MPCTools-Python3.zip
 
 # Define zip rule.
 $(ZIPNAME) : $(MPC_TOOLS_CASADI_FILES)
@@ -37,17 +36,17 @@ $(ZIPNAME) : $(MPC_TOOLS_CASADI_FILES)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
 upload : $(ZIPNAME)
-	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$(ZIPNAME)"
+	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$^"
 .PHONY : upload
 
 # Automated Python 3 conversion.
-mpc-tools-casadi-python3.zip : mpc-tools-casadi.zip
+$(ZIPNAME_3) : $(ZIPNAME)
 	@echo "Making $@."
-	@./makepython3
+	@./makepython3 $< $@
 
 # Phony rules.
-dist : mpc-tools-casadi.zip
-dist3 : mpc-tools-casadi-python3.zip
+dist : $(ZIPNAME)
+dist3 : $(ZIPNAME_3)
 .PHONY : dist dist3
 
 # Rules for documentation pdfs.

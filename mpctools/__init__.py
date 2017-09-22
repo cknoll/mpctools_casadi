@@ -17,7 +17,7 @@ def _getVersion(vstring, N=3):
     try:
         major_version = int(parts[0])
         minor_version = int(parts[1])
-    except IndexError, ValueError:
+    except (IndexError, ValueError):
         raise ValueError("Invalid version string '{}'. Must have major and "
                          "minor version.".format(vstring))
     return (major_version, minor_version)
@@ -30,13 +30,13 @@ elif _getVersion(casadi.__version__) > _getVersion(_MAX_CASADI_VERSION):
         % (casadi.__version__, _MAX_CASADI_VERSION))
 
 # Add modules and some specific functions.
-import tools
-import plots
-import util
-import colloc
-import solvers
-from tools import nmpc, nmhe, sstarg, getCasadiFunc, DiscreteSimulator
-from tools import safevertcat as vcat
-from util import keyboard, mtimes, ekf
-from util import sum1 as sum
-from solvers import callSolver
+from . import tools
+from . import plots
+from . import util
+from . import colloc
+from . import solvers
+from .tools import nmpc, nmhe, sstarg, getCasadiFunc, DiscreteSimulator
+from .util import safevertcat as vcat
+from .util import keyboard, mtimes, ekf
+from .util import sum1 as sum
+from .solvers import callSolver

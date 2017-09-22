@@ -21,7 +21,7 @@ import copy
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import matplotlib.pyplot as plt
-import util
+from . import util
 
 def makegui(simcon, **kwargs):
     """Build Tk window and plots; then start simulation."""

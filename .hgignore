@@ -17,16 +17,6 @@ cstr-matlab/*
 runall.log
 __local__/*
 build/*
-lib/*
-include/*
-casadi/*
-build/*
-installer/include/*
-installer/build/*
-installer/casadi/*
-installer/lib/*
-installer/casadisetup.py
-installer/*.tar.gz
-installer/*.zip
-mpc-tools-casadi.zip
+MPCTools-Python2.zip
+MPCTools-Python3.zip
 

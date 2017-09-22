@@ -25,7 +25,7 @@ interface to the archive available at
 
 To use MPCTools, you will need a recent versions of
 
-* Python 2.7
+* Python 2.7 (see below for Python 3 support)
 * Numpy
 * Scipy
 * Matplotlib
@@ -34,7 +34,7 @@ To use MPCTools, you will need a recent versions of
 
 With these packages installed, MPCTools can be downloaded from the
 website above, and the mpctools folder can be manually placed in the user's
-Python path, or the provided setup script mpctoolssetup.py can be used, e.g.,
+Python path, or the provided setup script `mpctoolssetup.py` can be used, e.g.,
 
     python mpctoolssetup.py install --user
 
@@ -45,7 +45,18 @@ to install for the current user only, or
 to install systemwide.
 
 Code is used by importing `mpctools` within python scripts. See sample
-files for  complete examples.
+files for complete examples.
+
+### Python 3 Support ###
+
+Support for Python 3.4+ has been added on an experimental basis. To use
+MPCTools with Python 3, you will need to download the Python 3 zip from the
+[Downloads](https://bitbucket.org/rawlings-group/mpc-tools-casadi/downloads])
+section.
+
+The Python 3 files are generated automatically from the Python 2 sources using
+Python's `2to3` conversion utility. This translation seems to work, but there
+may be subtle bugs. Please report any issues you discover.
 
 ## Documentation ##
 
@@ -65,8 +76,9 @@ In addition, you can cite MPCTools as
 
 ## Bugs ##
 
-Questions, comments, bug reports, and contributions should be sent to
-risbeck@wisc.edu.
+Questions, comments, bug reports can be posted on the
+(issue tracker)(https://bitbucket.org/rawlings-group-mpc-tools-casadi/issues)
+on Bitbucket.
 
 Michael J. Risbeck  
 <risbeck@wisc.edu>  

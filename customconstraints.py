@@ -42,7 +42,7 @@ t = 0
 u = solver.varsym["u"] # Get CasADi symbolic variables.
 for b in blocksizes:
     u0 = u[t]
-    for i in xrange(b - 1):
+    for i in range(b - 1):
         t = t + 1
         newcon.append(u0 - u[t])
     t = t + 1

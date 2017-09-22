@@ -63,7 +63,7 @@ times = Delta*Nsim*np.linspace(0,1,Nsim+1)
 x = {}
 u = {}
 Du = {}
-for method in solvers.keys():
+for method in solvers:
     x[method] = np.zeros((Nsim+1,Nx))
     x[method][0,:] = x0
     u[method] = np.zeros((Nsim,Nu))

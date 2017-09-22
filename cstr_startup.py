@@ -180,7 +180,7 @@ sstargs["lmpc"] = mpc.sstarg(f=Flinear,**sstarg_commonargs)
 sstargs["nmpc"] = mpc.sstarg(f=Fnonlinear,**sstarg_commonargs)
 
 # Now simulate the process under control.
-for method in solvers.keys():
+for method in solvers:
     xcl[method] = np.zeros((Nsim+1,Nx))
     xcl[method][0,:] = x0
     thisx = x0    
@@ -269,7 +269,7 @@ def cstrplot(x,u,xsp=None,contVars=[],title=None,colors={},labels={},
             args = {"color":colors.get(k,"black"), "label":labels.get(k,k)}
             ax.step(t,u[k][:,i],where="post",**args)
         if bounds is not None:
-            for b in set(["uub", "ulb"]).intersection(bounds.keys()):
+            for b in set(["uub", "ulb"]).intersection(bounds):
                 ax.plot(np.array([t[0],t[-1]]),np.ones((2,))*bounds[b][i],
                         '--k')
         ax.set_ylabel(ylabelsu[i])

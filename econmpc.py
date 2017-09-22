@@ -199,8 +199,9 @@ for eq in equations:
     rotax = fig.add_subplot(gs[1,1])
     for (lvals,lrotvals,xcl,xclc,c) in zip(LVALS,LROTVALS,XCL,XCLC,colors):
         # Plot closed-loop stage cost.
-        costax.plot(range(Nsim),lvals[eq],color=c)
-        rotax.plot(range(Nsim),lrotvals[eq],color=c)
+        t = np.arange(Nsim)
+        costax.plot(t, lvals[eq], color=c)
+        rotax.plot(t, lrotvals[eq], color=c)
         # Plot phase trajectory with collocation points.
         ax.plot(xcl[eq][:,0],xcl[eq][:,1],"o",color=c,markerfacecolor=c,
                 markeredgecolor=c,markersize=6)

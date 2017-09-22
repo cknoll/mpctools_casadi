@@ -5,24 +5,13 @@ the script with an 'n' option, e.g.
 
     python runall.py -n
 
-Note that in Matplotlib V1.4.2, there seems to be a bug that leads to error
-messages of the form
-
-    can't invoke "event" command: application has been destroyed
-        while executing
-    "event generate $w <<ThemeChanged>>"
-        (procedure "ttk::ThemeChanged" line 6)
-        invoked from within
-    "ttk::ThemeChanged"
-
-These errors appear to be harmless and can be ignored. Notably, they do not
-seem to be produced when this script is run from Spyder or when the example
-files are run individually.
+Note that you will be unable to see any plots in this case.
 """
 import sys, traceback
 import matplotlib.pyplot as plt
 import mpctools.solvers, mpctools.plots
-from mpctools.util import stdout_redirected, strcolor, listAvailableSolvers, dummy_context
+from mpctools.util import stdout_redirected, strcolor, dummy_context
+import casadi
 
 # Turn off output
 mpctools.solvers.setMaxVerbosity(0)
@@ -34,10 +23,9 @@ logfile = open("runall.log","w")
 
 # List of files. We hard-code these so that we explicitly pick everything.
 examplefiles = []
-availablesolvers = listAvailableSolvers(categorize=False)
-if "qpoases" in availablesolvers:
+if casadi.has_conic("qpoases"):
     examplefiles.append("mpcexampleclosedloop.py")
-if "bonmin" in availablesolvers:
+if casadi.has_nlpsol("bonmin"):
     examplefiles += ["fishing.py", "cargears.py"]
 examplefiles += [
     "airplane.py",
@@ -87,6 +75,7 @@ for f in examplefiles:
         plt.close("all")
         if abort:
             break
+    import pdb; pdb.set_trace()
 
 plt.ion()
 logfile.close()

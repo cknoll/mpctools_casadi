@@ -1,4 +1,4 @@
-from __future__ import print_function, division # Grab some handy Python3 stuff.
+from __future__ import print_function, division
 import scipy.linalg
 import casadi
 import casadi.tools as ctools
@@ -814,4 +814,27 @@ def listAvailableSolvers(asstring=False, front="    ", categorize=True):
             solvers = flattenlist(solvers.values())
         retval = solvers
     return retval
-   
+ 
+def safevertcat(x):
+    """
+    Safer wrapper for Casadi's vertcat.
+    
+    the input x is expected to be an iterable containing multiple things that
+    should be concatenated together. This is in contrast to Casadi 3.0's new
+    version of vertcat that accepts a variable number of arguments. We retain
+    this (old, Casadi 2.4) behavior because it makes it easier to check types.    
+    
+    If a single SX or MX object is passed, then this doesn't do anything.
+    Otherwise, if all elements are numpy ndarrays, then numpy's concatenate
+    is called. If anything isn't an array, then casadi.vertcat is called.
+    """
+    symtypes = set(["SX", "MX"])
+    xtype = getattr(x, "type_name", lambda : None)()
+    if xtype in symtypes:
+        val = x
+    elif (not isinstance(x, np.ndarray) and
+            all(isinstance(a, np.ndarray) for a in x)):
+        val = np.concatenate(x)
+    else:
+        val = casadi.vertcat(*x)
+    return val

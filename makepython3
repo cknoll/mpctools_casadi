@@ -1,10 +1,13 @@
 #!/bin/bash
-dir=$(mktemp --directory --tmpdir=. -t makepython3-XXXXXXXX)
-unzip -qq mpc-tools-casadi.zip -d $dir
-mv $dir/mpc-tools-casadi $dir/mpc-tools-casadi-python3
-find $dir -name '*.py' -exec sed -i 's/.*showandsave.*//' {} \;
-2to3 --no-diffs --write --nobackups $dir 2> 2to3.log
-cd $dir && zip -qq -r ../mpc-tools-casadi-python3.zip mpc-tools-casadi-python3
+zip2=$1
+dir2=${zip2%.*}
+zip3=$2
+dir3=${zip3%.*}
+scratchdir=$(mktemp --directory --tmpdir=. -t makepython3-XXXXXXXX)
+unzip -qq $zip2 -d $scratchdir
+mv $scratchdir/$dir2 $scratchdir/$dir3
+2to3 --write --nobackups $scratchdir 1> 2to3.diff 2> 2to3.log
+cd $scratchdir && zip -qq -r ../$zip3 $dir3
 cd ..
-rm -rf $dir
+rm -rf $scratchdir
 
