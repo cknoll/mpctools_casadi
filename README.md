@@ -16,16 +16,16 @@ COPYING for more details.
 
 ## Availability ##
 
-The latest development sources of MPCTools are also available via
-anonymous access to a read-only Mercurial archive. There is also a web
-interface to the archive available at
-[Bitbucket](https://bitbucket.org/rawlings-group/mpc-tools-casadi)
+The most recent release of MPCTools is available for download from the
+[Downloads][bbdownloads] section. Choose the appropriate version for Python 2
+or 3. The development sources are hosted in a Mercurial repository on 
+[Bitbucket][bitbucket].
 
 ## Installation ##
 
 To use MPCTools, you will need a recent versions of
 
-* Python 2.7 (see below for Python 3 support)
+* Python 2.7 or 3.5+ (see below for Python 3 support)
 * Numpy
 * Scipy
 * Matplotlib
@@ -33,8 +33,9 @@ To use MPCTools, you will need a recent versions of
 * CasADi (Version >=3.0; [download here](http://files.casadi.org))
 
 With these packages installed, MPCTools can be downloaded from the
-website above, and the mpctools folder can be manually placed in the user's
-Python path, or the provided setup script `mpctoolssetup.py` can be used, e.g.,
+[downloads][bbdownloads] section, and the `mpctools` folder can be manually 
+placed in the user's Python path, or the provided setup script
+`mpctoolssetup.py` can be used, e.g.,
 
     python mpctoolssetup.py install --user
 
@@ -51,8 +52,7 @@ files for complete examples.
 
 Support for Python 3.4+ has been added on an experimental basis. To use
 MPCTools with Python 3, you will need to download the Python 3 zip from the
-[Downloads](https://bitbucket.org/rawlings-group/mpc-tools-casadi/downloads])
-section.
+[Downloads][bbdownloads] section.
 
 The Python 3 files are generated automatically from the Python 2 sources using
 Python's `2to3` conversion utility. This translation seems to work, but there
@@ -67,8 +67,7 @@ examples.
 ## Citing MPCTools ##
 
 Because MPCTools is primarily an interface to CasADi, you should cite CasADi as
-described on its [website](https://github.com/casadi/casadi/wiki/Publications).
-In addition, you can cite MPCTools as
+described on its [website][casadipubs]. In addition, you can cite MPCTools as
 
 - Risbeck, M.J., Rawlings, J.B., 2015. MPCTools: Nonlinear model predictive
   control tools for CasADi (Python interface).
@@ -77,10 +76,16 @@ In addition, you can cite MPCTools as
 ## Bugs ##
 
 Questions, comments, bug reports can be posted on the
-(issue tracker)(https://bitbucket.org/rawlings-group-mpc-tools-casadi/issues)
-on Bitbucket.
+[issue tracker][bbissues] on Bitbucket.
 
 Michael J. Risbeck  
 <risbeck@wisc.edu>  
 University of Wisconsin-Madison  
 Department of Chemical Engineering
+
+[bitbucket]: https://bitbucket.org/rawlings-group/mpc-tools-casadi
+[bbissues]: https://bitbucket.org/rawlings-group/mpc-tools-casadi/issues
+[bbdownloads]: https://bitbucket.org/rawlings-group/mpc-tools-casadi/downloads
+[casadi]: https://casadi.org
+[casadipubs]: https://github.com/casadi/casadi/wiki/Publications
+[casadidownloads]: https://files.casadi.org

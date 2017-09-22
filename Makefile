@@ -36,9 +36,17 @@ $(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
 	@python makezip.py --name $(ZIPNAME_2) $(MPC_TOOLS_CASADI_FILES) || rm -f $(ZIPNAME_2)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
-upload : $(ZIPNAME_2) $(ZIPNAME_3)
-	echo -n "Enter bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$^"
-.PHONY : upload
+define do-bitbucket-upload
+echo "Uploading $< to Bitbucket."
+echo -n "Enter Bitbucket username: " && read bitbucketuser && curl -v -u $$bitbucketuser -X $(UPLOAD_COMMAND) -F files=@"$<"
+endef
+
+upload2 : $(ZIPNAME_2)
+	@$(do-bitbucket-upload)
+upload3 : $(ZIPNAME_3)
+	@$(do-bitbucket-upload)
+upload : upload2 upload3
+.PHONY : upload upload2 upload3
 
 # Automated Python 3 conversion.
 $(ZIPNAME_3) : $(ZIPNAME_2)
