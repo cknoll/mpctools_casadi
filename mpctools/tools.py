@@ -104,7 +104,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     
     The return value is a ControlSolver object. To actually solve the
     optimization, use ControlSolver.solve().
-    """     
+    """
     # Copy dictionaries so we don't change the user inputs.
     N = N.copy()
     guess = guess.copy()
@@ -372,7 +372,14 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
             raise KeyError("l argument %s is invalid!" % k)
     obj = l(*finallargs)  
     if includeprior:
-        obj += lx(varStruct["x",0] - parStruct["x0bar",0])
+        lxargs = funcargs.get("lx", None)
+        if lxargs is None and inferargs:
+            lxargs = __getargnames(lx)
+        if lxargs is not None:
+            args = __getArgs(lxargs, 0, varStruct, parStruct)
+        else:
+            args = [varStruct["x",0] - parStruct["x0bar",0]]
+        obj += lx(*args)
     
     # Decide if w is inside the model or additive.
     fErrorVars = []    

@@ -9,7 +9,7 @@ from numpy import random
 random.seed(927) # Seed random number generator.
 
 doPlots = True
-fullInformation = True # True for full information estimation, False for MHE.
+fullInformation = False # True for full information estimation, False for MHE.
 
 # Problem parameters.
 Nt = 10 # Horizon length
@@ -25,7 +25,7 @@ Nv = Ny
 
 sigma_v = 0.25 # Standard deviation of the measurements
 sigma_w = 0.001 # Standard deviation for the process noise
-sigma_p = .5 # Standard deviation for prior
+sigma_p = 0.5 # Standard deviation for prior
 
 # Make covariance matrices.
 P = np.diag((sigma_p*np.ones((Nx,)))**2) # Covariance for prior.
@@ -72,9 +72,10 @@ H = mpc.getCasadiFunc(measurement,[Nx],["x"],"H")
 def lfunc(w,v):
     return sigma_w**-2*casadi.sum_square(w) + sigma_v**-2*casadi.sum_square(v) 
 l = mpc.getCasadiFunc(lfunc,[Nw,Nv],["w","v"],"l")
-def lxfunc(x):
-    return mpc.mtimes(x.T,linalg.inv(P),x)
-lx = mpc.getCasadiFunc(lxfunc,[Nx],["x"],"lx")
+def lxfunc(x, x0bar, Pinv):
+    dx = x - x0bar
+    return mpc.mtimes(dx.T, Pinv, dx)
+lx = mpc.getCasadiFunc(lxfunc, [Nx, Nx, (Nx, Nx)], ["x", "x0bar", "Pinv"], "lx")
 
 # First simulate everything.
 w = sigma_w*random.randn(Nsim,Nw)
@@ -113,13 +114,20 @@ for t in range(Nsim):
     tmax = t+1        
     lb = {"x":np.zeros((N["t"] + 1,Nx))}  
 
-    # Call solver. Would be faster to reuse a single solver object, but we
-    # can't because the horizon is changing.
+    # Build and call solver. If using full information or before the horizon
+    # fills up, need to make a new solver. Otherwise, can reuse the old one.
     buildtime = -time.time()
-    solver = mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
-                      y=ysim[tmin:tmax,:], l=l, N=N, lx=lx,
-                      x0bar=x0bar, verbosity=0, guess=guess,
-                      lb=lb)
+    if fullInformation or t < Nt:
+        solver = mpc.nmhe(f=F, h=H, u=usim[tmin:tmax-1,:],
+                          y=ysim[tmin:tmax,:], l=l, N=N, lx=lx,
+                          x0bar=x0bar, verbosity=0, guess=guess,
+                          lb=lb, extrapar=dict(Pinv=linalg.inv(P)),
+                          inferargs=True)
+    else:
+        solver.par["Pinv"] = linalg.inv(P)
+        solver.par["x0bar"] = x0bar
+        solver.par["y"] = list(ysim[tmin:tmax,:])
+        solver.par["u"] = list(usim[tmin:tmax - 1,:])
     buildtime += time.time()
     solvetime = -time.time()
     sol = mpc.callSolver(solver)
@@ -142,7 +150,7 @@ for t in range(Nsim):
     for k in set(["x","w","v"]).intersection(sol.keys()):
         guess[k] = sol[k].copy()
     
-    # Do some different things if not using full information estimation.    
+    # Update guess and prior if not using full information estimation.    
     if not fullInformation and t + 1 > Nt:
         for k in guess.keys():
             guess[k] = guess[k][1:,...] # Get rid of oldest measurement.
@@ -150,11 +158,6 @@ for t in range(Nsim):
         # Do EKF to update prior covariance, but don't take EKF state.
         [P, x0bar, _, _] = mpc.ekf(F,H,x=sol["x"][0,...],
             u=usim[tmin,:],w=sol["w"][0,...],y=ysim[tmin,:],P=P,Q=Q,R=R)
-        
-        # Need to redefine arrival cost.
-        def lxfunc(x):
-            return mpc.mtimes(x.T,linalg.inv(P),x)
-        lx = mpc.getCasadiFunc(lxfunc,[Nx],["x"],"lx")
     
      # Add final guess state for new time point.
     for k in guess.keys():
