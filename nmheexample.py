@@ -70,7 +70,7 @@ H = mpc.getCasadiFunc(measurement,[Nx],["x"],"H")
 
 # Define stage costs.
 def lfunc(w,v):
-    return sigma_w**-2*casadi.sum_square(w) + sigma_v**-2*casadi.sum_square(v) 
+    return sigma_w**-2*mpc.mtimes(w.T, w) + sigma_v**-2*mpc.mtimes(v.T, v) 
 l = mpc.getCasadiFunc(lfunc,[Nw,Nv],["w","v"],"l")
 def lxfunc(x, x0bar, Pinv):
     dx = x - x0bar

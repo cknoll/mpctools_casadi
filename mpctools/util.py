@@ -64,16 +64,6 @@ def atleastnd(arr,n=2):
     return arr
 
 
-def getLinearization(*args, **kwargs):
-    """DEPRECIATED"""
-    raise NotImplementedError("Depreciated. See getLinearizedModel.")
-
-
-def linearizeModel(*args, **kwargs):
-    """DEPRECIATED"""
-    raise NotImplementedError("Depreciated. See getLinearizedModel.")
-
-
 def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
     """
     Returns linear (affine) state-space model for f at the point in args.
@@ -99,8 +89,8 @@ def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
     # Now do jacobian.
     jacobians = []
     for i in range(len(args)):
-        jac = f.jacobian(i,0) # df/d(args[i]).
-        jacobians.append(np.array(jac(*args)[0]))
+        jac = jacobianfunc(f, i) # df/d(args[i]).
+        jacobians.append(np.array(jac(*args)))
     
     # Decide whether or not to discretize.
     if Delta is not None:
@@ -143,11 +133,6 @@ def c2d(A, B, Delta, Bp=None, f=None, asdict=False):
     else:
         retval = [Ad, Bd, Bpd, fd]
     return retval
-
-
-def c2d_augmented(*args, **kwargs):
-    """DEPRECIATED"""
-    raise NotImplementedError("Depreciated. See c2d.")
 
 
 def c2dObjective(a,b,q,r,Delta):
@@ -577,8 +562,10 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     that f must be f(x,u,w) and h must be h(x).
     
     If specified, f_jac and h_jac should be initialized jacobians. This saves
-    some time if you're going to be calling this many times in a row, althouth
-    it's really not noticable unless the models are very large.
+    some time if you're going to be calling this many times in a row, although
+    it's really not noticable unless the models are very large. Note that they
+    should return a single argument and can be created using
+    mpctools.util.jacobianfunc.
     
     The value of x that should be fed is xhat(k | k-1), and the value of P
     should be P(k | k-1). xhat will be updated to xhat(k | k) and then advanced
@@ -593,15 +580,15 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     
     # Check jacobians.
     if f_jacx is None:
-        f_jacx = f.jacobian(0)
+        f_jacx = jacobianfunc(f, 0)
     if f_jacw is None:
-        f_jacw = f.jacobian(2)
+        f_jacw = jacobianfunc(f, 2)
     if h_jacx is None:
-        h_jacx = h.jacobian(0)
+        h_jacx = jacobianfunc(h, 0)
         
     # Get linearization of measurement.
-    C = np.array(h_jacx(x)[0])
-    yhat = np.array(h(x)[0]).flatten()
+    C = np.array(h_jacx(x))
+    yhat = np.array(h(x)).flatten()
     
     # Advance from x(k | k-1) to x(k | k).
     xhatm = x                                          # This is xhat(k | k-1)    
@@ -612,8 +599,8 @@ def ekf(f,h,x,u,w,y,P,Q,R,f_jacx=None,f_jacw=None,h_jacx=None):
     
     # Now linearize the model at xhat.
     w = np.zeros(w.shape)
-    A = np.array(f_jacx(xhat, u, w)[0])
-    G = np.array(f_jacw(xhat, u, w)[0])
+    A = np.array(f_jacx(xhat, u, w))
+    G = np.array(f_jacw(xhat, u, w))
     
     # Advance.
     Pmp1 = A.dot(P).dot(A.T) + G.dot(Q).dot(G.T)       # This is P(k+1 | k)
@@ -682,8 +669,14 @@ def getCasadiPlugins(keep=None):
     If keep is not None, it should be a list of plugin types to keep. Only
     plugins of these types are in the return dictionary.    
     """
-    plugins = casadi.CasadiMeta_getPlugins().split(";")
-    plugins = dict([tuple(reversed(p.split("::"))) for p in plugins])
+    for suffix in ["getPlugins", "plugins"]:
+        func = 'CasadiMeta_' + suffix
+        if hasattr(casadi, func):
+            plugins = getattr(casadi, func)().split(";")
+            break
+    else:
+        raise RuntimeError("Unable to get Casadi plugins!")
+    plugins = dict(tuple(reversed(p.split("::"))) for p in plugins)
     if keep is not None:
         plugins = {k : v for (k, v) in plugins.iteritems() if v in keep}
     return plugins
@@ -786,6 +779,7 @@ def _getDocDict(docstring):
     # Now return the dictionary.
     return {c.id : (c.default, c.doc) for c in allcells}
 
+
 def getSolverOptions(solver, display=True):
         """
         Returns a dictionary of solver-specific options.
@@ -812,6 +806,7 @@ def getSolverOptions(solver, display=True):
                 print(k, "[%r]: %s\n" % options[k])
         return options    
 
+
 def listAvailableSolvers(asstring=False, front="    ", categorize=True):
     """
     Returns available solvers as a string or a dictionary.
@@ -836,7 +831,8 @@ def listAvailableSolvers(asstring=False, front="    ", categorize=True):
             solvers = flattenlist(solvers.values())
         retval = solvers
     return retval
- 
+
+
 def safevertcat(x):
     """
     Safer wrapper for Casadi's vertcat.
@@ -860,3 +856,22 @@ def safevertcat(x):
     else:
         val = casadi.vertcat(*x)
     return val
+
+
+def jacobianfunc(func, indep, dep=0, name=None):
+    """
+    Returns a Casadi Function to evaluate the Jacobian of func.
+    
+    func should be a casadi.Function object. indep and dep should be the index
+    of the independent and dependent variables respectively. They can be
+    (zero-based) integer indices, or names of variables as strings.
+    """
+    if name is None:
+        name = "jac_" + func.name()
+    jacname = ["jac"]
+    for (i, arglist) in [(dep, func.name_out), (indep, func.name_in)]:
+        if isinstance(i, int):
+            i = arglist()[i]
+        jacname.append(i)
+    jacname = ":".join(jacname)
+    return func.factory(name, func.name_in(), [jacname])
