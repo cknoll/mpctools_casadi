@@ -262,7 +262,8 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=None, l=l, e=e, funcargs=funcargs, Delta=Delta,
                   con=con, conlb=conlb, conub=conub,periodic=periodic,
-                  verbosity=verbosity, deltaVars=deltaVars, isQP=isQP,
+                  verbosity=verbosity, timelimit=timelimit,
+                  deltaVars=deltaVars, isQP=isQP,
                   casaditype=casaditype, discretel=discretel,
                   infercolloc=infercolloc, solver=solver,
                   discretevar=discretevar, inferargs=inferargs)
@@ -390,7 +391,8 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, l=l, funcargs=funcargs, Delta=Delta,
                   verbosity=verbosity, casaditype=casaditype,
-                  fErrorVars=fErrorVars, inferargs=inferargs)
+                  timelimit=timelimit, fErrorVars=fErrorVars,
+                  inferargs=inferargs)
     return __optimalControlProblem(*args, **kwargs)
 
 
@@ -509,7 +511,8 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     args = [N, varStruct, parStruct, lb, ub, guess, obj]
     kwargs = dict(f=f, g=g, h=h, funcargs=funcargs, verbosity=verbosity,
                   discretef=discretef, finalpoint=False, casaditype=casaditype,
-                  inferargs=inferargs, e=e, discretevar=discretevar)
+                  timelimit=timelimit, inferargs=inferargs, e=e,
+                  discretevar=discretevar)
     return __optimalControlProblem(*args, **kwargs)
 
 
