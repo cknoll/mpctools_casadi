@@ -125,3 +125,8 @@ test3 : $(ZIPNAME_3)
 test : test2 test3
 .PHONY : test test2 test3
 
+# Rules for printing variables.
+list-examples :
+	@echo $(EXAMPLES)
+.PHONY : list-examples
+

@@ -19,7 +19,7 @@ on Linux.
 import sys, traceback
 import matplotlib.pyplot as plt
 import mpctools.solvers, mpctools.plots
-from mpctools.util import stdout_redirected, strcolor, dummy_context
+from mpctools.util import stdout_redirected, strcolor, dummy_context, execfile
 import casadi
 
 # Turn off output
@@ -69,7 +69,7 @@ printstatus(__doc__)
 abort = False
 failures = []
 for f in examplefiles:
-    printstatus(strcolor("%s ... " % f, "blue"), end=" ")   
+    printstatus(strcolor("%s ... " % f, "blue"), end="")   
     try:
         context = dummy_context if f in showoutput else stdout_redirected
         with context():

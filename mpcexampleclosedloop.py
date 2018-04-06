@@ -1,6 +1,4 @@
 # MPC for a multivariable system.
-
-# Imports.
 import numpy as np
 import mpctools as mpc
 import mpctools.plots as mpcplots

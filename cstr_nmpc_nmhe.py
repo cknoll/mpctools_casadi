@@ -329,7 +329,7 @@ for n in range(1,Nsim):
     # Update state estimate with measurement.
     err[n,:] = y[n,:] - measurement(xhatm[n,:])
     
-    print("(%3d) " % (n,), end=' ') 
+    print("(%3d) " % (n,), end="") 
     
     # Handle disturbance.
     if useMeasuredState:
@@ -343,9 +343,9 @@ for n in range(1,Nsim):
         estimator.par["y"] = ydata
         estimator.par["u"] = udata
         estimator.solve()
-        estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
+        estsol = mpc.util.casadiStruct2numpyDict(estimator.var)
         
-        print("Estimator: %s, " % (estimator.stats["status"],), end=' ')            
+        print("Estimator: %s, " % (estimator.stats["status"],), end="")
         xhat[n,:] = estsol["x"][-1,:] # Update our guess.
         
         estimator.saveguess()        
@@ -373,7 +373,7 @@ for n in range(1,Nsim):
     xaugsp[n,:] = np.squeeze(targetfinder.var["x",0,:])
     usp[n,:] = np.squeeze(targetfinder.var["u",0,:])
 
-    print("Target: %s, " % (targetfinder.stats["status"],), end=' ') 
+    print("Target: %s, " % (targetfinder.stats["status"],), end="") 
     if targetfinder.stats["status"] != "Solve_Succeeded":
         print("*** Optimization failed. Enter debug mode. ***")        
         mpc.keyboard()
@@ -385,7 +385,7 @@ for n in range(1,Nsim):
     controller.par["u_prev"] = [u[n-1,:]]
     controller.fixvar("x",0,x0hat)            
     controller.solve()
-    print("Controller: %s, " % (controller.stats["status"],), end=' ') 
+    print("Controller: %s, " % (controller.stats["status"],), end="") 
     
     controller.saveguess()
     u[n,:] = np.squeeze(controller.var["u",0])

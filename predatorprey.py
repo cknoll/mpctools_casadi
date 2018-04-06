@@ -57,7 +57,7 @@ t = Delta*np.arange(Nsim)
 u[:,0] = 0.1*(1 + np.sin(2*np.pi*t/10))
 y = np.NaN*np.ones((Nsim + 1, Ny))
 noise = 0.05*random.randn(Nsim + 1, Nx) # Multiplicative noise term.
-for t in xrange(Nsim + 1):
+for t in range(Nsim + 1):
     # Round x and take measurement.
     x[t,:] = np.maximum(np.round(x[t,:]*(1 + noise[t,:])), 0)
     y[t] = measurement(x[t,:])    

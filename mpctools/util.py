@@ -876,3 +876,16 @@ def jacobianfunc(func, indep, dep=0, name=None):
         jacname.append(i)
     jacname = ":".join(jacname)
     return func.factory(name, func.name_in(), [jacname])
+
+
+# Python 3 execfile.
+def execfile(file, *args):
+    """
+    Executes the given Python file.
+    
+    *args should be (globals, locals), defining the contexts in which the
+    code is executed.
+    """
+    with open(file, "r") as f:
+        code = f.read()
+    exec(compile(code, file, "exec"), *args)

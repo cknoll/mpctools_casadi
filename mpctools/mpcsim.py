@@ -74,7 +74,7 @@ def openfile(simcon):
     """Open another python file and run it."""
     f = askopenfilename()
     simcon.root.destroy()
-    exec(compile(open(f).read(), f, 'exec'))
+    util.execfile(f)
 
 def askbool(description, message, **kwargs):
     """
