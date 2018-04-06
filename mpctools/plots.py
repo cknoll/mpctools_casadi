@@ -43,9 +43,9 @@ def mpcplot(x, u, t, xsp=None, fig=None, xinds=None, uinds=None, tightness=0.5,
     
     # Process arguments.
     if xinds is None:
-        xinds = range(x.shape[0])
+        xinds = np.arange(x.shape[0])
     if uinds is None:
-        uinds = range(u.shape[0])
+        uinds = np.arange(u.shape[0])
     if fig is None:
         fig = plt.figure()
     if xsp is None:
@@ -186,7 +186,7 @@ def showandsave(fig,filename="fig.pdf",choice=None,**kwargs):
         fig.show()
     if SAVE_FIGURE_PDFS:
         if choice == "prompt":
-            choice = raw_input("Save figure as '%s' [y/n]? " % (filename,))
+            choice = input("Save figure as '%s' [y/n]? " % (filename,))
         if choice == "y":
             fig.savefig(filename,**kwargs)
 

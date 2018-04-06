@@ -1,13 +1,12 @@
-from __future__ import print_function, division
 import numpy as np
 import casadi
 import casadi.tools as ctools
-import colloc
 import warnings
 
 # Other things from our package.
 from . import util
 from . import solvers
+from . import colloc
 
 """
 Functions for solving MPC problems using Casadi and Ipopt.
@@ -140,7 +139,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     
     # Now get the shapes of all the variables that are present.
     deltaVars = ["u"] if uprev is not None else []
-    allShapes = __generalVariableShapes(N, setpoint=sp.keys(), delta=deltaVars,
+    allShapes = __generalVariableShapes(N, setpoint=list(sp), delta=deltaVars,
                                         extra=extraparshapes)
     if "c" not in N:
         N["c"] = 0
@@ -173,7 +172,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     # is passed as a set of variables and one is a set of parameters. Note that
     # if this ends up empty, we just set it to None.
     parNames = set(["p"] + [k + "_sp" for k in sp]
-        + [k + "_prev" for k in deltaVars] + extrapar.keys())
+        + [k + "_prev" for k in deltaVars] + list(extrapar))
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
     if len(parStruct.keys()) == 0:
         parStruct = None
@@ -339,7 +338,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
-    parNames = set(["u","p","y"] + extrapar.keys())
+    parNames = set(["u","p","y"] + list(extrapar))
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
         
     varNames = set(["x","z","w","v","xc","zc"])
@@ -348,7 +347,7 @@ def nmhe(f, h, u, y, l, N, lx=None, x0bar=None, lb={}, ub={}, guess={}, g=None,
     # Now we fill up the parameters in the guess structure.
     for (name,val) in [("u",u),("p",p),("y",y)]:
         guess[name] = val
-    for v in extrapar.keys():
+    for v in extrapar:
         thispar = np.array(extrapar[v])[np.newaxis,...]
         guess[v] = thispar
 
@@ -444,7 +443,7 @@ def sstarg(f, h, N, phi=None, lb={}, ub={}, guess={}, g=None, p=None,
     
     # Build Casadi symbolic structures. These need to be separate because one
     # is passed as a set of variables and one is a set of parameters.
-    parNames = set(["p"] + extrapar.keys())
+    parNames = set(["p"] + list(extrapar))
     parStruct = __casadiSymStruct(allShapes, parNames, casaditype)
     
     varNames = set(["x", "z", "u", "y", "s"])
@@ -557,7 +556,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         
     # Sort out bounds and parameters.
     for (data,structure,name) in dataAndStructure:
-        for v in set(data.keys()).intersection(structure.keys()):
+        for v in set(data).intersection(structure.keys()): # .keys() is important!
             # Check sizes. We have to decide if the user supplied time-varying
             # bounds or not (as determined by the shape of data).
             vs = structure[v]
@@ -627,12 +626,12 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         con = []
         conlb = np.array([])
         conub = np.array([])
-    if periodic and "x" in struct.keys():
+    if periodic and "x" in list(struct.keys()):
         con.append(struct["x"][0] - struct["x"][-1])
         conlb = np.concatenate([conlb,np.zeros((N["x"],))])
         conub = np.concatenate([conub,np.zeros((N["x"],))])
     for f in ["state","measurement","algebra","delta","path"]:
-        if f in constraints.keys():
+        if f in list(constraints.keys()):
             con += util.flattenlist(constraints[f]["con"])
             conlb = np.concatenate([conlb,constraints[f]["lb"].flatten()])
             conub = np.concatenate([conub,constraints[f]["ub"].flatten()])
@@ -644,7 +643,7 @@ def __optimalControlProblem(N, var, par=None, lb={}, ub={}, guess={},
         except KeyError:
             raise ValueError("Unknown casaditype. Must be 'SX' or 'MX'.")
     
-    if "cost" in constraints.keys():
+    if "cost" in list(constraints.keys()):
         obj = sum(util.flattenlist(constraints["cost"]),obj)
     
     # Build ControlSolver object and return that.
@@ -729,11 +728,11 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
     # Decide function arguments.
     if inferargs:
         funcs = dict(f=f, g=g, h=h, l=l, e=e)
-        args = {k : __getargnames(v) for (k, v) in funcs.iteritems()}
+        args = {k : __getargnames(v) for (k, v) in funcs.items()}
         args.update(funcargs)
     else:
         args = funcargs.copy()
-        if l is not None and "l" not in args.keys():
+        if l is not None and "l" not in args:
             raise KeyError("Must supply arguments to l!")
     
     # Make sure user-defined arguments are valid.
@@ -757,7 +756,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
     def isGiven(v): # Membership function.
         return v in givenvars
     for k in set(defaultargs).difference(args):
-        args[k] = filter(isGiven, defaultargs[k])
+        args[k] = [a for a in defaultargs[k] if isGiven(a)]
     
     # Also define inverse map to get positions of arguments.
     argsInv = {}
@@ -771,8 +770,8 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
         for t in times:
             allargs.append(__getArgs(args[func],t,var))
         return allargs
-    tintervals = range(0,Nt)
-    tpoints = range(0,Nt + bool(finalpoint))
+    tintervals = np.arange(Nt)
+    tpoints = np.arange(Nt + bool(finalpoint))
     
     # Preallocate return dictionary.
     returnDict = {}    
@@ -1006,7 +1005,7 @@ def __generalVariableShapes(sizeDict, setpoint=[], delta=[], finalx=True,
     # Now loop through all the variables, and if we've been given all of the
     # necessary sizes, then add that variable
     shapeDict = {}
-    for (v, (t, shapeinds)) in allvars.iteritems():
+    for (v, (t, shapeinds)) in allvars.items():
         if givensizes.issuperset(shapeinds):
             shape = [sizeDict[i] for i in shapeinds]
             if len(shape) == 0:
@@ -1078,7 +1077,7 @@ def __getShapes(vals, mindims=1, extra="prepend"):
     except KeyError:
         raise ValueError("Invalid choices for extra!")
     shapes = {}
-    for (k, v) in vals.iteritems():
+    for (k, v) in vals.items():
         s = getattr(v, "shape", None)
         if s is None:
             try:
@@ -1218,7 +1217,7 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
         sizes = symbols["sizes"]
         wrappedx0 = casadi.MX.sym(names[0], *sizes[0])
         wrappedpar = [casadi.MX.sym(names[i], *sizes[i]) for i
-                      in xrange(1, len(sizes))]    
+                      in range(1, len(sizes))]    
         wrappedIntegrator = integrator(x0=wrappedx0,
                                        p=casadi.vertcat(*wrappedpar))["xf"]
         integrator = casadi.Function(funcname, [wrappedx0] + wrappedpar,
@@ -1286,13 +1285,13 @@ def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", scalar=True,
         for (name, size) in zip(varnames, realvarsizes):
             if len(size) == 2:
                 thisarr = []
-                for i in xrange(size[0]):
+                for i in range(size[0]):
                     row = [XX.sym("%s_%d_%d" % (name, i, j)) for
-                           j in xrange(size[1])]
+                           j in range(size[1])]
                     thisarr.append(row)
             else:
                 thisarr = [XX.sym("%s_%d" % (name, i)) for
-                           i in xrange(size[0])]
+                           i in range(size[0])]
             args.append(np.array(thisarr, dtype=object))
     else:
         args = [XX.sym(name, *size) for
@@ -1314,7 +1313,7 @@ def __getargnames(func):
     argnames = []
     if func is not None:
         try:
-            for i in xrange(func.n_in()):
+            for i in range(func.n_in()):
                 argnames.append(func.name_in(i))
         except AttributeError:
             if not isinstance(func, casadi.Function):

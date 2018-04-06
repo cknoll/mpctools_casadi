@@ -1,4 +1,4 @@
-from __future__ import print_function, division
+
 import scipy.linalg
 import casadi
 import casadi.tools as ctools
@@ -10,6 +10,7 @@ import sys
 import os
 import warnings
 from contextlib import contextmanager
+from functools import reduce
 
 # First, we grab a few things from the CasADi module.
 DM = casadi.DM
@@ -99,7 +100,7 @@ def getLinearizedModel(f,args,names=None,Delta=None,returnf=True,forcef=False):
         fs = Bfactor.dot(fs)
     
     # Package everything up.
-    ss = dict(zip(names,jacobians))
+    ss = dict(zip(names, jacobians))
     if returnf and ("f" not in ss or forcef):
         ss["f"] = fs
     return ss    
@@ -248,7 +249,7 @@ def mtimes(*args, **kwargs):
     forcemtimes = kwargs.pop("forcemtimes", None)
     forcedot = kwargs.pop("forcedot", False)
     if len(kwargs) > 0:
-        raise TypeError("Invalid keywords: %s" % kwargs.keys())    
+        raise TypeError("Invalid keywords: %s" % list(kwargs))    
     
     # Pick whether to use mul or dot.
     if forcemtimes:
@@ -362,7 +363,7 @@ def smushColloc(t=None, x=None, tc=None, xc=None, Delta=1, asdict=False):
             t = np.arange(0, Nt+1)*Delta
         else:
             t.shape = (t.size,)
-        import colloc
+        from . import colloc
         Nc = xc.shape[2]
         [r, _, _, _] = colloc.weights(Nc, include0=False, include1=False)
         r.shape = (r.size,1)
@@ -488,7 +489,7 @@ class ArrayDict(collections.MutableMapping):
         """
         Returns a copy of self with each array copied as well.
         """
-        return {k : v.copy() for (k, v) in self.__arraydict__.iteritems()}
+        return {k : v.copy() for (k, v) in self.__arraydict__.items()}
     
     # The rest of the methods just perform the corresponding dict action.
     def __getitem__(self, k):
@@ -621,7 +622,7 @@ def _infercolloc(r, guess):
         raise ValueError("Missing keys! Must have 'x' and 'xc'.")
     r = r[np.newaxis,1:-1]
     x1 = np.array(guess["x",0])
-    for t in xrange(len(guess["x"]) - 1):
+    for t in range(len(guess["x"]) - 1):
         x0 = x1
         x1 = np.array(guess["x",t + 1])
         guess["xc",t] = r*x0 + (1 - r)*x1
@@ -678,7 +679,7 @@ def getCasadiPlugins(keep=None):
         raise RuntimeError("Unable to get Casadi plugins!")
     plugins = dict(tuple(reversed(p.split("::"))) for p in plugins)
     if keep is not None:
-        plugins = {k : v for (k, v) in plugins.iteritems() if v in keep}
+        plugins = {k : v for (k, v) in plugins.items() if v in keep}
     return plugins
 
 
@@ -694,7 +695,7 @@ def _getDocCell(lines, joins=("", "", "", " ")):
     cell. It must have exactly one entry for each cell    
     """
     Ncol = len(joins)
-    fields = [[] for i in xrange(Ncol)]
+    fields = [[] for i in range(Ncol)]
     for line in lines:
         cells = line.split(" | ", Ncol - 1)
         cells[0] = cells[0].lstrip().lstrip("|")
@@ -818,7 +819,7 @@ def listAvailableSolvers(asstring=False, front="    ", categorize=True):
     """
     availablesolvers = getCasadiPlugins(["Nlpsol", "Qpsol", "Conic"])
     solvers = dict(NLP=[], QP=[])
-    for (k, v) in availablesolvers.iteritems():
+    for (k, v) in availablesolvers.items():
         if v == "Nlpsol":
             solvers["NLP"].append(k)
         elif v == "Qpsol" or v == "Conic":
@@ -828,7 +829,7 @@ def listAvailableSolvers(asstring=False, front="    ", categorize=True):
         retval = front + ("\n" + front).join(types)
     else:
         if not categorize:
-            solvers = flattenlist(solvers.values())
+            solvers = flattenlist(list(solvers.values()))
         retval = solvers
     return retval
 

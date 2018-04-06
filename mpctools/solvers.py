@@ -1,4 +1,3 @@
-from __future__ import print_function, division # Grab some handy Python3 stuff.
 import numpy as np
 from . import util
 import casadi
@@ -463,12 +462,12 @@ class ControlSolver(object):
                 return ret
         
         # Check for extra fields in guess.
-        extra = set(newguess.keys()).difference(self.guess.keys())
+        extra = set(newguess.keys()).difference(self.guess.keys()) # keys() is important!
         if len(extra) > 0:
             warnings.warn("Ignoring extra fields in guess: %r." % (extra,))
         
         # Now actually save guess.
-        for k in self.guess.keys():
+        for k in self.guess.keys(): # keys() is important!
             # These values and the guess structure can potentially have a
             # different number of time points. So, we need to figure out
             # what range of times will be valid for both things. The offset
@@ -479,7 +478,7 @@ class ControlSolver(object):
             tmin = max(toffset, 0)
             
             # Now actually store the stuff.           
-            for t in xrange(tmin, tmax):
+            for t in range(tmin, tmax):
                 self.guess[k,t-toffset] = getguess(k, t)
                 
         # Finally, infer a collocation guess.
@@ -493,7 +492,7 @@ class ControlSolver(object):
         
         The current u and a new update for the prior x0bar can also be given.
         """
-        parkeys = self.par.keys()
+        parkeys = self.par.keys() # keys() is important!
         cycles = {}
         if "y" not in parkeys:
             raise TypeError("y is missing from par! Not from mhe().")
@@ -505,8 +504,8 @@ class ControlSolver(object):
         
         # Actually cycle things.
         # TODO: split out saveguess and use same logic.
-        for (k, newval) in cycles.iteritems():
-            for t in xrange(len(self.par[k]) - 1):
+        for (k, newval) in cycles.items():
+            for t in range(len(self.par[k]) - 1):
                 self.par[k,t] = self.par[k,t + 1]
             self.par[k,-1] = newval
             

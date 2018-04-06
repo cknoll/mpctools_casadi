@@ -74,7 +74,7 @@ def openfile(simcon):
     """Open another python file and run it."""
     f = askopenfilename()
     simcon.root.destroy()
-    execfile(f)
+    exec(compile(open(f).read(), f, 'exec'))
 
 def askbool(description, message, **kwargs):
     """
@@ -134,7 +134,7 @@ def _get_setvalue_data():
         
     # Also create a reverse mapping.
     setvalue_names = {sv.field : name for (name, sv) in
-                      setvalue_options.iteritems()}
+                      setvalue_options.items()}
     setvalue_names["value"] = "Value"
     setvalue_names = util.ReadOnlyDict(setvalue_names)
     
@@ -868,7 +868,7 @@ class Updatable(object):
         if not isinstance(newobj, type(self)):
             raise TypeError("Incompatible type for newobj.")
         if attributes is None:
-            attributes = filter(lambda x : not x.startswith("_"), dir(newobj))
+            attributes = [x for x in dir(newobj) if not x.startswith("_")]
         for a in attributes:
             setattr(self, a, getattr(newobj, a))
 
@@ -1104,9 +1104,9 @@ def makeaxes(fig, rows, cols, sharex=True):
     figure.
     """
     axes = np.empty((rows, cols), dtype=object)
-    for j in xrange(cols):
+    for j in range(cols):
         xax = None
-        for i in xrange(rows):
+        for i in range(rows):
             ax = fig.add_subplot(rows, cols, i*cols + j + 1, sharex=xax)
             ax.set_visible(False)
             axes[i, j] = ax
