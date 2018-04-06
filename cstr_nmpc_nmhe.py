@@ -178,7 +178,7 @@ Oaug = np.vstack((np.eye(Nx,Nx+Nid) - Aaug[:Nx,:], Caug))
 svds = linalg.svdvals(Oaug)
 rank = sum(svds > 1e-8)
 if rank < Nx + Nid:
-    print "***Warning: augmented system is not detectable!"
+    print("***Warning: augmented system is not detectable!")
 
 # Now simulate things.
 Nsim = 51
@@ -313,13 +313,13 @@ for n in range(1,Nsim):
     try:
         x[n,:] = cstr.sim(x[n-1,:], u[n-1,:], d[n-1,:])
     except:
-        print "***Error during simulation!"
+        print("***Error during simulation!")
         break
     udata.append(u[n-1,:]) # Store latest control move.
     
     # Advance state estimate. Use disturbance as modeled.
     xhatm[n,:] = cstraug.sim(xhat[n-1,:], u[n-1,:], ds)
-    print ""    
+    print("")    
     
     # Take plant measurement.
     y[n,:] = measurement(np.concatenate(
@@ -329,7 +329,7 @@ for n in range(1,Nsim):
     # Update state estimate with measurement.
     err[n,:] = y[n,:] - measurement(xhatm[n,:])
     
-    print "(%3d) " % (n,), 
+    print("(%3d) " % (n,), end=' ') 
     
     # Handle disturbance.
     if useMeasuredState:
@@ -345,7 +345,7 @@ for n in range(1,Nsim):
         estimator.solve()
         estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
         
-        print "Estimator: %s, " % (estimator.stats["status"],),            
+        print("Estimator: %s, " % (estimator.stats["status"],), end=' ')            
         xhat[n,:] = estsol["x"][-1,:] # Update our guess.
         
         estimator.saveguess()        
@@ -373,9 +373,9 @@ for n in range(1,Nsim):
     xaugsp[n,:] = np.squeeze(targetfinder.var["x",0,:])
     usp[n,:] = np.squeeze(targetfinder.var["u",0,:])
 
-    print "Target: %s, " % (targetfinder.stats["status"],), 
+    print("Target: %s, " % (targetfinder.stats["status"],), end=' ') 
     if targetfinder.stats["status"] != "Solve_Succeeded":
-        print "*** Optimization failed. Enter debug mode. ***"        
+        print("*** Optimization failed. Enter debug mode. ***")        
         mpc.keyboard()
         break
 
@@ -385,7 +385,7 @@ for n in range(1,Nsim):
     controller.par["u_prev"] = [u[n-1,:]]
     controller.fixvar("x",0,x0hat)            
     controller.solve()
-    print "Controller: %s, " % (controller.stats["status"],), 
+    print("Controller: %s, " % (controller.stats["status"],), end=' ') 
     
     controller.saveguess()
     u[n,:] = np.squeeze(controller.var["u",0])
@@ -395,7 +395,7 @@ for n in range(1,Nsim):
     udata.pop(0)    
     
 endtime = time.clock()
-print "\n\nNonlinear Took %.5g s." % (endtime - starttime,)
+print("\n\nNonlinear Took %.5g s." % (endtime - starttime,))
 
 # *****
 # Plots

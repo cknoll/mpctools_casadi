@@ -77,7 +77,7 @@ for t in range(Nsim):
     #<<ENDCHUNK>>    
     
     # Print stats.
-    print "%d: %s" % (t,solver.stats["status"])
+    print("%d: %s" % (t,solver.stats["status"]))
     u[t,:] = solver.var["u",0,:]
     
     #<<ENDCHUNK>>    

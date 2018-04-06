@@ -9,7 +9,7 @@ from scipy import linalg
 
 def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d -----------------------------------" % k
+    print("runsim: iteration %d -----------------------------------" % k)
 
     # unpack stuff from simulation container
 
@@ -37,7 +37,7 @@ def runsim(k, simcon, opnclsd):
 
     if (k == 0 or chsum > 0):
 
-        print "runsim: initialization"
+        print("runsim: initialization")
 
         # Define problem size parameters
 
@@ -172,14 +172,14 @@ def runsim(k, simcon, opnclsd):
 #        print 'svds = ', svds
         rank = sum(svds > 1e-10)
 
-        print 'A    = ',A
-        print 'C    = ',C
-        print 'Bd   = ',Bd
-        print 'Cd   = ',Cd
-        print 'rank = ',rank
+        print('A    = ',A)
+        print('C    = ',C)
+        print('Bd   = ',Bd)
+        print('Cd   = ',Cd)
+        print('rank = ',rank)
 
         if rank < Nx + Nid:
-            print "***Warning: augmented system is not detectable!"
+            print("***Warning: augmented system is not detectable!")
 
         # Build augmented system.
 

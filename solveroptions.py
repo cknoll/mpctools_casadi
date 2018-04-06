@@ -13,16 +13,16 @@ allsolvers = mpc.solvers.listAvailableSolvers(asstring=False)
 alloptions = {}
 errors = {}
 for s in allsolvers["QP"] + allsolvers["NLP"]:
-    print "Getting options for %s." % s
+    print("Getting options for %s." % s)
     solver.solver = s
     try:
         alloptions[s] = solver.getSolverOptions(display=False)    
     except ValueError as err:
         if err.message == "No table found!":
-            print "  *** No documentation table for %s!" % s
+            print("  *** No documentation table for %s!" % s)
         else:
             errors[s] = err.message
-            print "  *** Error for %s!" % s
+            print("  *** Error for %s!" % s)
     except RuntimeError as err:
         errors[s] = err.message
-        print "  *** Error for %s!" % s
+        print("  *** Error for %s!" % s)

@@ -293,8 +293,8 @@ def printmatrix(A,before="     ",nsig=3,latex=True):
     if latex:
         print(r"\begin{pmatrix}")
     for i in range(A.shape[0]):
-        print(before + " & ".join([numberformat(a,nsig) for a in 
-                                    np.array(A)[i,:].tolist()]) + r" \\") 
+        print((before + " & ".join([numberformat(a,nsig) for a in 
+                                    np.array(A)[i,:].tolist()]) + r" \\")) 
     if latex:
         print(r"\end{pmatrix}")
             

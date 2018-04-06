@@ -48,7 +48,7 @@ for b in blocksizes:
     t = t + 1
 solver.addconstraints(newcon)
 solver.solve()
-print solver.stats["status"]
+print(solver.stats["status"])
 
 # Plot things.
 [x, u] = [solver.vardict[k] for k in ["x", "u"]]

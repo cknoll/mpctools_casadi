@@ -60,7 +60,7 @@ controller = mpc.nmpc(f=f, l=l, Pf=Vf, e=e, ef=ef, N=N, lb=lb, ub=ub,
                       udiscrete=np.array([udiscrete]), solver=solver,
                       isQP=True, inferargs=True, verbosity=0)
 controller.solve()
-print controller.stats["status"]
+print(controller.stats["status"])
 
 
 s = controller.vardict["s"]

@@ -130,7 +130,7 @@ contargs = dict(
 )
 controller = mpc.nmpc(**contargs)
 buildtime += time.time()
-print "Building controller took %.4g s." % buildtime
+print("Building controller took %.4g s." % buildtime)
 
 # Pick different initial conditions and get open-loop profiles.
 x0vals = [np.array([(.7*np.cos(t) + 1)*cAs, (.7*np.sin(t)+1)*cBs])
@@ -141,7 +141,7 @@ LVALS = []
 LROTVALS = []
 XF = []
 for x0 in x0vals:
-    print "x0 = [%10.5g, %10.5g]" % (x0[0],x0[1])
+    print("x0 = [%10.5g, %10.5g]" % (x0[0],x0[1]))
     # Preallocate.
     xcl = {}
     xclc = {}
@@ -165,7 +165,7 @@ for x0 in x0vals:
 
             # Solve with just terminal penalty.
             controller.solve()
-            print "    %s %3d: %s" % (eq,t,controller.stats["status"])
+            print("    %s %3d: %s" % (eq,t,controller.stats["status"]))
             if controller.stats["status"] != "Solve_Succeeded":
                 mpc.keyboard()
                 break

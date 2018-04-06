@@ -201,9 +201,9 @@ for method in solvers:
             sstargs[method].guess["y",0] = thisysp
             sstargs[method].solve()            
             
-            print "%10s %3d: %s" % ("sstarg",t,sstargs[method].stats["status"])
+            print("%10s %3d: %s" % ("sstarg",t,sstargs[method].stats["status"]))
             if sstargs[method].stats["status"] != "Solve_Succeeded":
-                print "***Target finder failed!"
+                print("***Target finder failed!")
                 break
             
             xsp[t,:] = np.squeeze(sstargs[method].var["x",0])
@@ -215,9 +215,9 @@ for method in solvers:
         # Fix initial condition and solve.
         solvers[method].fixvar("x",0,thisx)
         solvers[method].solve()
-        print "%10s %3d: %s" % (method,t,solvers[method].stats["status"])
+        print("%10s %3d: %s" % (method,t,solvers[method].stats["status"]))
         if solvers[method].stats["status"] != "Solve_Succeeded":
-            print "***Solver failed!"         
+            print("***Solver failed!")         
             break
         else:
             solvers[method].saveguess()

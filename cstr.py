@@ -125,7 +125,7 @@ svds = linalg.svdvals(np.bmat([[np.eye(Nx) - A,
                                 -Bd],[C,Cd]]))
 rank = sum(svds > 1e-10)
 if rank < Nx + Nid:
-    print "*Warning: system not detectable!"
+    print("*Warning: system not detectable!")
 
 #<<ENDCHUNK>>
 

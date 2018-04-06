@@ -69,7 +69,7 @@ for (i, x0) in enumerate(x0s):
     controller.saveguess(default=True) # Reset guess to default.
     controller.fixvar("x", 0, x0)
     controller.solve()
-    print "Step %d of %d: %s" % (i + 1, len(x0s), controller.stats["status"])
+    print("Step %d of %d: %s" % (i + 1, len(x0s), controller.stats["status"]))
     xs.append(controller.vardict["x"].copy())
     us.append(controller.vardict["u"].copy())
     Vs.append(controller.obj)

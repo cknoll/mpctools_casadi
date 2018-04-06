@@ -14,7 +14,7 @@ useCasadiSX = True
 
 def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d -----------------------------------" % k
+    print("runsim: iteration %d -----------------------------------" % k)
 
     # Unpack stuff from simulation container.
 
@@ -61,7 +61,7 @@ def runsim(k, simcon, opnclsd):
 
     if (k == 0 or chsum > 0):
 
-        print "runsim: initialization"
+        print("runsim: initialization")
 
         # Define problem size parameters.
 
@@ -284,7 +284,7 @@ def runsim(k, simcon, opnclsd):
         svds = linalg.svdvals(Oaug)
         rank = sum(svds > 1e-8)
         if rank < Nx + Nid:
-            print "***Warning: augmented system is not detectable!"
+            print("***Warning: augmented system is not detectable!")
 
         # Make NMHE solver.
 
@@ -475,7 +475,7 @@ def runsim(k, simcon, opnclsd):
     estimator.solve()
     estsol = mpc.util.casadiStruct2numpyDict(estimator.var)        
 
-    print "runsim: estimator status - %s" % (estimator.stats["status"])
+    print("runsim: estimator status - %s" % (estimator.stats["status"]))
     xaughat_k = estsol["x"][-1,:]
     xhat_k = xaughat_k[:Nx]
     dhat_k = xaughat_k[Nx:]
@@ -552,7 +552,7 @@ def runsim(k, simcon, opnclsd):
         xaugss = np.squeeze(targetfinder.var["x",0,:])
         uss = np.squeeze(targetfinder.var["u",0,:])
 
-        print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj) 
+        print("runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)) 
         
         # Now use nonlinear MPC controller.
 
@@ -561,7 +561,7 @@ def runsim(k, simcon, opnclsd):
         controller.par["u_prev"] = [u_km1]
         controller.fixvar("x",0,xaughat_k)            
         controller.solve()
-        print "runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj) 
+        print("runsim: controller status - %s (Obj: %.5g)" % (controller.stats["status"],controller.obj)) 
 
         controller.saveguess()
         u_k = np.squeeze(controller.var["u",0])

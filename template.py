@@ -60,7 +60,7 @@ for t in range(Nsim):
     solver.solve()   
     
     # Print stats.
-    print "%d: %s" % (t,solver.stats["status"])
+    print("%d: %s" % (t,solver.stats["status"]))
     u[t,:] = solver.var["u",0,:]    
     
     # Simulate.

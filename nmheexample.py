@@ -132,8 +132,8 @@ for t in range(Nsim):
     solvetime = -time.time()
     sol = mpc.callSolver(solver)
     solvetime += time.time()
-    print ("%3d (%5.3g s build, %5.3g s solve): %s"
-           % (t, buildtime, solvetime, sol["status"]))
+    print(("%3d (%5.3g s build, %5.3g s solve): %s"
+           % (t, buildtime, solvetime, sol["status"])))
     if sol["status"] != "Solve_Succeeded":
         break
     xhat[t,:] = sol["x"][-1,...] # This is xhat( t  | t )
@@ -164,7 +164,7 @@ for t in range(Nsim):
         guess[k] = np.concatenate((guess[k],guess[k][-1:,...]))
 
 totaltime += time.time()
-print "Simulation took %.5g s." % totaltime
+print("Simulation took %.5g s." % totaltime)
 
 # Plots.
 if doPlots:

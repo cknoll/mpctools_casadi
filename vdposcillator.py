@@ -71,7 +71,7 @@ for method in solvers:
     for t in range(Nsim):
         solvers[method].fixvar("x",0,x[method][t,:])
         solvers[method].solve()
-        print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
+        print("%5s %d: %s" % (method,t,solvers[method].stats["status"]))
         u[method][t,:] = solvers[method].var["u",0,:]
         Du[method][t,:] = solvers[method].var["Du",0,:]
         solvers[method].par["u_prev",0,:] = u[method][t,:]

@@ -72,7 +72,7 @@ for method in solvers:
         solvers[method].solve()
         
         # Print status and make sure solver didn't fail.        
-        print "%5s %d: %s" % (method,t,solvers[method].stats["status"])
+        print("%5s %d: %s" % (method,t,solvers[method].stats["status"]))
         if solvers[method].stats["status"] != "Solve_Succeeded":
             break
         else:
@@ -82,7 +82,7 @@ for method in solvers:
         
         # We can stop early if we are already close to the origin.
         if np.sum(x[method][t+1,:]**2) < 1e-4:
-            print "%s at origin after %d iterations." % (method,t)
+            print("%s at origin after %d iterations." % (method,t))
             break
 
 # Prepare some plots.

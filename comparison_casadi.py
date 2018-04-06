@@ -139,7 +139,7 @@ for t in range(Nsim):
     #<<ENDCHUNK>>    
     
     # Print stats.
-    print "%d: %s" % (t,status)
+    print("%d: %s" % (t,status))
     u[t,:] = optvar["u",0,:]
     
     #<<ENDCHUNK>>    

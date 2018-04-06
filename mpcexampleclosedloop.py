@@ -47,7 +47,7 @@ ucl = np.zeros((m,nsim))
 for k in range(nsim):
     solver.fixvar("x", 0, x0)
     sol = mpc.callSolver(solver)
-    print "Iteration %d Status: %s" % (k, sol["status"])
+    print("Iteration %d Status: %s" % (k, sol["status"]))
     xcl[:,k] = sol["x"][0,:]
     ucl[:,k] = sol["u"][0,:]
     x0 = ffunc(x0, ucl[:,k]) # Update x0.

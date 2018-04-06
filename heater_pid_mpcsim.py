@@ -85,7 +85,7 @@ class SISOFO:
 
 def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d -----------------------------------" % k
+    print("runsim: iteration %d -----------------------------------" % k)
 
     # unpack stuff from simulation container
 
@@ -117,7 +117,7 @@ def runsim(k, simcon, opnclsd):
 
     if (k == 0 or chsum > 0):
 
-        print "runsim: initialization"
+        print("runsim: initialization")
 
         # define PID controller
 

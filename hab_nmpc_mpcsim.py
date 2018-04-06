@@ -61,7 +61,7 @@ y_init = measurement(x_init)
 # Define simulation functions.
 def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d -----------------------------------" % k
+    print("runsim: iteration %d -----------------------------------" % k)
 
     # Unpack stuff from simulation container.
 
@@ -109,7 +109,7 @@ def runsim(k, simcon, opnclsd):
 
     if (k == 0 or chsum > 0):
 
-        print "runsim: initialization"
+        print("runsim: initialization")
 
         # Define other problem size parameters.
         
@@ -465,7 +465,7 @@ def runsim(k, simcon, opnclsd):
         status = "Kalman Filter"
     simcon.extra["kalmanfilter"]["xhat"] = xaughat_k
 
-    print "runsim: estimator status - %s" % status
+    print("runsim: estimator status - %s" % status)
     xhat_k = xaughat_k[:Nx]
     dhat_k = xaughat_k[Nx:]
 
@@ -539,7 +539,7 @@ def runsim(k, simcon, opnclsd):
     xaugss = np.squeeze(targetfinder.var["x",0,:])
     uss = np.squeeze(targetfinder.var["u",0,:])
 
-    print "runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj)
+    print("runsim: target status - %s (Obj: %.5g)" % (targetfinder.stats["status"],targetfinder.obj))
     
     # Update Kalman Filter steady state.
     simcon.extra["kalmanfilter"].update(xlin=xaugss, ulin=uss,
@@ -586,7 +586,7 @@ def runsim(k, simcon, opnclsd):
                 sol["x"][t + 1,:] = mpcmodel.sim(sol["x"][t,:], sol["u"][t,:])
                 uprev = sol["u"][t,:]
             status = "LQR"
-        print "runsim: controller status - %s (Obj: %.5g)" % (status, obj) 
+        print("runsim: controller status - %s (Obj: %.5g)" % (status, obj)) 
         
         # Apply quantization.
         
@@ -616,7 +616,7 @@ def runsim(k, simcon, opnclsd):
         else:
             simcon.extra["quanterr"] = 0
         
-        print "runsim: quantization offset: %g" % simcon.extra["quanterr"]
+        print("runsim: quantization offset: %g" % simcon.extra["quanterr"])
         u_k = np.squeeze(sol["u"][0,:])
 
         # Update closed-loop predictions

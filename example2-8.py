@@ -80,7 +80,7 @@ uopt = {}
 phiopt = {}
 figure = plt.figure(figsize=(6,8))
 guessmethod = 0
-print "\n-----------------\nGuess Method (run)\n-----------------"
+print("\n-----------------\nGuess Method (run)\n-----------------")
 for guessmethod in range(Nguessmethods):
     guess = {}
     opt = {}
@@ -90,7 +90,7 @@ for guessmethod in range(Nguessmethods):
     phiopt[f] = np.zeros(theta.shape)
     for i in range(Npts):
         if i % 25 == 0:        
-            print "%s (%3d of %d)" % (f,i+1,Npts)
+            print("%s (%3d of %d)" % (f,i+1,Npts))
         x0 = [np.cos(theta[i]), np.sin(theta[i])]
         guess = getguess(opt,guess,x0)
         opt = mpc.callSolver(mpc.nmpc(Fcasadi, lcasadi, N, x0, lb, ub, guess,

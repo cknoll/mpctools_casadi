@@ -50,7 +50,7 @@ def Fdiscrete(x,u):
     return mpc.mtimes(A,x) + mpc.mtimes(B,u)
 F = mpc.getCasadiFunc(Fdiscrete,[Nx,Nu],["x","u"],"F")
 
-print "\n=Exact Discretization="
+print("\n=Exact Discretization=")
 N = {"x":Nx, "u":Nu, "t":Nt}
 opt_dnmpc = mpc.callSolver(mpc.nmpc(F, l, N, x0, lb, ub, Pf=Pf,
                                     verbosity=verb))
@@ -70,7 +70,7 @@ Mcolloc = 5
 F_rk4 = mpc.getCasadiFunc(fcontinuous, [Nx,Nu], ["x","u"], "F_rk4", rk4=True,
                           Delta=Delta, M=Mrk4)    
 
-print "\n=RK4 Discretization="
+print("\n=RK4 Discretization=")
 opt_crk4nmpc = mpc.callSolver(mpc.nmpc(F_rk4, l, N, x0, lb, ub, Pf=Pf,
                                        verbosity=verb))
 fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,
@@ -78,7 +78,7 @@ fig_crk4nmpc = mpc.plots.mpcplot(opt_crk4nmpc["x"],opt_crk4nmpc["u"],t,
 fig_crk4nmpc.canvas.set_window_title("Continuous-time NMPC (RK4)")
 mpc.plots.showandsave(fig_crk4nmpc,"mpcmodelcomparison_rk4.pdf")
 
-print "\n=Collocation Discretization="
+print("\n=Collocation Discretization=")
 Ncolloc = N.copy()
 Ncolloc["c"] = Mcolloc
 opt_ccollocnmpc = mpc.callSolver(mpc.nmpc(f, l, Ncolloc, x0, lb, ub, Pf=Pf,
@@ -90,7 +90,7 @@ mpc.plots.showandsave(fig_ccollocnmpc,"mpcmodelcomparison_collocation.pdf")
 
 # Discrete-time but with Casadi's integrators. This is slow, but it may be
 # necessary if your ODE is difficult to discretize.
-print "\n=Casadi Integrator Discretization="
+print("\n=Casadi Integrator Discretization=")
 F_integrator = mpc.tools.getCasadiIntegrator(fcontinuous,Delta,[Nx,Nu],
                                              ["x","u"],"int_f")
 opt_integrator = mpc.callSolver(mpc.nmpc(F_integrator, l, N, x0, lb, ub, Pf=Pf,

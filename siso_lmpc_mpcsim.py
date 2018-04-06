@@ -10,7 +10,7 @@ import random as rn
 
 def runsim(k, simcon, opnclsd):
 
-    print "runsim: iteration %d -----------------------------------" % k
+    print("runsim: iteration %d -----------------------------------" % k)
 
     # unpack stuff from simulation container
 
@@ -39,7 +39,7 @@ def runsim(k, simcon, opnclsd):
 
     if (k == 0 or chsum > 0):
 
-        print "runsim: initialization"
+        print("runsim: initialization")
 
         # Define continuous time model.
         Acont = np.array([[av.value]]) # Models are matrices.
@@ -189,7 +189,7 @@ def runsim(k, simcon, opnclsd):
         xv.clpred = sol["x"][:-1,0] + xv.sstarg + cv.bias
         cv.clpred = sol["x"][:-1,0] + cv.sstarg + cv.bias
 
-        print "runsim: control status - %s" % sol["status"]
+        print("runsim: control status - %s" % sol["status"])
 
     # load current input
     mv.value = uk[0] # Needs to be a scalar.

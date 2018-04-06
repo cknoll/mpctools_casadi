@@ -110,7 +110,7 @@ for t in range(Nsim + 1):
     mhe.solve()
     status = mhe.stats["status"]
     if t % 25 == 0 or status != "Solve_Succeeded":
-        print "Step %d of %d: %s" % (t, Nsim - Nt, status)
+        print("Step %d of %d: %s" % (t, Nsim - Nt, status))
     
     # Make a plot for the first step.
     if t == 0:

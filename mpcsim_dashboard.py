@@ -23,7 +23,7 @@ simulations["Hot Air Balloon"] = hab
 
 def mainloop():
     """Runs the main loop allowing user to choose the simulation."""
-    print __doc__
+    print(__doc__)
     keepgoing = True
     Ndig = int(round(np.log10(len(simulations))))
     fmt = "    (%{:d}s) %s".format(Ndig)
@@ -32,26 +32,26 @@ def mainloop():
         choices[str(i + 1)] = k
     while keepgoing:
         try:
-            print "Make a selection:\n"
+            print("Make a selection:\n")
             for item in choices.items():
-                print fmt % item
-            print ""
-            print fmt % ("Q", "Quit\n")
+                print(fmt % item)
+            print("")
+            print(fmt % ("Q", "Quit\n"))
             choice = raw_input("Choice: ").strip().lstrip("(").rstrip(")")
             
             if choice in set(["Q", "q"]):
                 keepgoing = False
             elif choice in choices:
                 sim = choices[choice]
-                print "Starting %s" % sim
+                print("Starting %s" % sim)
                 simulations[sim].dosimulation()
-                print __doc__
+                print(__doc__)
             else:
-                print "Invalid choice '%s'. Make another selection.\n" % choice
+                print("Invalid choice '%s'. Make another selection.\n" % choice)
         except KeyboardInterrupt:
-            print "\n"
+            print("\n")
             keepgoing = False
-    print "Quitting."
+    print("Quitting.")
 
 if __name__ == "__main__":
     mainloop()

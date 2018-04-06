@@ -117,7 +117,7 @@ for t in range(Nsim):
     # Solve OCP
     controller.fixvar("x",0,x[t,:])
     controller.solve()
-    print "%5d: %20s" % (t,controller.stats["status"])
+    print("%5d: %20s" % (t,controller.stats["status"]))
     controller.saveguess()
     
     # Save predicted (x,y,z) trajectory.

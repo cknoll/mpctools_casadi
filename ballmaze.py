@@ -113,7 +113,7 @@ u = np.zeros((Nsim,Nu))
 for t in range(Nsim):
     controller.fixvar("x",0,x[t,:])
     controller.solve()
-    print "%5d: %20s" % (t,controller.stats["status"])
+    print("%5d: %20s" % (t,controller.stats["status"]))
     
     x[t+1,:] = np.squeeze(controller.var["x",1])
     u[t,:] = np.squeeze(controller.var["u",0])
