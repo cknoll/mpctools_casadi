@@ -1,4 +1,5 @@
 # Makefile for the zip distribution.
+PYTHON := python3
 
 # List source files here.
 MPCTOOLS_SRC := $(addprefix mpctools/, __init__.py colloc.py plots.py \
@@ -31,9 +32,9 @@ ZIPNAME_2 := MPCTools-Python2.zip
 ZIPNAME_3 := MPCTools-Python3.zip
 
 # Define zip rule.
-$(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
+$(ZIPNAME_3) : $(MPC_TOOLS_CASADI_FILES)
 	@echo "Building zip distribution."
-	@python makezip.py --name $(ZIPNAME_2) $(MPC_TOOLS_CASADI_FILES) || rm -f $(ZIPNAME_2)
+	@./makezip.py --name $@ $(MPC_TOOLS_CASADI_FILES) || rm -f $@
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
 define do-bitbucket-upload
@@ -48,10 +49,11 @@ upload3 : $(ZIPNAME_3)
 upload : upload2 upload3
 .PHONY : upload upload2 upload3
 
-# Automated Python 3 conversion.
-$(ZIPNAME_3) : $(ZIPNAME_2)
-	@echo "Making $@."
-	@./makepython3 $< $@
+# DISABLED. Needs to be rewritten to go from 3 to 2.
+## Automated Python 3 conversion.
+#$(ZIPNAME_3) : $(ZIPNAME_2)
+#	@echo "Making $@."
+#	@./makepython3 $< $@
 
 # Phony rules.
 dist2 : $(ZIPNAME_2)
@@ -62,12 +64,12 @@ dist : dist2 dist3
 # Rules for documentation pdfs.
 $(DOC_PDF) : %.pdf : %.tex
 	@echo "Making $@."
-	@python latex2pdf.py --display errors --dir $(@D) $<
+	@doc/latex2pdf.py --display errors --dir $(@D) $<
 
 # Rule to make Matlab versions of Octave CSTR example.
 $(CSTR_MATLAB_FILES) : cstr.m
 	@echo "Making Matlab CSTR files."
-	@cd doc && python matlabify.py
+	@cd doc && ./matlabify.py
 
 # Documentation dependencies.
 doc/introslides.pdf : cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
@@ -83,23 +85,23 @@ cstr_octave.pdf : cstr.m
 
 cstr_python.pdf : cstr.py
 	@echo "Making $@."
-	@python $< --ioff
+	@$(PYTHON) $< --ioff
 
 vdposcillator_lmpc.pdf vdposcillator_nmpc.pdf : vdposcillator.py
 	@echo "Making vdposcillator pdfs."
-	@python $< --ioff
+	@$(PYTHON) $< --ioff
 
 cstr_startup.pdf : cstr_startup.py
 	@echo "Making $@."
-	@python $< --ioff
+	@$(PYTHON) $< --ioff
 
 doc/sidebyside.tex : comparison_casadi.py comparison_mtc.py
 	@echo "Making $@."
-	@cd doc && python doSourceComparison.py $(@F)
+	@cd doc && ./doSourceComparison.py $(@F)
 
 doc/sidebyside-cstr.tex : cstr.m cstr.py
 	@echo "Making $@."
-	@cd doc && python doSourceComparison.py $(@F)
+	@cd doc && ./doSourceComparison.py $(@F)
 
 # Define cleanup rules.
 TEXSUFFIXES := .log .aux .toc .vrb .synctex.gz .snm .nav .out

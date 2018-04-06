@@ -1,3 +1,5 @@
+# Note: this file must be compatible with *both* Python 2 and 3.
+"""Tests a .zip distribution file."""
 import sys
 import os
 import tempfile
@@ -29,4 +31,4 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise RuntimeError("usage: testzip.py [zipname]")
     main(sys.argv[1])
-    
+

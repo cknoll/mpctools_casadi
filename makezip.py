@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Adds all distribution files to a zip file for upload to Bitbucket."""
 
 import argparse
@@ -45,4 +46,5 @@ with zipfile.ZipFile(zipname, "w", zipfile.ZIP_DEFLATED) as vizip:
     # Also add readme with txt extension to play nice with Windows.
     if includereadme:
         vizip.write("README.md", os.path.join(root, "README.txt"))
-    print "Wrote zip file '%s'." % vizip.filename
+    print("Wrote zip file '%s'." % vizip.filename)
+
