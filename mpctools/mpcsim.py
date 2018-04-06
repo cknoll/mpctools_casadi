@@ -12,12 +12,19 @@
 # - implement option to show process diagram
 # - refactor Trndplt.plotvals
 
-import Tkinter as tk
-import tkMessageBox as tkmsg
-from tkFileDialog import askopenfilename
-from tkSimpleDialog import askfloat, askinteger # analysis:ignore
+import sys
 import collections
 import copy
+if sys.version_info.major == 2:
+    import Tkinter as tk
+    import tkMessageBox as tkmsg
+    from tkFileDialog import askopenfilename
+    from tkSimpleDialog import askfloat, askinteger # analysis:ignore
+else:
+    import tkinter as tk
+    import tkinter.messagebox as tkmsg
+    from tkinter.filedialog import askopenfilename
+    from tkinter.simpledialog import askfloat, askinteger # analysis:ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import matplotlib.pyplot as plt

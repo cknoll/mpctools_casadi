@@ -10,7 +10,8 @@ import sys
 import os
 import warnings
 from contextlib import contextmanager
-from functools import reduce
+if sys.version_info.major >= 3:
+    from .compat import execfile, reduce # analysis: ignore
 
 # First, we grab a few things from the CasADi module.
 DM = casadi.DM
@@ -876,16 +877,3 @@ def jacobianfunc(func, indep, dep=0, name=None):
         jacname.append(i)
     jacname = ":".join(jacname)
     return func.factory(name, func.name_in(), [jacname])
-
-
-# Python 3 execfile.
-def execfile(file, *args):
-    """
-    Executes the given Python file.
-    
-    *args should be (globals, locals), defining the contexts in which the
-    code is executed.
-    """
-    with open(file, "r") as f:
-        code = f.read()
-    exec(compile(code, file, "exec"), *args)

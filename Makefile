@@ -2,7 +2,7 @@
 
 # List source files here.
 MPCTOOLS_SRC := $(addprefix mpctools/, __init__.py colloc.py plots.py \
-                  solvers.py tools.py util.py mpcsim.py)
+                  solvers.py tools.py util.py mpcsim.py compat.py)
 
 EXAMPLES := airplane.py ballmaze.py cstr.py cstr_startup.py cstr_nmpc_nmhe.py \
             collocationexample.py comparison_casadi.py comparison_mtc.py \
