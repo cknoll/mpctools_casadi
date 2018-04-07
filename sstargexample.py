@@ -52,7 +52,7 @@ for sp in slackpens:
     sstarg.par["slackpen"] = sp
     sstarg.solve()
     
-    for (k, v) in targ.iteritems():
+    for (k, v) in targ.items():
         v.append(sstarg.vardict[k][0])
 
 # Make a plot.
