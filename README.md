@@ -25,7 +25,7 @@ or 3. The development sources are hosted in a Mercurial repository on
 
 To use MPCTools, you will need a recent versions of
 
-* Python 2.7 or 3.5+ (see below for Python 3 support)
+* Python 3.5+ or 2.7 (see below for Python 2.7 support)
 * Numpy
 * Scipy
 * Matplotlib
@@ -37,26 +37,41 @@ With these packages installed, MPCTools can be downloaded from the
 placed in the user's Python path, or the provided setup script
 `mpctoolssetup.py` can be used, e.g.,
 
-    python mpctoolssetup.py install --user
+    python3 mpctoolssetup.py install --user
 
 to install for the current user only, or
 
-    sudo python mpctoolssetup.py install
+    sudo python3 mpctoolssetup.py install
 
-to install systemwide.
+to install systemwide. Note that in these commands, you should use the
+appropriate `python` command for the version you downloaded, i.e., `python3`
+or `python2`.
 
 Code is used by importing `mpctools` within python scripts. See sample
 files for complete examples.
 
-### Python 3 Support ###
+### Python 2.7 Support ###
 
-Support for Python 3.4+ has been added on an experimental basis. To use
-MPCTools with Python 3, you will need to download the Python 3 zip from the
-[Downloads][bbdownloads] section.
+In older versions of MPCTools, source files were written to be compatible with
+Python 2.7, and Python 3 versions were automatically generated using Python's
+`2to3` conversion utility. However, as of version 2.4, these roles are reversed.
+That is, the source files for MPCTools and the example files are now written to
+be compatible with Python 3.5+, and Python 2 versions are generated
+automatically. The code has been written so as to require only a minimal set
+of changes for Python 2.7 compatibility, but please report any bugs that you
+find.
 
-The Python 3 files are generated automatically from the Python 2 sources using
-Python's `2to3` conversion utility. This translation seems to work, but there
-may be subtle bugs. Please report any issues you discover.
+For normal users who use MPCTools fia the [downloads][bbdownloads] link, this
+change should be completely transparent, and you can continue to update
+MPCTools by re-downloading the approprate `.zip` file. However, for advanced
+users who may be using MPCTools directly from a clone of the repository, you
+will need to either start using Python 3, or you will have to switch to using
+`.zip` files from the [downloads][bbdownloads] section.
+
+Finally, note that [Python 2.7 end of life][py27eol] is Jaunary 1st, 2020.
+After this point, Python 2.7 will no longer be supported by the Python
+developers. At or before this date, we will stop releasing Python 2 versions
+of MPCTools, so you should make plans to upgrade in the near future.
 
 ## Documentation ##
 
@@ -89,3 +104,5 @@ Department of Chemical Engineering
 [casadi]: https://casadi.org
 [casadipubs]: https://github.com/casadi/casadi/wiki/Publications
 [casadidownloads]: https://files.casadi.org
+[py27eol]: https://www.python.org/dev/peps/pep-0373
+

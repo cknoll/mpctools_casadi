@@ -66,7 +66,7 @@ print(controller.stats["status"])
 s = controller.vardict["s"]
 Du = controller.vardict["Du"]
 sf = controller.vardict["sf"]
-obj = sum(l(s[t,:], Du[t,:]) for t in xrange(Nt)) #+ Vf(sf[0,:])
+obj = sum(l(s[t,:], Du[t,:]) for t in range(Nt)) + Vf(sf[0,:])
 
 # Make a plot.
 [fig, ax] = plt.subplots(nrows=2, figsize=(4, 6))
