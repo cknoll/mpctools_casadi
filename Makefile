@@ -34,11 +34,13 @@ ZIPNAME_3 := MPCTools-Python3.zip
 # Define zip rules.
 $(ZIPNAME_3) : $(MPC_TOOLS_CASADI_FILES)
 	@echo "Building zip distribution for Python 3."
-	@./makezip.py --name $@ $(MPC_TOOLS_CASADI_FILES)
+	@./makezip.py --name $@ $^
 
 $(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
 	@echo "Building zip distribution for Python 2."
-	@./makezip.py --python2 --name $@ $(MPC_TOOLS_CASADI_FILES)
+	@./makezip.py --python2 --name $@ $^
+
+$(ZIPNAME_2) $(ZIPNAME_3) : makezip.py
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
 define do-bitbucket-upload

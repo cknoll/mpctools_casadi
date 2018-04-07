@@ -876,3 +876,16 @@ def jacobianfunc(func, indep, dep=0, name=None):
         jacname.append(i)
     jacname = ":".join(jacname)
     return func.factory(name, func.name_in(), [jacname])
+
+
+def runfile(file, scope=None):
+    """
+    Executes a file in the given scope and return the dict of variables.
+    
+    The default is a new scope. If an existing scope is given, it is modified
+    in place.
+    """
+    if scope is None:
+        scope = {}
+    execfile(file, scope)
+    return scope

@@ -19,7 +19,7 @@ on Linux.
 import sys, traceback
 import matplotlib.pyplot as plt
 import mpctools.solvers, mpctools.plots
-from mpctools.util import stdout_redirected, strcolor, dummy_context, execfile
+from mpctools.util import stdout_redirected, strcolor, dummy_context, runfile
 import casadi
 
 # Turn off output
@@ -73,7 +73,7 @@ for f in examplefiles:
     try:
         context = dummy_context if f in showoutput else stdout_redirected
         with context():
-            execfile(f, {}) # Run files in dummy namespace.
+            runfile(f)
             status = strcolor("succeeded", "green", bold=True)
     except KeyboardInterrupt:
         status =  "\n\n%s\n" % (strcolor("*** USER INTERRUPT ***", "yellow"),) 
@@ -84,7 +84,6 @@ for f in examplefiles:
         traceback.print_exc(file=logfile)
         status = strcolor("FAILED", "red", bold=True)
         failures.append(f)
-        abort = True
     finally:
         printstatus(status)
         plt.close("all")

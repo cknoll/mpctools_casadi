@@ -31,9 +31,11 @@ PYTHON_2_HEADER = "from __future__ import division, print_function"
 # Helper functions.
 def clean_py_file(file, python2=False):
     """Iterator for cleaned file."""
-    if python2:
-        yield PYTHON_2_HEADER
     with open(file, "r") as read:
+        read = Peekable(read)
+        if python2:
+            yield from get_python_header(read)
+            yield PYTHON_2_HEADER
         for line in read:
             line = line.rstrip()
             if "#CHANGESET_ID" in line:
@@ -42,6 +44,51 @@ def clean_py_file(file, python2=False):
             if python2 and "from .compat import" in line:
                 continue
             yield line
+
+
+class Peekable:
+    """Iterator with the ability to peek at the next value."""
+    def __init__(self, fromiter):
+        """Stores the original iterator."""
+        self.__fromiter = fromiter
+        self.__peek = self.NOPEEK
+    
+    def __iter__(self):
+        """Returns self."""
+        return self
+    
+    def __next__(self):
+        """Returns next item in the iterator."""
+        if self.__peek is self.NOPEEK:
+            val = next(self.__fromiter)
+        else:
+            val = self.__peek
+            self.__peek = self.NOPEEK
+        return val
+    
+    def peek(self):
+        """Peeks at the next value in the iterator."""
+        if self.__peek is self.NOPEEK:
+            self.__peek = next(self.__fromiter)
+        return self.__peek
+    
+    NOPEEK = object() # Sentinel object.
+
+
+def get_python_header(file):
+    """Yields lines for the header of a Python file."""
+    indocstring = False
+    while True:
+        line = file.peek().strip()
+        if indocstring:
+            if line.endswith('"""'):
+                indocstring = False
+        else:
+            if line.startswith('"""'):
+                indocstring = not line.endswith('"""')
+            elif not line.startswith("#") and len(line) > 0:
+                break
+        yield next(file).rstrip()
 
 
 def clean_txt_file(file):

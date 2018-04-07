@@ -1,4 +1,3 @@
-from __future__ import division
 import numpy as np
 import mpctools as mpc
 import matplotlib.pyplot as plt

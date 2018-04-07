@@ -267,8 +267,8 @@ def runsim(k, simcon, opnclsd):
         # any noticable slowdown.
 
         if (k == 0):
-            ydata = [y_init.copy() for i in xrange(Nmhe)]
-            udata = [u_init.copy() for i in xrange(Nmhe - 1)]
+            ydata = [y_init.copy() for i in range(Nmhe)]
+            udata = [u_init.copy() for i in range(Nmhe - 1)]
         else:
             ydata = simcon.ydata
             udata = simcon.udata
@@ -578,7 +578,7 @@ def runsim(k, simcon, opnclsd):
             sol["x"][1:,Nx:] = np.tile(xaughat_k[Nx:], (Nf, 1))
             lqr = simcon.extra["lqr"]
             uprev = u_km1
-            for t in xrange(Nf):
+            for t in range(Nf):
                 z_ = np.concatenate((sol["x"][t,:Nx] - xaugss[:Nx], uprev - uss))
                 if t == 0:
                     obj = mpc.mtimes(z_.T, lqr["P"], z_)
@@ -611,7 +611,7 @@ def runsim(k, simcon, opnclsd):
             sol["u"][:,0] = np.array(getfuel)*quantum
             
             # Re-simulate the x trajectory.
-            for i in xrange(sol["u"].shape[0]):
+            for i in range(sol["u"].shape[0]):
                 sol["x"][i + 1,:] = mpcmodel.sim(sol["x"][i,:], sol["u"][i,:])
         else:
             simcon.extra["quanterr"] = 0
