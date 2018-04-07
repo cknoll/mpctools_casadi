@@ -31,10 +31,14 @@ MPC_TOOLS_CASADI_FILES := $(MPCTOOLS_SRC) $(EXAMPLES) $(DOC_PDF) \
 ZIPNAME_2 := MPCTools-Python2.zip
 ZIPNAME_3 := MPCTools-Python3.zip
 
-# Define zip rule.
+# Define zip rules.
 $(ZIPNAME_3) : $(MPC_TOOLS_CASADI_FILES)
-	@echo "Building zip distribution."
-	@./makezip.py --name $@ $(MPC_TOOLS_CASADI_FILES) || rm -f $@
+	@echo "Building zip distribution for Python 3."
+	@./makezip.py --name $@ $(MPC_TOOLS_CASADI_FILES)
+
+$(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
+	@echo "Building zip distribution for Python 2."
+	@./makezip.py --python2 --name $@ $(MPC_TOOLS_CASADI_FILES)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
 define do-bitbucket-upload
@@ -48,12 +52,6 @@ upload3 : $(ZIPNAME_3)
 	@$(do-bitbucket-upload)
 upload : upload2 upload3
 .PHONY : upload upload2 upload3
-
-# DISABLED. Needs to be rewritten to go from 3 to 2.
-## Automated Python 3 conversion.
-#$(ZIPNAME_3) : $(ZIPNAME_2)
-#	@echo "Making $@."
-#	@./makepython3 $< $@
 
 # Phony rules.
 dist2 : $(ZIPNAME_2)

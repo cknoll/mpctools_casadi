@@ -10,8 +10,7 @@ import sys
 import os
 import warnings
 from contextlib import contextmanager
-if sys.version_info.major >= 3:
-    from .compat import execfile, reduce # analysis: ignore
+from .compat import execfile, reduce # analysis:ignore
 
 # First, we grab a few things from the CasADi module.
 DM = casadi.DM

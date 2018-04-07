@@ -7,6 +7,11 @@ new (due to backward incompatibility in Casadi).
 
 # Version for mpctools.
 __version__ = "2.3.3"
+def get_changeset_id():
+    """Returns the mercurial changeset id for this version of MPCTools."""
+    from . import hg; changeset_id = hg.get_changeset_id() #CHANGESET_ID
+    return changeset_id
+
 
 # Check Casadi version to make sure it's up to date.
 _MIN_CASADI_VERSION = "3.0"
