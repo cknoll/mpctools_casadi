@@ -23,7 +23,7 @@ DOC_PDF := $(DOC_TEX:.tex=.pdf)
 CSTR_MATLAB_FILES := $(addprefix cstr-matlab/, main.m massenbal.m \
                        massenbalstst.m partial.m)
 
-MISC_FILES := COPYING.txt mpctoolssetup.py cstr.m README.md
+MISC_FILES := COPYING.txt mpctoolssetup.py cstr.m README.md README.pdf
 
 MPC_TOOLS_CASADI_FILES := $(MPCTOOLS_SRC) $(EXAMPLES) $(DOC_PDF) \
                           $(CSTR_MATLAB_FILES) $(MISC_FILES)
@@ -63,6 +63,10 @@ dist : dist2 dist3
 $(DOC_PDF) : %.pdf : %.tex
 	@echo "Making $@."
 	@doc/latex2pdf.py --display errors --dir $(@D) $<
+
+README.pdf : README.md
+	@echo "Making $@."
+	@pandoc -o $@ $<
 
 # Rule to make Matlab versions of Octave CSTR example.
 $(CSTR_MATLAB_FILES) : cstr.m
@@ -104,7 +108,7 @@ doc/sidebyside-cstr.tex : cstr.m cstr.py
 # Define cleanup rules.
 TEXSUFFIXES := .log .aux .toc .vrb .synctex.gz .snm .nav .out
 TEX_MISC := $(foreach doc, $(basename $(DOC_TEX)), $(addprefix $(doc), $(TEXSUFFIXES)))
-OTHER_MISC := doc/sidebyside.tex doc/sidebyside-cstr.tex
+OTHER_MISC := doc/sidebyside.tex doc/sidebyside-cstr.tex README.pdf
 clean :
 	@rm -f $(ZIPNAME_2) $(ZIPNAME_3) $(TEX_MISC) $(OTHER_MISC)
 .PHONY : clean

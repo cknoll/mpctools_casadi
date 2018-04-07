@@ -13,6 +13,7 @@ doc/*.snm
 doc/*.toc
 doc/*.bbl
 doc/*.blg
+doc/*.fls
 cstr-matlab/*
 runall-python*.log
 __local__/*

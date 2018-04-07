@@ -35,10 +35,10 @@ def clean_py_file(file, python2=False):
         yield PYTHON_2_HEADER
     with open(file, "r") as read:
         for line in read:
-            line = read.rstrip()
+            line = line.rstrip()
             if "#CHANGESET_ID" in line:
-                pad = line[:len(line) - len(line.rstrip())]
-                line = "{}changeset_id = {}".format(pad, CHANGESET_ID)
+                pad = line[:len(line) - len(line.lstrip())]
+                line = '{}changeset_id = "{}"'.format(pad, CHANGESET_ID)
             if python2 and "from .compat import" in line:
                 continue
             yield line
@@ -78,6 +78,7 @@ def makefileolderthan(target, relto, delta=1, changeatime=False,
 # Main function.
 def main(files, zipname, root="", python2=False, newline="\n"):
     """Writes the zip file."""
+    files = set(files)
     includereadme = ("README.md" in files)
     if includereadme:
         files.remove("README.md")
@@ -94,14 +95,12 @@ def main(files, zipname, root="", python2=False, newline="\n"):
             writefile = os.path.join(root, f)
             if f.endswith(".py"):
                 z.writestr(writefile,
-                           newline.join(clean_py_file(writefile,
+                           newline.join(clean_py_file(readfile,
                                                       python2=python2)))
             elif f.endswith(".pdf"):
                 z.write(readfile, writefile)
             else:
                 z.writestr(writefile, newline.join(clean_txt_file(readfile)))
-            
-            z.write(readfile, writefile)
         
         # Also add readme with txt extension to play nice with Windows.
         if includereadme:
