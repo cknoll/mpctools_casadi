@@ -406,11 +406,11 @@ class ControlSolver(object):
         self.stats["time"] = endtime - starttime
          
     def saveguess(self, newguess=None, toffset=None, default=False,
-                  infercolloc=True):
+                  infercolloc=True, pad=True):
         """
         Stores a given guess in one of three ways.
         
-        The first way is to pass an array of numpy dicts. Each entry should
+        The first way is to pass a dict of numpy arrays. Each entry should
         have time along the first dimension and appropriate variable size in
         following dimensions. For this case, toffset defaults to zero.
         
@@ -425,10 +425,15 @@ class ControlSolver(object):
         which is useful for using the previous optimization as a guess for the
         next optimization.
         
-        In any case, depending on toffset, certain components of the guess
-        will not be touched. E.g., if toffset is 1, then the final values of
-        x and u will not be changed unless the given guess has extra time
-        points.
+        The keyword argument pad determines what to do for the "missing"
+        elements when toffset is not zero. If pad=True (the default), then the
+        missing entries will be filled by duplicating the first and/or last
+        given entries to fill any gaps at the beginning and/or end. If
+        pad=False, then the missing entries will not be changed. For example,
+        suppose toffset=1 and the guess has the same number of time points as
+        the solver. Thus, the final time point is missing. If pad=True, it will
+        be filled using the second-to-last time point; otherwise, it will not
+        be changed.
         """
         getguess = None
         if newguess is None:
@@ -461,25 +466,27 @@ class ControlSolver(object):
                     ret = newguess[k][t,...]
                 return ret
         
-        # Check for extra fields in guess.
-        extra = set(newguess.keys()).difference(self.guess.keys()) # keys() is important!
+        # Check for extra fields in guess. keys() is important!
+        extra = set(newguess.keys()).difference(self.guess.keys())
         if len(extra) > 0:
             warnings.warn("Ignoring extra fields in guess: %r." % (extra,))
         
         # Now actually save guess.
         for k in self.guess.keys(): # keys() is important!
-            # These values and the guess structure can potentially have a
-            # different number of time points. So, we need to figure out
-            # what range of times will be valid for both things. The offset
-            # makes things a bit weird.
-            tmaxVal = len(getguess(k))
-            tmaxGuess = len(self.guess[k]) + toffset
-            tmax = min(tmaxVal, tmaxGuess)
-            tmin = max(toffset, 0)
+            Tguess = len(getguess(k))
+            Tself = len(self.guess[k])
+            if pad:
+                tmin = 0
+                tmax = Tself
+            else:
+                tmin = max(0, toffset)
+                tmax = min(Tself, Tguess - toffset)
             
             # Now actually store the stuff.           
             for t in range(tmin, tmax):
-                self.guess[k,t-toffset] = getguess(k, t)
+                tself = t
+                tguess = max(0, min(t + toffset, Tguess - 1))
+                self.guess[k,tself] = getguess(k, tguess)
                 
         # Finally, infer a collocation guess.
         if (infercolloc and "colloc" in self.misc

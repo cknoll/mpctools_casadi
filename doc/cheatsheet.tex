@@ -36,6 +36,7 @@
 \newcommand{\smallurl}[2][\scriptsize]{\texttt{#1$<$#2$>$}}
 \newcommand{\funcname}[2][.25em]{\vspace{#1}\noindent\texttt{#2}\nopagebreak\vspace{#1}}
 \newcommand{\casadi}{CasADi}
+\newcommand{\bitbucket}{\smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}}
 
 %\newcommand{\sepline}{\hrule}
 \providecommand{\sepline}{\vspace{-2em}}
@@ -57,9 +58,9 @@ These descriptions are not intended to be complete, and you should consult the d
 
 \paragraph*{Obtaining \texttt{mpc-tools-casadi}.}
 
-The latest files can be found on \smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}.
-You will see a link on the left to download all of the files in a compressed archive.
-No specific installation is required beyond Python and \casadi{}, but note that \casadi{} must be at least Version 3.0.
+The latest files can be found on \bitbucket{}.
+Click ``Downloads'' on the left side of the page, and choose the appropriate \texttt{MPCTools-*.zip} for your Python version.
+No specific installation is required beyond Python (3.5+ or 2.7) and \casadi{}, but note that \casadi{} must be at least Version 3.0.
 
 \paragraph*{Getting Started.}
 
@@ -281,6 +282,7 @@ if solver.stats["status"] == "Solve_Succeeded":
 \end{lstlisting}
 %
 prepares the solver for re-optimization at the next time point by using the final $N-1$ values of the previous trajectory as a guess for the first $N-1$ time periods in the next optimization.
+The guess for the final time point will be filled with the guess for the second-to-last time point.
 
 \paragraph{Plotting.}
 
@@ -373,15 +375,15 @@ Note that since \casadi{} is in active development, \texttt{mpc-tools-casadi} wi
 Additionally, function internals may change significantly as we identify better or more useful ways to wrap the relevant \casadi{} functions.
 This means function call syntax may change, although we will strive to maintain compatibility wherever possible.
 
-As mentioned previoiusly, the latest files can always be found on \smallurl{https://hg.cae.wisc.edu/hg/mpc-tools-casadi}.
-For questions, comments, or bug reports, please contact us by email.
+As mentioned previoiusly, the latest files can always be found on \bitbucket{}.
+For questions, comments, or bug reports, please open an issue on Bitbucket.
 
 \begin{center}
-\begin{tabular}{ccc}
-    Michael J. Risbeck & Nishith R. Patel & James B. Rawlings \\
-    \smallurl[\small]{risbeck@wisc.edu} & \smallurl[\small]{nrpatel@wisc.edu} & \smallurl[\small]{james.rawlings@wisc.edu} \\
-    \multicolumn{3}{c}{University of Wisconsin--Madison} \\
-    \hspace*{.2\textwidth} & \hspace*{.2\textwidth} & \hspace*{.2\textwidth} % Kluge alert. I hate latex tables.
+\begin{tabular}{cc}
+    Michael J. Risbeck & James B. Rawlings \\
+    \smallurl[\small]{risbeck@wisc.edu} & \smallurl[\small]{james.rawlings@wisc.edu} \\
+    \multicolumn{2}{c}{University of Wisconsin--Madison} \\
+    \hspace*{.2\textwidth} & \hspace*{.2\textwidth} % Force column width.
 \end{tabular}
 \end{center}
 
