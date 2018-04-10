@@ -43,13 +43,18 @@ u = solver.varsym["u"] # Get CasADi symbolic variables.
 for b in blocksizes:
     u0 = u[t]
     for i in range(b - 1):
-        t = t + 1
+        t += 1
         newcon.append(u0 - u[t])
-    t = t + 1
+    t += 1
 solver.addconstraints(newcon)
 solver.solve()
 print(solver.stats["status"])
 
 # Plot things.
 [x, u] = [solver.vardict[k] for k in ["x", "u"]]
-mpc.plots.mpcplot(x, u, np.arange(Nt + 1), xsp=np.zeros_like(x))
+fig = mpc.plots.mpcplot(x, u, np.arange(Nt + 1), xsp=np.zeros_like(x))
+uax = fig.axes[0]
+t = 0
+for delta in blocksizes:
+    t += delta
+    uax.axvline(t, color="black", linewidth=0.5)

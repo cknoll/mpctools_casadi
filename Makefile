@@ -30,6 +30,8 @@ MPC_TOOLS_CASADI_FILES := $(MPCTOOLS_SRC) $(EXAMPLES) $(DOC_PDF) \
 
 ZIPNAME_2 := MPCTools-Python2.zip
 ZIPNAME_3 := MPCTools-Python3.zip
+ZIPNAMES := $(ZIPNAME_2) $(ZIPNAME_3)
+ZIPDIRS := $(basename $(ZIPNAMES))
 
 # Define zip rules.
 $(ZIPNAME_3) : $(MPC_TOOLS_CASADI_FILES)
@@ -40,7 +42,14 @@ $(ZIPNAME_2) : $(MPC_TOOLS_CASADI_FILES)
 	@echo "Building zip distribution for Python 2."
 	@./makezip.py --python2 --name $@ $^
 
-$(ZIPNAME_2) $(ZIPNAME_3) : makezip.py
+$(ZIPNAMES) : makezip.py
+
+$(ZIPDIRS) : % : %.zip
+	@echo "Unzipping $<"
+	@rm -rf $@/*
+	@unzip -q $<
+
+.PHONY : $(ZIPDIRS)
 
 UPLOAD_COMMAND := POST https://api.bitbucket.org/2.0/repositories/rawlings-group/mpc-tools-casadi/downloads
 define do-bitbucket-upload
@@ -60,6 +69,10 @@ dist2 : $(ZIPNAME_2)
 dist3 : $(ZIPNAME_3)
 dist : dist2 dist3
 .PHONY : dist dist2 dist3
+
+unzip2 : $(basename $(ZIPNAME_2))
+unzip3 : $(basename $(ZIPNAME_3))
+.PHONY : unzip2 unzip3
 
 # Rules for documentation pdfs.
 $(DOC_PDF) : %.pdf : %.tex
@@ -112,7 +125,8 @@ TEXSUFFIXES := .log .aux .toc .vrb .synctex.gz .snm .nav .out
 TEX_MISC := $(foreach doc, $(basename $(DOC_TEX)), $(addprefix $(doc), $(TEXSUFFIXES)))
 OTHER_MISC := doc/sidebyside.tex doc/sidebyside-cstr.tex README.pdf
 clean :
-	@rm -f $(ZIPNAME_2) $(ZIPNAME_3) $(TEX_MISC) $(OTHER_MISC)
+	@rm -f $(ZIPNAMES) $(TEX_MISC) $(OTHER_MISC)
+	@rm -rf $(ZIPDIRS)
 .PHONY : clean
 
 PDF_MISC := $(DOC_PDF) cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
