@@ -1,18 +1,16 @@
-#!/usr/bin/env python
+"""See README for description."""
 from distutils.core import setup
 import mpctools
 
-with open("README.md", "r") as f:
-    description = "".join(f)
-
-setup(name="mpc-tools-casadi",
+setup(name="MPCTools",
     version=mpctools.__version__,
     description="Nonlinear MPC tools for use with CasADi",
     author="Michael Risbeck",
     author_email="risbeck@wisc.edu",
     url="https://bitbucket.org/rawlings-group/mpc-tools-casadi",
-    long_description=description,
+    long_description=__doc__,
     packages=["mpctools"],
     platforms=["N/A"],
-    license="GNU LGPLv3", 
+    license="GNU LGPLv3",
 )
+

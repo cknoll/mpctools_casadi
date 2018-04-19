@@ -26,7 +26,8 @@ parser.add_argument("files", default=[], nargs="*",
 # Constants.
 CHANGESET_ID = mpctools.hg.get_changeset_id()
 PYTHON_2_HEADER = "from __future__ import division, print_function"
-
+README_MD = "README.md"
+README_TXT = "README.txt"
 
 # Helper functions.
 def clean_py_file(file, python2=False):
@@ -95,9 +96,24 @@ def clean_txt_file(file):
     """Iterator for cleaned txt file."""
     with open(file, "r") as read:
         for line in read:
+            yield line.rstrip("\n")
+
+
+def clean_setup_file(file):
+    """Iterator to replace the docstring in the setup file."""
+    with open(README_MD, "r") as read:
+        for (i, line) in enumerate(read):
+            line = line.rstrip("\n").replace('"', '\\"')
+            if i == 0:
+                line = '"""' + line
             yield line
+    yield '"""'
+    with open(file, "r") as read:
+        for (i, line) in enumerate(read):
+            if i > 0:
+                yield line.rstrip("\n")
 
-
+                
 def makefileolderthan(target, relto, delta=1, changeatime=False,
                       mustexist=False):
     """
@@ -126,9 +142,9 @@ def makefileolderthan(target, relto, delta=1, changeatime=False,
 def main(files, zipname, root="", python2=False, newline="\n"):
     """Writes the zip file."""
     files = set(files)
-    includereadme = ("README.md" in files)
+    includereadme = (README_MD in files)
     if includereadme:
-        files.remove("README.md")
+        files.remove(README_MD)
     files.discard("mpctools/hg.py")
     if python2:
         files.discard("mpctools/compat.py")
@@ -140,7 +156,9 @@ def main(files, zipname, root="", python2=False, newline="\n"):
         for f in files:
             readfile = f
             writefile = os.path.join(root, f)
-            if f.endswith(".py"):
+            if f == "mpctoolssetup.py":
+                z.writestr(writefile, newline.join(clean_setup_file(readfile)))
+            elif f.endswith(".py"):
                 z.writestr(writefile,
                            newline.join(clean_py_file(readfile,
                                                       python2=python2)))
@@ -151,7 +169,7 @@ def main(files, zipname, root="", python2=False, newline="\n"):
         
         # Also add readme with txt extension to play nice with Windows.
         if includereadme:
-            z.write("README.md", os.path.join(root, "README.txt"))
+            z.write(README_MD, os.path.join(root, README_TXT))
         print("Wrote zip file '%s'." % z.filename)
 
 
