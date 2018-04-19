@@ -50,16 +50,17 @@ examplefiles += [
     "comparison_mtc.py",
     "econmpc.py",    
     "example2-8.py",
+    "icyhill.py",
     "mheexample.py",
     "mpcmodelcomparison.py",
     "nmheexample.py",
     "nmpcexample.py",
     "periodicmpcexample.py",
-    "vdposcillator.py",
     "predatorprey.py",
     "softconstraints.py",
     "sstargexample.py",
-    "customconstraints.py",
+    "template.py",
+    "vdposcillator.py",
 ]
 showoutput = set(["fishing.py", "cargears.py"])
 
