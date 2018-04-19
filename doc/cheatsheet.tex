@@ -1,62 +1,25 @@
 \documentclass{article}
 
 \usepackage[left=.5in,right=.5in,top=.75in,bottom=.75in]{geometry}
-\usepackage{mathtools,bm,textcomp,multicol,parcolumns,enumitem,array}
-\usepackage[dvipsnames]{xcolor}
-\usepackage[T1]{fontenc}
+\usepackage{mpctools}
+\lstset{xleftmargin=12pt, frame=L}
 
-% Stuff for source codes.
-\usepackage{listings}
-\providecommand{\lstinline}{}
-\lstdefinestyle{output}{
-    basicstyle=\ttfamily\footnotesize,
-    keywordstyle=\ttfamily,
-    stringstyle=\ttfamily,
-    commentstyle=\ttfamily,
-    upquote=true,
-    showstringspaces=false,
-}
-\lstdefinestyle{python}{
-    language=Python,
-    basicstyle=\ttfamily\footnotesize,
-    keywordstyle=\color{Blue}\ttfamily,
-    stringstyle=\color{Purple}\ttfamily,
-    commentstyle=\color{ForestGreen}\ttfamily,
-    upquote=true,
-    showstringspaces=false,
-%    numbers=left,
-    stepnumber=10,
-    firstnumber=0,
-    numberstyle=\scriptsize,
-    escapechar=@,
-    morekeywords={as,True,False},
-}
-\lstset{style=python}
-
-\newcommand{\smallurl}[2][\scriptsize]{\texttt{#1$<$#2$>$}}
-\newcommand{\funcname}[2][.25em]{\vspace{#1}\noindent\texttt{#2}\nopagebreak\vspace{#1}}
-\newcommand{\casadi}{CasADi}
-\newcommand{\bitbucket}{\smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}}
-
-%\newcommand{\sepline}{\hrule}
-\providecommand{\sepline}{\vspace{-2em}}
-
-\title{mpc-tools-casadi Cheat Sheet}
+\title{\mpctools{} Cheat Sheet}
 
 \begin{document}
 
 \begin{center}
-    \LARGE \texttt{mpc-tools-casadi} Cheat Sheet
+    \LARGE \mpctools{} Cheat Sheet
 \end{center}
 
 \section{Functions Reference}
 
-Here we present some of the most useful functions from \texttt{mpc-tools-casadi}.
+Here we present some of the most useful functions from \mpctools{}.
 These descriptions are not intended to be complete, and you should consult the documentation within the Python module for more details.
 
 \begin{multicols}{2}
 
-\paragraph*{Obtaining \texttt{mpc-tools-casadi}.}
+\paragraph*{Obtaining MPCTools.}
 
 The latest files can be found on \bitbucket{}.
 Click ``Downloads'' on the left side of the page, and choose the appropriate \texttt{MPCTools-*.zip} for your Python version.
@@ -67,26 +30,26 @@ No specific installation is required beyond Python (3.5+ or 2.7) and \casadi{}, 
 Functions are arranged in a package called \texttt{mpctools}.
 Typically, everything you need can be found in the main level, e.g.,
 %
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 import mpctools as mpc
 \end{lstlisting}
 
 Many functions have optional arguments or default values that aren't listed below.
-Consult the docstrings throughout \texttt{mpc-tools-casadi} to see what options are available.
+Consult the docstrings throughout \mpctools{} to see what options are available.
 
 \paragraph*{Simulating Nonlinear Systems.}
 
 To facilitate nonlinear simulations, we provide the \texttt{DiscreteSimulator} class, which is a wrapper a \casadi{} \texttt{Integrator} object.
 To initialize, the syntax is
 %
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 model = DiscreteSimulator(ode,Delta,argsizes)
 \end{lstlisting}
 %
 where \texttt{ode} is a Python function that takes a fixed number of arguments whose lengths are given (in order) in the list \texttt{argsizes}.
 
 Once the object has been built, one timestep can be simulated using
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 xnext = model.sim(x,u)
 \end{lstlisting}
 
@@ -107,7 +70,7 @@ Optional arguments are available to return a Runge-Kutta discretization.
 For this, you must specify \lstinline|rk4=True| and also provide arguments \texttt{Delta} with the timestep and \texttt{M} with the number of steps to take in each interval.
 Example usage is shown below.
 
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 import mpctools as mpc
 
 # 2 states and 1 control.
@@ -121,6 +84,8 @@ Delta = 0.5 # Set timestep.
 ode_rk4 = mpc.getCasadiFunc(ode, [2,1], ["x","u"],
     rk4=True, Delta=Delta, M=1)
 \end{lstlisting}
+
+See Section~\ref{sec:functions} for some additional information about function semantics.
 
 \funcname{getCasadiIntegrator(f,Delta,argsizes,argnames)}
 
@@ -236,7 +201,7 @@ In case you need to add custom constraints to an optimization problem beyond wha
 Optimization variables and parameters can be accessed via the \lstinline|varsym| and \lstinline|parsym| attributes of \lstinline|ControlSolver|, and the expressions can be added as constraints via \lstinline|addconstraints|.
 For example, suppose you wish to constrain $u(5) = u(0)$ and $u(15) = u(10)$, you would use
 %
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 solver = mpctools.nmpc(...) # Build controller.
 u = solver.varsym["u"] # Get u symbolic variables.
 solver.addconstraints([u[0] - u[5], u[15] - u[10]])
@@ -257,7 +222,7 @@ Below we list the useful methods for this class.
 Fixes the variable named \texttt{var} to take on the value \texttt{val} at time \texttt{t}.
 This is most useful for changing the initial conditions, e.g., with
 %
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 solver.fixvar("x",0,x0)
 \end{lstlisting}
 %
@@ -274,7 +239,7 @@ Some stats (including solver success or failure) is stored into the \texttt{solv
 Takes the current solution and stores the values as a guess to the optimizer.
 By default, time values are offset by 1. This is done so that
 %
-\begin{lstlisting}[frame=L]
+\begin{lstlisting}
 solver.solve()
 if solver.stats["status"] == "Solve_Succeeded":
     solver.saveguess()
@@ -315,6 +280,26 @@ Converts continuous-time model $(A,B)$ to discrete time with sample time \texttt
 
 \end{multicols}
 
+\section{User-Defined Functions} \label{sec:functions}
+
+\mpctools{} is written so that users can define functions that operate on ``native'' numeric data types and have them properly converted to \casadi{} functions via \lstinline|getCasadiFunc|.
+For these purposes, we consider NumPy \lstinline|array|s to be the native type.
+Thus, by default, when you call \lstinline|getCasadiFunc(f, ...)|, the function \lstinline|f| will be passed NumPy arrays of \casadi{} \lstinline|SX| scalar symbolic variables, and it is expected to return either a single scalar (e.g., for objective functions) or a NumPy vector (e.g., for ODE right-hand sides).
+This behavior should cover the majority of use cases.
+
+In some cases, NumPy compatibility may not be necessary, and you may prefer to write your functions to use the \casadi{} symbolic types directly (keeping in mind their slightly different semantics).
+For this case, you can pass \lstinline|numpy=False| to \lstinline|getCasadiFunc()|, which will pass the \casadi{} symbols directly to \lstinline|f| without wrapping them as NumPy arrays.
+(Note that previous versions of \mpctools{} used \lstinline|scalar=False| for this functionality.
+The name \lstinline|scalar| has been deprecated in favor of \lstinline|numpy| to better reflect its function.
+For backward compatibility, \lstinline|scalar| is still accepted as a synonym, but a deprecation warning is issued.)
+
+A related concept is the two different \casadi{} symbolic types, \lstinline|SX| and \lstinline|MX|.
+In general, you can think of \lstinline|SX| symbolics as arrays of scalar variables that are pulled apart and used in algebraic expressions, while \lstinline|MX| symbolics are vectors or matrices that are always operated on as a whole.
+Note that while \casadi{} allows you to index or split \lstinline|MX| variables, such operations will be significantly slower than the corresponding \lstinline|SX| operations, and thus \lstinline|SX| would be preferred if possible.
+However, \lstinline|SX| symbols cannot be used in certain instances, e.g., if your function calls some type of solver (integrator, root finder, etc.) internally.
+To provide flexibility, \lstinline|getCasadiFunc()| has a \lstinline|casaditype| keyword argument that can be either \lstinline|"SX"| or \lstinline|"MX"| to choose which type to use.
+Consult the \casadi{} documentation for more details about \lstinline|SX| vs. \lstinline|MX|.
+
 \section{Common Mistakes}
 
 Below we list some common issues that may cause headaches.
@@ -326,7 +311,6 @@ Below we list some common issues that may cause headaches.
     Any matrix multiplications within \texttt{mpc\_tools\_casadi.py} are written as \lstinline@A.dot(b)@ instead of \lstinline@A*b@ as would be common in Octave/\textsc{Matlab}.
     
     For quadratic stage costs, we provide \texttt{mtimes} (itself, just a wrapper of \casadi{}'s \texttt{mul}), which multiplies an arbitrary number of arguments.
-    Unfortunately this isn't compatible with \texttt{array}s, and so you will want to cast to \casadi{}'s \texttt{DMatrix} type before multiplying.
     
     If you encounter errors such as ``\texttt{cannot cast shape (n,1) to shape (n,)}'' or something of that nature, be careful about whether you are working with 1D \texttt{arrays}, vectors stored as \texttt{matrix} objects, etc.
     This may mean adding \texttt{np.newaxis} to your assignment statements or using constructs like \lstinline@np.array(x).flatten()@ to force your data to have the right shape.
@@ -355,23 +339,25 @@ Below we list some common issues that may cause headaches.
     
     Although the solvers allow constraints on all decision variables, tight constraints on the state variables (e.g., that the system terminate at the origin) can be troublesome for the solver.
     Consider using a penalty function first to get a decent guess and then re-solving with hard constraints from there.
-    
 \end{itemize}
 
 \section{Example File}
 
-Below, we present an example file to show how much code is saved by using \texttt{mpc-tools-casadi}.
-On the left side, we show the the script written using the pure \texttt{casadi} module, while on the right, we show the script rewritten to use \texttt{mpc-tools-casadi}.
+Below, we present an example file to show how much code is saved by using \mpctools{}.
+On the left side, we show the the script written using the pure \texttt{casadi} module, while on the right, we show the script rewritten to use \mpctools{}.
 
 \hspace{1em}
 
-\input{sidebyside.tex}
+\begingroup
+    \lstset{frame=none}
+    \input{sidebyside.tex}
+\endgroup
 
-Even for this simple example, \texttt{mpc-tools-casadi} can save a significant amount of coding, and it makes script files much shorter and more readable while still taking advantage of the computational power provided by \casadi{}.
+Even for this simple example, \mpctools{} can save a significant amount of coding, and it makes script files much shorter and more readable while still taking advantage of the computational power provided by \casadi{}.
 
 \section{Disclaimer}
 
-Note that since \casadi{} is in active development, \texttt{mpc-tools-casadi} will need to be updated to reflect changes in \casadi{}'s Python API.
+Note that since \casadi{} is in active development, \mpctools{} will need to be updated to reflect changes in \casadi{}'s Python API.
 Additionally, function internals may change significantly as we identify better or more useful ways to wrap the relevant \casadi{} functions.
 This means function call syntax may change, although we will strive to maintain compatibility wherever possible.
 

@@ -1,9 +1,14 @@
 % Provides some convenient latex commands.
-\usepackage{listings,booktabs,textcomp}
-\providecommand{\lstinline}{} % This makes my IDE happy.
+\usepackage{lmodern,textcomp,multicol,parcolumns,enumitem,array,booktabs}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage{mathtools,bm}
 
-\usepackage{xcolor}
+
+\usepackage{listings}
 \definecolor{codegray}{gray}{0.5}
+
+\lstset{showstringspaces=false}
 
 \lstdefinestyle{makefile}{
     language={[gnu]make},
@@ -41,18 +46,33 @@
     commentstyle=\color{ForestGreen},
     escapechar=!,
     upquote=true,
+    morekeywords={endfunction},
 }
 
-\newcommand{\codeemph}[1]{\textcolor{NavyBlue}{\small\bfseries #1}}
+\lstdefinestyle{output}{
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\ttfamily,
+    stringstyle=\ttfamily,
+    commentstyle=\ttfamily,
+    upquote=true,
+    showstringspaces=false,
+}
 
+\lstset{style=python}
+
+\newcommand{\codeemph}[1]{\textcolor{NavyBlue}{\small\bfseries #1}}
+\newcommand{\funcname}[2][.25em]{\vspace{#1}\noindent\texttt{#2}\nopagebreak\vspace{#1}}
 \newcommand{\smallurl}[2][\footnotesize]{\texttt{#1 #2}}
+
+\newcommand{\bitbucket}{\smallurl{https://bitbucket.org/rawlings-group/mpc-tools-casadi}}
 
 \usepackage{graphicx}
 \graphicspath{{./}{../}}
-
-\usepackage{lmodern}
 
 \usepackage{tikz}
 \usetikzlibrary{trees}
 
 \newcommand{\casadi}{CasADi}
+\newcommand{\mpctools}{MPCTools}
+
+\providecommand{\sepline}{\vspace{-2em}}

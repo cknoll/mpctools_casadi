@@ -1245,6 +1245,23 @@ def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", numpy=None,
     """
     Core logic for getCasadiFunc and its relatives.
     
+    casaditype chooses what type of casadi variable to use, while numpy chooses
+    to wrap the casadi symbols in a NumPy array before calling f. Both
+    numpy and casaditype are None by default; the table below shows what values
+    are used in the various cases.
+    
+                  +----------------------+-----------------------+
+                  |       numpy is       |       numpy is        |
+                  |         None         |       not None        |
+    +-------------+----------------------+-----------------------+
+    | casaditype  | casaditype = "SX"    | casaditype = ("SX" if |
+    |  is None    | numpy = True         |   numpy else "MX")    |
+    +------------------------------------+-----------------------+
+    | casaditype  | numpy = (False if    | warning issued if     |
+    | is not None |   casaditype == "MX" |   numpy == True and   |
+    |             |   else True)         |   casaditype == "MX"  |
+    +------------------------------------+-----------------------+
+    
     Returns a dictionary with the following entries:
         
     - casadiargs: a list of the original casadi symbolic primitives
@@ -1294,17 +1311,17 @@ def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", numpy=None,
     
     # Decide which Casadi type to use and whether to wrap as a numpy array.
     # XX is either casadi.SX or casadi.MX.
-    if casaditype is None:
-        if numpy is None:
-            numpy = True
-            casaditype = "SX"
-        else:
-            casaditype = "SX" if numpy else "MX"
+    if numpy is None and casaditype is None:
+        numpy = True
+        casaditype = "SX"
     elif numpy is None:
         numpy = False if casaditype == "MX" else True
-    if numpy and casaditype == "MX" and WARN_NUMPY_MX:
-        warnings.warn("Using a numpy array of casadi MX is almost always a "
-                      "bad idea. Consider refactoring to avoid.")
+    elif casaditype is None:
+        casaditype = "SX" if numpy else "MX"
+    else:
+        if numpy and (casaditype == "MX") and WARN_NUMPY_MX:
+            warnings.warn("Using a numpy array of casadi MX is almost always "
+                          "a bad idea. Consider refactoring to avoid.")
     XX = dict(SX=casadi.SX, MX=casadi.MX).get(casaditype, None)
     if XX is None:
         raise ValueError("casaditype must be either 'SX' or 'MX'!")

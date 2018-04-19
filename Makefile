@@ -75,7 +75,7 @@ unzip3 : $(basename $(ZIPNAME_3))
 .PHONY : unzip2 unzip3
 
 # Rules for documentation pdfs.
-$(DOC_PDF) : %.pdf : %.tex
+$(DOC_PDF) : %.pdf : %.tex doc/mpctools.sty
 	@echo "Making $@."
 	@doc/latex2pdf.py --display errors --dir $(@D) $<
 
@@ -94,6 +94,9 @@ doc/introslides.pdf : cstr_octave.pdf cstr_python.pdf vdposcillator_lmpc.pdf \
 doc/cheatsheet.pdf : doc/sidebyside.tex
 doc/octave-vs-python.pdf : doc/sidebyside-cstr.tex
 doc/install.pdf : 
+
+doc : $(DOC_PDF)
+.PHONY : doc
 
 # Define rules for intermediate files.
 cstr_octave.pdf : cstr.m

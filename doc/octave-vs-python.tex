@@ -1,46 +1,8 @@
 \documentclass{article}
 
-\usepackage[left=.25in,right=.25in,top=.75in,bottom=.75in]{geometry}
-\usepackage{mathtools,bm,textcomp,multicol,parcolumns,enumitem,array}
-\usepackage[dvipsnames]{xcolor}
-\usepackage[T1]{fontenc}
-\usepackage{textcomp}
+\usepackage[margin=0.25in]{geometry}
+\usepackage{mpctools}
 
-% Stuff for source codes.
-\usepackage{listings}
-\providecommand{\lstinline}{}
-\lstdefinestyle{python}{
-    language=Python,
-    basicstyle=\ttfamily\footnotesize,
-    keywordstyle=\color{Blue}\ttfamily,
-    stringstyle=\color{Purple}\ttfamily,
-    commentstyle=\color{ForestGreen}\ttfamily,
-    upquote=true,
-    showstringspaces=false,
-%    numbers=left,
-    stepnumber=10,
-    firstnumber=0,
-    numberstyle=\scriptsize,
-    escapechar=@,
-    morekeywords={as,True,False},
-    upquote=true,
-}
-
-\lstdefinestyle{matlab}{
-    language=Matlab,
-    basicstyle=\ttfamily\footnotesize,
-    keywordstyle=\color{Blue},
-    stringstyle=\color{Purple},
-    commentstyle=\color{ForestGreen},
-    upquote=true,
-    morekeywords={endfunction},
-}
-
-\newcommand{\smallurl}[2][\scriptsize]{\texttt{#1$<$#2$>$}}
-\newcommand{\funcname}[2][.25em]{\vspace{#1}\noindent\texttt{#2}\nopagebreak\vspace{#1}}
-\newcommand{\casadi}{CasADi}
-
-%\newcommand{\sepline}{\hrule}
 \providecommand{\sepline}{\vspace{-2em}}
 
 \title{Octave vs. Python for Example 1.11}

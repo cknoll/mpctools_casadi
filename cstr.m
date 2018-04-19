@@ -31,7 +31,7 @@ Cp  = 0.239;  %     kJ/(kg K)
 DeltaH = -5e4; %    kJ/kmol
 Tcs = 300; %        K
 hs = 0.659; %       m
-ps = 0.1*F0; %       m^3/min
+ps = 0.1*F0; %      m^3/min
 
 rhoCp = rho*Cp;
 
@@ -98,9 +98,9 @@ Fs = F0; F = F0;
 Tc = Tcs;
 z0 = [c0; Tc; hs];
 [z, fval, info] = fsolve(@massenbalstst, z0);
-if ( info ~= 1 )
-    warning('failure to find steady state!')
-endif
+if info ~= 1
+    warning('failure to find steady state.')
+end
 cs = z(1);
 Ts = z(2);
 hs = z(3);
@@ -154,9 +154,9 @@ naug = size(Aaug,1);
 
 % detectability test of disturbance model
 detec = rank([eye(n+nd) - Aaug; Caug]);
-if (detec < (n+nd))
+if detec < (n + nd)
   warning ('augmented system is not detectable\n')
-endif
+end
 
 %<<ENDCHUNK>>
 
@@ -215,7 +215,9 @@ for i = 1: ntimes
     dhat(:,i) = dhat_(:,i) + Ld*ey;
     
     % Stop if at last time.
-    if (i == ntimes) break; endif
+    if i == ntimes
+        break
+    end
     
     %<<ENDCHUNK>>
     
