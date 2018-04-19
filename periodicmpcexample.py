@@ -24,7 +24,7 @@ t = np.arange(Nt + 1)*dt
 (Adisc, Bdisc) = mpc.util.c2d(Acont,Bcont,dt)
 def F(x, u):
     return mpc.mtimes(Adisc, x) + mpc.mtimes(Bdisc, u)
-Fcasadi = mpc.getCasadiFunc(F, [n,m], ["x","u"], funcname="F", scalar=False)
+Fcasadi = mpc.getCasadiFunc(F, [n,m], ["x","u"], funcname="F")
 
 # Bounds on u.
 umax = 1

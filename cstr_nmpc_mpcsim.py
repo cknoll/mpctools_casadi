@@ -182,7 +182,7 @@ def runsim(k, simcon, opnclsd):
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
                                    [Nx+Nid,Nu,Nw,Nd], ["xaug","u","w","d"],
-                                   "ode_estimator_rk4", scalar=False)
+                                   "ode_estimator_rk4")
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
                              [Nx+Nid,Nd], ["xaug","d"], "measurement")
@@ -210,7 +210,7 @@ def runsim(k, simcon, opnclsd):
 
         largs = ["x","u","x_sp","u_sp","Du"]
         l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l",scalar=False)
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu],largs,funcname="l")
 
         # Define cost to go.
 
@@ -218,7 +218,7 @@ def runsim(k, simcon, opnclsd):
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T,Pi,dx)
         Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","s_xp"],
-                               funcname="Pf", scalar=False)
+                               funcname="Pf")
 
         # Build augmented estimator matrices.
 
@@ -228,19 +228,12 @@ def runsim(k, simcon, opnclsd):
         Qwinv = linalg.inv(Qw)
         Rvinv = linalg.inv(Rv)
 
-        # Build augmented estimator matrices.
-#        Qw = eps*np.eye(Nx + Nid)
-#         Qw[-1,-1] = 1
-#        Rv = eps*eps*np.diag(xs**2)
-#        Qwinv = linalg.inv(Qw)
-#        Rvinv = linalg.inv(Rv)
-
         # Define stage costs for estimator.
 
         def lest(w,v):
             return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v)
                       
-        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l",scalar=False)
+        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l")
 
         # Don't use a prior.
         lxest = None
@@ -305,7 +298,7 @@ def runsim(k, simcon, opnclsd):
 
         phiargs = ["y","y_sp","u","u_sp","Q","R"]
         phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
-                                phiargs, scalar=False)
+                                phiargs)
 
         sstargargs = {
             "f" : ode_disturbance_casadi,

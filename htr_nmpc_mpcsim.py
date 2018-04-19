@@ -170,18 +170,15 @@ def runsim(k, simcon, opnclsd):
         
         model_augmented_casadi = mpc.getCasadiFunc(model_augmented,
                                                    [Nx+Nid,Nu,Nd],
-                                                   ["x","u","p"], "faug",
-                                                   scalar=False)
+                                                   ["x","u","p"], "faug")
 
         model_estimator_casadi = mpc.getCasadiFunc(model_estimator,
                                                    [Nx+Nid,Nu,Nx+Nid,Nd],
-                                                   ["x","u","w","p"], "fest",
-                                                   scalar=False)
+                                                   ["x","u","w","p"], "fest")
         
         model_sstarg_casadi = mpc.getCasadiFunc(model_sstarg,
                                                 [Nx+Nid,Nu,Nd],
-                                                ["x","u","p"], "fdist",
-                                                scalar=False)
+                                                ["x","u","p"], "fdist")
         
         # Also define DummySimulator object.
         
@@ -229,7 +226,7 @@ def runsim(k, simcon, opnclsd):
 
         largs = ["x", "u", "x_sp", "u_sp", "Du", "s"]
         l = mpc.getCasadiFunc(stagecost, [Nx+Nid,Nu,Nx+Nid,Nu,Nu,Ny], largs,
-                              funcname="l", scalar=False)
+                              funcname="l")
 
         # Define cost to go.
 
@@ -237,7 +234,7 @@ def runsim(k, simcon, opnclsd):
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T, Pi, dx)
         Pf = mpc.getCasadiFunc(costtogo, [Nx+Nid,Nx+Nid], ["x", "x_sp"],
-                               funcname="Pf", scalar=False)
+                               funcname="Pf")
 
         # Define output constraints for the controller.
         
@@ -249,7 +246,7 @@ def runsim(k, simcon, opnclsd):
             ]
             return mpc.vcat(terms)
         e = mpc.getCasadiFunc(outputconstraints, [Nx + Nid, Ny], ["x", "s"],
-                              funcname="e", scalar=False)
+                              funcname="e")
 
         # Build augmented estimator matrices.
 
@@ -264,8 +261,7 @@ def runsim(k, simcon, opnclsd):
         def lest(w, v):
             return mpc.mtimes(w.T, Qwinv, w) + mpc.mtimes(v.T, Rvinv, v)
                       
-        lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l",
-                                 scalar=False)
+        lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l")
 
         # Don't use a prior.
 
@@ -335,8 +331,7 @@ def runsim(k, simcon, opnclsd):
             return mpc.mtimes(dy.T, Qyss, dy) + mpc.mtimes(du.T, Rss, du)
 
         phiargs = ["y", "y_sp", "u", "u_sp"]
-        phi = mpc.getCasadiFunc(sstargobj, [Ny, Ny, Nu, Nu],
-                                phiargs, scalar=False)
+        phi = mpc.getCasadiFunc(sstargobj, [Ny, Ny, Nu, Nu], phiargs)
 
         sstargargs = {
             "f" : model_sstarg_casadi,

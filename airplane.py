@@ -78,9 +78,8 @@ def lfunc(x, u, xsp=None, usp=None):
         xsp = np.zeros(x.shape)
     dx = x[0:3] - xsp[0:3]
     return mpc.mtimes(dx.T, dx)
-ltarg = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], scalar=False)
-l = mpc.getCasadiFunc(lfunc, [Nx,Nu,Nx,Nu], ["x","u","x_sp","u_sp"],
-                      scalar=False)
+ltarg = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"])
+l = mpc.getCasadiFunc(lfunc, [Nx,Nu,Nx,Nu], ["x","u","x_sp","u_sp"])
 
 # First simulate to get a guess.
 x = np.zeros((Nt+1,Nx))

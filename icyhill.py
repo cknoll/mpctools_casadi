@@ -45,12 +45,12 @@ ss["R"] = np.eye(Nu)
 def l(x, u):
     """Quadratic stage cost x'Qx + u'Ru."""
     return mpc.mtimes(x.T, ss["Q"], x) + mpc.mtimes(u.T, ss["R"], u)
-lcasadi = mpc.getCasadiFunc(l, [Nx, Nu], ["x", "u"], "l", scalar=False)
+lcasadi = mpc.getCasadiFunc(l, [Nx, Nu], ["x", "u"], "l")
 
 def Vf(x):
     """Quadratic terminal penalty."""
     return mpc.mtimes(x.T, ss["Pi"], x)
-Vfcasadi = mpc.getCasadiFunc(Vf, [Nx], ["x"], "Vf", scalar=False)
+Vfcasadi = mpc.getCasadiFunc(Vf, [Nx], ["x"], "Vf")
 
 lb = dict(u=-umax*np.ones((Nt, Nu)))
 ub = dict(u=umax*np.ones((Nt, Nu)))

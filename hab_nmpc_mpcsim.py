@@ -171,7 +171,7 @@ def runsim(k, simcon, opnclsd):
 
         ode_estimator_rk4_casadi = mpc.getCasadiFunc(ode_estimator_rk4,
                                    [Nx+Nid,Nu,Nw], ["x","u","w"],
-                                   "ode_estimator_rk4", scalar=False)
+                                   "ode_estimator_rk4")
 
         measurement_casadi = mpc.getCasadiFunc(measurement,
                              [Nx+Nid], ["x"], "measurement")        
@@ -202,7 +202,7 @@ def runsim(k, simcon, opnclsd):
         def lest(w,v):
             return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v)
                       
-        lest = mpc.getCasadiFunc(lest,[Nw,Nv],["w","v"],"l",scalar=False)
+        lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l")
 
         # Don't use a prior.
 
@@ -299,7 +299,7 @@ def runsim(k, simcon, opnclsd):
 
         phiargs = ["y", "y_sp", "u", "u_sp", "Q", "R", "s"]
         phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu),2*Ny],
-                                phiargs, scalar=False)
+                                phiargs)
 
         # Add slacked output constraints.
         def outputcon(x, s):
@@ -351,7 +351,7 @@ def runsim(k, simcon, opnclsd):
 
         largs = ["x","u","x_sp","u_sp","Du","s"]
         l = mpc.getCasadiFunc(stagecost,
-            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,2*Ny],largs,funcname="l",scalar=False)
+            [Nx+Nid,Nu,Nx+Nid,Nu,Nu,2*Ny],largs,funcname="l")
 
         # Define cost to go.
 
@@ -359,7 +359,7 @@ def runsim(k, simcon, opnclsd):
             dx = x[:Nx] - xsp[:Nx]
             return mpc.mtimes(dx.T, Qx, dx)
         Pf = mpc.getCasadiFunc(costtogo,[Nx+Nid,Nx+Nid],["x","x_sp"],
-                               funcname="Pf", scalar=False)
+                               funcname="Pf")
     
         # Make NMPC solver.
 

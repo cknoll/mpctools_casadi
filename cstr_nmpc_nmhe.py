@@ -137,12 +137,12 @@ def stagecost(x,u,xsp,usp,Deltau):
     du = u - usp
     
     # Calculate stage cost.
-    return (mpc.mtimes(dx.T,Q,dx) + .1*mpc.mtimes(du.T,R,du)
+    return (mpc.mtimes(dx.T,Q,dx) + 0.1*mpc.mtimes(du.T,R,du)
         + mpc.mtimes(Deltau.T,R,Deltau))
 
 largs = ["x","u","x_sp","u_sp","Du"]
 l = mpc.getCasadiFunc(stagecost,
-    [Nx+Nid,Nu,Nx+Nid,Nu,Nu], largs, funcname="l", scalar=False)
+    [Nx+Nid,Nu,Nx+Nid,Nu,Nu], largs, funcname="l")
 
 def costtogo(x,xsp):
     # Deviation variables.
@@ -151,7 +151,7 @@ def costtogo(x,xsp):
     # Calculate cost to go.
     return mpc.mtimes(dx.T,Pi,dx)
 Pf = mpc.getCasadiFunc(costtogo, [Nx+Nid,Nx+Nid], ["x","s_xp"],
-                       funcname="Pf", scalar=False)
+                       funcname="Pf")
 
 # Build augmented estimator matrices.
 Qw = eps*np.eye(Nx + Nid)
@@ -163,7 +163,7 @@ Rvinv = linalg.inv(Rv)
 # Define stage costs for estimator.
 def lest(w,v):
     return mpc.mtimes(w.T,Qwinv,w) + mpc.mtimes(v.T,Rvinv,v) 
-lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l", scalar=False)
+lest = mpc.getCasadiFunc(lest, [Nw,Nv], ["w","v"], "l")
 
 # Don't use a prior.
 lxest = None
@@ -277,7 +277,7 @@ def sstargobj(y,y_sp,u,u_sp,Q,R):
 if useSstargObjective:
     phiargs = ["y","y_sp","u","u_sp","Q","R"]
     phi = mpc.getCasadiFunc(sstargobj, [Ny,Ny,Nu,Nu,(Ny,Ny),(Nu,Nu)],
-                            phiargs, scalar=False)
+                            phiargs)
 else:
     phiargs = None
     phi = None

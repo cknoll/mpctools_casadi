@@ -1205,7 +1205,8 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
     # First get symbolic expressions.
     if numpy is None and scalar is not None:
         numpy = scalar
-        warnings.warn("Passing 'scalar' is deprecated. Replace with 'numpy'.")
+        warnings.warn("Keyword argument 'scalar=...' is deprecated. Replace "
+                      "with 'numpy=...'.")
     symbols = __getCasadiFunc(f, argsizes, argnames, funcname,
                               numpy=numpy, casaditype=casaditype,
                               allowmatrix=False)
