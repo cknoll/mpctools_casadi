@@ -12,20 +12,10 @@ from . import colloc
 Functions for solving MPC problems using Casadi and Ipopt.
 """
 
-# Developer notes:
-#
-#
-# - Documentation is very important. Try to use descriptive variable names as
-#   much as possible, and make sure every function has a docstring.
-#
-#
-# - We use the print function from Python 3 here, so any calls to print must
-#   have the arguments surrounded by parentheses.
-#
-#
-# - If any Python file gets longer than about 1000 lines, consider splitting it
-#   or moving functions to subfiles. Be sure to import everything that was
-#   moved so that existing code is not affected.
+# Using a numpy array of casadi MX symbols is almost always a bad idea, so we
+# warn the user if they request it. Users who know what they are doing can
+# disable the warning via this constant (see __getCasadiFunc).
+WARN_NUMPY_MX = True
 
 # =================================
 # MPC and MHE
@@ -1131,7 +1121,8 @@ def __getArgs(names,t=0,*structs):
     return thisargs
 
 def getCasadiFunc(f, varsizes=None, varnames=None, funcname=None, rk4=False,
-                  Delta=1, M=1, scalar=True, casaditype=None, wraps=None):
+                  Delta=1, M=1, scalar=None, casaditype=None, wraps=None,
+                  numpy=None):
     """
     Takes a function handle and turns it into a Casadi function.
     
@@ -1144,6 +1135,18 @@ def getCasadiFunc(f, varsizes=None, varnames=None, funcname=None, rk4=False,
     Alternatively, instead of specifying varsizes, varnames, and funcname,
     you can pass a casadi.Function as wraps to copy these values from the other
     function.
+    
+    The numpy argument determines whether arguments are passed with numpy
+    array semantics or not. By default, numpy=True, which means symbolic
+    variables are passed as numpy arrays of Casadi scalar symbolics. This means
+    your function should be written to accept (and should also return) numpy
+    arrays. If numpy=False, the arguments are passed as Casadi symbolic
+    vectors, which have slightly different semantics. Note that 'scalar'
+    is a deprecated synonym for numpy.
+    
+    To choose what type of Casadi symbolic variables to use, pass
+    casaditype="SX" or casaditype="MX". The default value is "SX" if
+    numpy=True, and "MX" if numpy=True.
     """ 
     # Decide if user specified wraps.
     if wraps is not None:
@@ -1161,9 +1164,13 @@ def getCasadiFunc(f, varsizes=None, varnames=None, funcname=None, rk4=False,
         raise ValueError("Must specify either varsizes or wraps!")
     if funcname is None:
         funcname = "f"
-    symbols = __getCasadiFunc(f, varsizes, varnames, funcname, scalar,
-                              casaditype, allowmatrix=True)
-    args = symbols["args"]
+    if numpy is None and scalar is not None:
+        numpy = scalar
+        warnings.warn("Passing 'scalar' is deprecated. Replace with 'numpy'.")
+    symbols = __getCasadiFunc(f, varsizes, varnames, funcname,
+                              numpy=numpy, casaditype=casaditype,
+                              allowmatrix=True)
+    args = symbols["casadiargs"]
     fexpr = symbols["fexpr"]
     
     # Evaluate function and make a Casadi object.  
@@ -1181,7 +1188,7 @@ def getCasadiFunc(f, varsizes=None, varnames=None, funcname=None, rk4=False,
 
 def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
                         abstol=1e-8, reltol=1e-8, wrap=True, verbosity=1,
-                        scalar=True, casaditype=None):
+                        scalar=None, casaditype=None, numpy=None):
     """
     Gets a Casadi integrator for function f from 0 to Delta.
     
@@ -1189,14 +1196,21 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
     that the first argument is assumed to be the differential variables, and
     all others are kept constant.
     
+    The scalar, casaditype, and numpy arguments all have the same behavior as
+    in getCasadiFunc. See getCasadiFunc documentation for more details.
+    
     wrap can be set to False to return the raw casadi Integrator object, i.e.,
     with inputs x and p instead of the arguments specified by the user.
     """
     # First get symbolic expressions.
-    symbols = __getCasadiFunc(f, argsizes, argnames, funcname, scalar,
-                              casaditype, allowmatrix=False)
-    x0 = symbols["args"][0]
-    par = symbols["args"][1:]
+    if numpy is None and scalar is not None:
+        numpy = scalar
+        warnings.warn("Passing 'scalar' is deprecated. Replace with 'numpy'.")
+    symbols = __getCasadiFunc(f, argsizes, argnames, funcname,
+                              numpy=numpy, casaditype=casaditype,
+                              allowmatrix=False)
+    x0 = symbols["casadiargs"][0]
+    par = symbols["casadiargs"][1:]
     fexpr = symbols["fexpr"]
     
     # Build ODE and integrator.
@@ -1226,22 +1240,29 @@ def getCasadiIntegrator(f, Delta, argsizes, argnames=None, funcname="int_f",
     return integrator
 
 
-def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", scalar=True,
+def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", numpy=None,
                     casaditype=None, allowmatrix=True):
     """
     Core logic for getCasadiFunc and its relatives.
     
-    Returns a dictionary with entries fexpr, rawargs, args, XX, names, sizes:
-    - rawargs is the list of raw arguments, each a numpy array of Casadi
-      scalars if scalar=True, or a single Casadi symbolic matrix if
-      scalar=False.
-    - args is the same list, but with all arguments converted to a single
-      Casadi symbolic matrix.
-    - fexpr is the casadi expression resulting from evaluating f(*rawargs).
-    - XX is either casadi.SX or casadi.MX depending on what was used to create
-      rawargs and args.
-    - names is a list of string names for each argument.
-    - sizes is a list of one- or two-element lists giving the sizes.
+    Returns a dictionary with the following entries:
+        
+    - casadiargs: a list of the original casadi symbolic primitives
+    
+    - numpyargs: a list of the numpy analogs of the casadi symbols. Note that
+                 this is None if numpy=False.
+    
+    - fargs: the list of arguments passed to f. This is numpyargs if numpyargs
+             is not None; otherwise, it is casadiargs.
+     
+    - fexpr: the casadi expression resulting from evaluating f(*fargs).
+    
+    - XX: is either casadi.SX or casadi.MX depending on what type was used
+          to create casadiargs.
+  
+    - names: a list of string names for each argument.
+    
+    - sizes: a list of one- or two-element lists giving the sizes.
     """
     # Check names.
     if varnames is None:
@@ -1271,37 +1292,62 @@ def __getCasadiFunc(f, varsizes, varnames=None, funcname="f", scalar=True,
                 "two-element lists!")
         realvarsizes.append(s)
     
-    # Decide which Casadi type to use. XX is either casadi.SX or casadi.MX.
+    # Decide which Casadi type to use and whether to wrap as a numpy array.
+    # XX is either casadi.SX or casadi.MX.
     if casaditype is None:
-        casaditype = "SX" if scalar else "MX"
+        if numpy is None:
+            numpy = True
+            casaditype = "SX"
+        else:
+            casaditype = "SX" if numpy else "MX"
+    elif numpy is None:
+        numpy = False if casaditype == "MX" else True
+    if numpy and casaditype == "MX" and WARN_NUMPY_MX:
+        warnings.warn("Using a numpy array of casadi MX is almost always a "
+                      "bad idea. Consider refactoring to avoid.")
     XX = dict(SX=casadi.SX, MX=casadi.MX).get(casaditype, None)
     if XX is None:
         raise ValueError("casaditype must be either 'SX' or 'MX'!")
         
-    # Now make the symbolic variables. How they are packaged depends on the
-    # scalar option.
-    if scalar:
-        args = []
-        for (name, size) in zip(varnames, realvarsizes):
-            if len(size) == 2:
-                thisarr = []
-                for i in range(size[0]):
-                    row = [XX.sym("%s_%d_%d" % (name, i, j)) for
-                           j in range(size[1])]
-                    thisarr.append(row)
-            else:
-                thisarr = [XX.sym("%s_%d" % (name, i)) for
-                           i in range(size[0])]
-            args.append(np.array(thisarr, dtype=object))
+    # Now make the symbolic variables. Make numpy versions if requested.
+    casadiargs = [XX.sym(name, *size)
+                  for (name, size) in zip(varnames, realvarsizes)]
+    if numpy:
+        numpyargs = [__casadi_to_numpy(x) for x in casadiargs]
+        fargs = numpyargs
     else:
-        args = [XX.sym(name, *size) for
-                (name, size) in zip(varnames, realvarsizes)]
-    catargs = [XX(a) for a in args]
-                
+        numpyargs = None
+        fargs = casadiargs
+    
     # Evaluate the function and return everything.
-    fexpr = util.safevertcat(f(*args))
-    return dict(fexpr=fexpr, args=catargs, rawargs=args, XX=XX, names=varnames,
-                sizes=realvarsizes)
+    fexpr = util.safevertcat(f(*fargs))
+    return dict(fexpr=fexpr, casadiargs=casadiargs, numpyargs=numpyargs, XX=XX,
+                names=varnames, sizes=realvarsizes)
+
+
+def __casadi_to_numpy(x, matrix=False, scalar=False):
+    """
+    Converts casadi symbolic variable x to a numpy array of scalars.
+    
+    If matrix=False, the function will guess whether x is a vector and return
+    the appropriate numpy type. To force a matrix, set matrix=True. To use
+    a numpy scalar when x is scalar, use scalar=True.
+    """
+    shape = None
+    if not matrix:
+        if scalar and x.is_scalar():
+            shape = ()
+        elif x.is_vector():
+            shape = (x.numel(),)
+    if shape is None:
+        shape = x.shape
+    y = np.empty(shape, dtype=object)
+    if y.ndim == 0:
+        y[()] = x # Casadi uses different behavior for x[()].
+    else:
+        for i in np.ndindex(shape):
+            y[i] = x[i]
+    return y
 
 
 def __getargnames(func):
@@ -1387,9 +1433,11 @@ class DiscreteSimulator(DummySimulator):
         return self.__Delta
         
     def __init__(self, ode, Delta, argsizes, argnames=None, verbosity=1,
-                 casaditype=None, scalar=True):
+                 casaditype=None, numpy=None, scalar=None):
         """
         Initialize by specifying model and sizes of everything.
+        
+        See getCasadiIntegrator for description of arguments.
         """
         # Call subclass constructor.
         super(DiscreteSimulator, self).__init__(None, argsizes, argnames)
