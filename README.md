@@ -93,9 +93,9 @@ described on its [website][casadipubs]. In addition, you can cite MPCTools as
 Questions, comments, bug reports can be posted on the
 [issue tracker][bbissues] on Bitbucket.
 
-Michael J. Risbeck  
-<risbeck@wisc.edu>  
-University of Wisconsin-Madison  
+Robert D. Mcallister  
+<rdmcallister@ucsb.edu>  
+University of California-Santa Barbara
 Department of Chemical Engineering
 
 [bitbucket]: https://bitbucket.org/rawlings-group/mpc-tools-casadi
