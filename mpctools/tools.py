@@ -167,7 +167,7 @@ def nmpc(f=None, l=None, N={}, x0=None, lb={}, ub={}, guess={}, g=None,
     if len(parStruct.keys()) == 0:
         parStruct = None
         
-    varNames = set(["x", "u", "xc", "zc", "s", "sf"]
+    varNames = set(["x", "u", "z", "xc", "zc", "s", "sf"]
                    + ["D" + k for k in deltaVars])
     varStruct = __casadiSymStruct(allShapes, varNames, casaditype)
 
@@ -847,7 +847,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
                     thiscon = g(*thisargs)
                     thesecons.append(thiscon)
             algebra.append(thesecons)
-        lb = np.zeros((len(tpoints),Ncolloc+1,Ng))
+        lb = np.zeros(((len(tpoints)-1)*(Ncolloc+1)+1,Ng))
         ub = lb.copy()
         returnDict["algebra"] = dict(con=algebra,lb=lb,ub=ub)
         
@@ -915,7 +915,7 @@ def __generalConstraints(var, Nt, f=None, Nf=0, g=None, Ng=0, h=None, Nh=0,
             pathconstraints.append([e(*eargs[t])])
         lb = -np.inf*np.ones((len(pathconstraints),Ne))
         ub = np.zeros((len(pathconstraints),Ne))
-        returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)    
+        returnDict["path"] = dict(con=pathconstraints,lb=lb,ub=ub)
     return returnDict
 
 
