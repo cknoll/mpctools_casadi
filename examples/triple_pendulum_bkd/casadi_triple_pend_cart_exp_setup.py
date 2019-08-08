@@ -16,6 +16,8 @@ from numpy import pi
 import sympy as sp
 import mpctools as mpc
 from ipydex import IPS, activate_ips_on_exception
+import pickle
+
 import symbtools as st
 import casadi
 
@@ -70,14 +72,16 @@ def model_rhs(state, u):
 
 
 T_total = 2.0
-Nt = 100
+Nt = 200
 Delta = T_total/Nt
 
 Nx = 8
 Nu = 1
 
 xa = np.array([pi, pi, pi, 0.0,   0.0, 0.0, 0.0, 0.0])
-xb = np.array([pi, pi, pi*.4, 0.0,   0.0, 0.0, 0.0, 0.0])
+xb = np.array([pi, pi, pi*0, 0.0,   0.0, 0.0, 0.0, 0.0])
+
+pfname = f"../trajectories/sup_uuo_{T_total}.pcl"
 
 
 # vdp = mpc.DiscreteSimulator(model_rhs, Delta, [Nx, Nu], ["x", "u"])
@@ -113,7 +117,7 @@ Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 
 # Bounds
-umax = 20
+umax = 40
 
 lb = {"u": -np.ones((Nu,))*umax, "x": np.array([2, 2, -1,  -1,  -15, -15, -15, -5])}
 ub = {"u":  np.ones((Nu,))*umax, "x": np.array([4, 4, 4,  1,  15, 15, 15, 5])}
@@ -125,7 +129,8 @@ Ndict = {"x": Nx, "u": Nu, "t": Nt}
 np.random.seed(1004)
 
 
-tt1 = np.arange(0, Delta*(Nt+1), Delta)
+tt1 = np.linspace(0, T_total, Nt+1)
+assert tt1[1] == Delta
 
 # columns
 xxa = xa.reshape(-1, 1)
@@ -162,10 +167,19 @@ print(solver.stats["status"])
 uu = solver.vardict["u"]
 xx = solver.vardict["x"]
 
+uu = np.concatenate(uu, np.zeros(Nu))
 
-plt.plot(tt1[:-1], uu)
+# this strange structure is due to historical reasons (pytrajectory)
+pcl_res = dict(sys=dict(sim_data=(tt1, xx, uu)))
+
+IPS()
+plt.plot(tt1, uu)
 plt.figure()
-plt.plot(tt1, xx, label="a")
+plt.plot(tt1, xx, label="x")
 plt.legend()
 plt.show()
 
+
+with open(pfname, "wb") as pfile:
+    pickle.dump(pcl_res, pfile)
+print(pfname, "written")

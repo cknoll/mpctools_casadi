@@ -15,6 +15,12 @@ def ode(x,u):
     ]
     return np.array(dxdt)
 
+import ipydex
+
+ipydex.IPS()
+
+exit()
+
 # Create a simulator. This allows us to simulate a nonlinear plant.
 vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])
 
