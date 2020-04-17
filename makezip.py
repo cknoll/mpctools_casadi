@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 import zipfile
-import mpctools.hg
+import mpctools.git
 
 # Command-line arguments.
 parser = argparse.ArgumentParser(description=__doc__, add_help=False)
@@ -24,7 +24,7 @@ parser.add_argument("files", default=[], nargs="*",
                     help="Files to include")
 
 # Constants.
-CHANGESET_ID = mpctools.hg.get_changeset_id()
+CHANGESET_ID = mpctools.git.get_changeset_id()
 PYTHON_2_HEADER = "from __future__ import division, print_function"
 README_MD = "README.md"
 README_TXT = "README.txt"

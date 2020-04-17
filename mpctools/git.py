@@ -8,9 +8,9 @@ import os
 import subprocess
 
 def get_changeset_id():
-    """Returns the mercurial changeset ID for the repo."""
+    """Returns the git changeset ID for the repo."""
     mpctoolsdir = os.path.dirname(__file__)
-    hgdir = os.path.dirname(mpctoolsdir)
-    changeset = subprocess.check_output(["hg", "id", "-i"],
-                                        cwd=hgdir)
+    gitdir = os.path.dirname(mpctoolsdir)
+    changeset = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                        cwd=gitdir)
     return changeset.decode().strip()

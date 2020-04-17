@@ -155,7 +155,7 @@ def prettyaxesbox(ax=None,linewidth=None,edgecolor="k",facecolor="none",front=Tr
         linewidth = 1
     
     # Now we're going to make the box around the axes look better.
-    ap = ax.axesPatch
+    ap = ax.patch
     zorders = [c.get_zorder() for c in ax.get_children()]    
     if front:
         z = max(zorders) + 1
