@@ -164,10 +164,10 @@ solver.solve()
 print(solver.stats["status"])
 
 
-uu = solver.vardict["u"]
+uu = solver.vardict["u"].squeeze()
 xx = solver.vardict["x"]
 
-uu = np.concatenate(uu, np.zeros(Nu))
+uu = np.concatenate((uu, np.zeros(Nu)))
 
 # this strange structure is due to historical reasons (pytrajectory)
 pcl_res = dict(sys=dict(sim_data=(tt1, xx, uu)))
