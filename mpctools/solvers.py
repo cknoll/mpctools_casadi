@@ -360,7 +360,7 @@ class ControlSolver(object):
         Solve the current solver object.
         """
         # Solve the problem and get optimal variables.
-        starttime = time.clock()
+        starttime = time.time()
         if self.__changed:
             self.initialize()
         solver = self.__solver
@@ -391,7 +391,7 @@ class ControlSolver(object):
         self.__varval = self.__var(sol["x"])
         self.__vardict = None # Lazy update in getter.
         self.__objval = float(sol["f"])
-        endtime = time.clock()
+        endtime = time.time()
         
         # Grab some stats.
         status = stats.get("return_status", "UNKNOWN")
