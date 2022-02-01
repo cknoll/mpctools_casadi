@@ -8,6 +8,14 @@ from scipy import linalg
 
 useCasadiSX = True
 
+# Define a helper function.
+def sx_vector(sx_list):
+    """Convert a list of casadi.SX objects to a Numpy object vector."""
+    out = np.empty(len(sx_list), dtype=object)
+    for (i, sx) in enumerate(sx_list):
+        out[i] = sx
+    return out
+
 def runsim(k, simcon, opnclsd):
 
     print("runsim: iteration %d -----------------------------------" % k)
@@ -86,7 +94,7 @@ def runsim(k, simcon, opnclsd):
             # ODE for CSTR.
             rate = k0*c*np.exp(-E/T)
 
-            dxdt = np.array([
+            dxdt = sx_vector([
                 F0*(c0 - c)/(np.pi*r**2*h) - rate,
                 F0*(T0 - T)/(np.pi*r**2*h)
                     - dH/(rho*Cp)*rate
@@ -162,7 +170,7 @@ def runsim(k, simcon, opnclsd):
         def measurement(x,d=ds):
             [c, T, h] = x[0:Nx]
             dhat = x[Nx:Nx+Nid]
-            return np.array([c + dhat[0], T + dhat[1], h])
+            return sx_vector([c + dhat[0], T + dhat[1], h])
         ys = measurement(xaugs)
 
         # Turn into casadi functions.
