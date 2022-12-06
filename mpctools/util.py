@@ -464,7 +464,7 @@ def dummy_context(*args):
 # __setitem__, and so results can be inconsistent. Instead, we use an abstract
 # base class from the collections module. See Section 8.3.6 in the docs at
 # https://docs.python.org/2/library/collections.html
-class ArrayDict(collections.MutableMapping):
+class ArrayDict(collections.abc.MutableMapping):
     """
     Python dictionary of numpy arrays.
 
