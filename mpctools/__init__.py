@@ -34,6 +34,8 @@ elif _getVersion(casadi.__version__) > _getVersion(_MAX_CASADI_VERSION):
     raise ImportError("casadi version %s is too new (must be <=%s)"
         % (casadi.__version__, _MAX_CASADI_VERSION))
 
+from . import casadi_monkeypatch
+
 # Add modules and some specific functions.
 from . import tools
 from . import plots
