@@ -1,4 +1,4 @@
-# Template for nonlinear MPC using RK4 on an ODE model.
+# Template for nonlinear MPC using RK4 on an ODE model. (not related to the triple pendulum)
 import mpctools as mpc
 import numpy as np
 
@@ -15,11 +15,13 @@ def ode(x,u):
     ]
     return np.array(dxdt)
 
-import ipydex
 
-ipydex.IPS()
+if 0:
+    import ipydex
 
-exit()
+    ipydex.IPS()
+
+    exit()
 
 # Create a simulator. This allows us to simulate a nonlinear plant.
 vdp = mpc.DiscreteSimulator(ode, Delta, [Nx,Nu], ["x","u"])

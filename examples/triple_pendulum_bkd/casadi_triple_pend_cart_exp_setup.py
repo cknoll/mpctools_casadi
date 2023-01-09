@@ -81,7 +81,7 @@ Nu = 1
 xa = np.array([pi, pi, pi, 0.0,   0.0, 0.0, 0.0, 0.0])
 xb = np.array([pi, pi, pi*0, 0.0,   0.0, 0.0, 0.0, 0.0])
 
-pfname = f"../trajectories/sup_uuo_{T_total}.pcl"
+pfname = f"trajectories_sup_uuo_{T_total}.pcl"
 
 
 # vdp = mpc.DiscreteSimulator(model_rhs, Delta, [Nx, Nu], ["x", "u"])
