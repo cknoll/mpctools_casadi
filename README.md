@@ -1,3 +1,17 @@
+
+
+**Note**: This is not the official repository but instead a patched version, published for research purpose only.
+
+The original software can be found here: <https://bitbucket.org/rawlings-group/mpc-tools-casadi/src/master/>
+
+
+
+
+<br>
+<br>
+<br>
+
+
 # MPCTools: Nonlinear Model Predictive Control Tools for CasADi (Python Interface) #
 
 Copyright (C) 2017
